@@ -1,0 +1,132 @@
+package com.ctify.player.ui
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ctify.player.player.PlayerViewModel
+import com.ctify.player.ui.theme.BgBlack
+import com.ctify.player.ui.theme.SpotifyGreen
+import com.ctify.player.ui.theme.TextSecondary
+
+private enum class Tab(val label: String, val icon: ImageVector) {
+    Home("Home", Icons.Filled.Home),
+    Search("Search", Icons.Filled.Search),
+    Library("Library", Icons.Filled.LibraryMusic),
+}
+
+@Composable
+fun CtifyRoot(viewModel: PlayerViewModel) {
+    var tab by remember { mutableIntStateOf(0) }
+    var showNowPlaying by remember { mutableStateOf(false) }
+    var moreTrackId by remember { mutableStateOf<String?>(null) }
+    var openedPlaylist by remember { mutableStateOf<String?>(null) }
+
+    val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val current = viewModel.repository.trackById(ui.currentTrackId)
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) viewModel.importFile(uri) }
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> if (uri != null) viewModel.importFolder(uri) }
+    val onImport: () -> Unit = { importLauncher.launch(arrayOf("audio/*")) }
+    val onImportFolder: () -> Unit = { folderLauncher.launch(null) }
+    val onMore: (String) -> Unit = { moreTrackId = it }
+
+    Scaffold(
+        containerColor = BgBlack,
+        bottomBar = {
+            androidx.compose.foundation.layout.Column {
+                if (current != null) {
+                    val progress = if (ui.durationMs > 0) ui.positionMs.toFloat() / ui.durationMs else 0f
+                    MiniPlayer(
+                        track = current,
+                        isPlaying = ui.isPlaying,
+                        progress = progress,
+                        onClick = { showNowPlaying = true },
+                        onTogglePlay = viewModel::togglePlay,
+                    )
+                }
+                NavigationBar(containerColor = Color(0xFF101010)) {
+                    Tab.entries.forEachIndexed { index, t ->
+                        NavigationBarItem(
+                            selected = tab == index,
+                            onClick = { tab = index },
+                            icon = { Icon(t.icon, t.label) },
+                            label = { Text(t.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = SpotifyGreen,
+                                selectedTextColor = SpotifyGreen,
+                                unselectedIconColor = TextSecondary,
+                                unselectedTextColor = TextSecondary,
+                                indicatorColor = Color.Transparent,
+                            ),
+                        )
+                    }
+                }
+            }
+        },
+    ) { inner ->
+        Box(Modifier.fillMaxSize().padding(inner)) {
+            when (tab) {
+                0 -> HomeScreen(
+                    viewModel,
+                    onOpenNowPlaying = { showNowPlaying = true },
+                    onMore = onMore,
+                    onOpenPlaylist = { name -> openedPlaylist = name; tab = 2 },
+                )
+                1 -> SearchScreen(viewModel, onMore = onMore)
+                else -> LibraryScreen(
+                    viewModel,
+                    onMore = onMore,
+                    onImport = onImport,
+                    onImportFolder = onImportFolder,
+                    openedPlaylist = openedPlaylist,
+                    onOpenPlaylist = { openedPlaylist = it },
+                )
+            }
+        }
+    }
+
+    moreTrackId?.let { id ->
+        AddToPlaylistSheet(viewModel, trackId = id, onDismiss = { moreTrackId = null })
+    }
+
+    AnimatedVisibility(
+        visible = showNowPlaying && current != null,
+        enter = slideInVertically(initialOffsetY = { it }),
+        exit = slideOutVertically(targetOffsetY = { it }),
+    ) {
+        NowPlayingScreen(viewModel, onClose = { showNowPlaying = false })
+    }
+}
+
+internal fun contentPadding() = PaddingValues(bottom = 12.dp)
