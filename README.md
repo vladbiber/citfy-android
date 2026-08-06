@@ -62,3 +62,4 @@ Or just open the folder in Android Studio and press Run.
 The files in `app/src/main/assets/demo/` (audio + cover gradients) are generated
 locally with `ffmpeg` — short ambient chord pads, royalty-free, purely for the demo.
 `manifest.json` lists their metadata.
+# citfy-android
