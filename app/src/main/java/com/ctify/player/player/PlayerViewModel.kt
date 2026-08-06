@@ -29,6 +29,8 @@ data class PlayerUiState(
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val volume: Float = 1f,
+    val queueIds: List<String> = emptyList(),
+    val currentIndex: Int = -1,
 )
 
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
@@ -122,6 +124,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             shuffle = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
             volume = c.volume,
+            queueIds = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId },
+            currentIndex = c.currentMediaItemIndex,
         )
         persistSnapshot()
     }
@@ -177,6 +181,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             }
             c.play()
         }
+    }
+
+    /** Jumps to a specific song in the current play queue. */
+    fun playQueueIndex(index: Int) {
+        val c = controller ?: return
+        if (index < 0 || index >= c.mediaItemCount) return
+        c.seekTo(index, 0L)
+        c.play()
     }
 
     fun next() = controller?.seekToNext().let { }

@@ -2,6 +2,7 @@ package com.ctify.player.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,10 +14,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -28,8 +33,10 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -43,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,9 +60,11 @@ import androidx.media3.common.Player
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.SpotifyGreen
+import com.ctify.player.ui.theme.SurfaceDark
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NowPlayingScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
@@ -63,6 +73,7 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
 
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableStateOf(0f) }
+    var showQueue by remember { mutableStateOf(false) }
 
     val duration = ui.durationMs.coerceAtLeast(1L)
     val livePosition = if (scrubbing) (scrubValue * duration).toLong() else ui.positionMs
@@ -90,7 +101,9 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 Text("NOW PLAYING", color = TextSecondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 Spacer(Modifier.weight(1f))
-                Spacer(Modifier.width(30.dp))
+                IconButton(onClick = { showQueue = true }) {
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, "queue", tint = TextPrimary, modifier = Modifier.size(26.dp))
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -98,7 +111,18 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 8.dp)
+                    // Swipe left/right on the artwork to skip to the next/previous song.
+                    .pointerInput(Unit) {
+                        var dragTotal = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { dragTotal = 0f },
+                            onDragEnd = {
+                                if (dragTotal < -80f) viewModel.next()
+                                else if (dragTotal > 80f) viewModel.previous()
+                            },
+                        ) { _, dragAmount -> dragTotal += dragAmount }
+                    },
             ) {
                 AlbumArt(track, 320.dp, corner = 12.dp, modifier = Modifier.fillMaxSize())
             }
@@ -185,6 +209,48 @@ fun NowPlayingScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                     ),
                 )
             }
+        }
+    }
+
+    if (showQueue) {
+        ModalBottomSheet(onDismissRequest = { showQueue = false }, containerColor = SurfaceDark) {
+            Text(
+                "Up next",
+                color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            )
+            LazyColumn(Modifier.heightIn(max = 480.dp)) {
+                itemsIndexed(ui.queueIds) { index, id ->
+                    val t = viewModel.repository.trackById(id) ?: return@itemsIndexed
+                    val isCurrent = index == ui.currentIndex
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.playQueueIndex(index) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AlbumArt(t, 40.dp, corner = 4.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                t.title,
+                                color = if (isCurrent) SpotifyGreen else TextPrimary,
+                                fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(t.artist, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (isCurrent) {
+                            Icon(
+                                if (ui.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                null, tint = SpotifyGreen, modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

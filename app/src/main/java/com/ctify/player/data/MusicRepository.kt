@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 /**
  * Single source of truth for the music library and lightweight user state.
@@ -49,7 +50,7 @@ class MusicRepository private constructor(private val appContext: Context) {
     /** Loads demo assets, then user-imported files, then merges any device audio. */
     suspend fun load(includeDevice: Boolean) = withContext(Dispatchers.IO) {
         val demo = loadDemoTracks()
-        val imported = loadImportedTracks()
+        val imported = loadImportedTracks().map { ensureImportedCover(it) }
         val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()) else emptyList()
         val all = imported + demo + device
         byId.clear()
@@ -182,10 +183,12 @@ class MusicRepository private constructor(private val appContext: Context) {
 
     private fun buildImportedTrack(uri: Uri, displayName: String?): Track {
         val fileName = displayName ?: queryDisplayName(uri) ?: "Imported track"
+        val id = "imp_${uri.toString().hashCode()}"
         var title = fileName.substringBeforeLast('.')
         var artist = "Imported"
         var album = "Imported files"
         var durationMs = 0L
+        var coverUri: String? = null
         runCatching {
             val mmr = MediaMetadataRetriever()
             try {
@@ -194,12 +197,53 @@ class MusicRepository private constructor(private val appContext: Context) {
                 mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)?.takeIf { it.isNotBlank() }?.let { artist = it }
                 mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)?.takeIf { it.isNotBlank() }?.let { album = it }
                 mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.let { durationMs = it }
+                mmr.embeddedPicture?.let { bytes ->
+                    val f = coverCacheFile(id)
+                    f.writeBytes(bytes)
+                    coverUri = Uri.fromFile(f).toString()
+                }
             } finally {
                 mmr.release()
             }
         }
-        val id = "imp_${uri.toString().hashCode()}"
-        return Track(id, title, artist, album, uri.toString(), null, durationMs, isDemo = false, isImported = true)
+        return Track(id, title, artist, album, uri.toString(), coverUri, durationMs, isDemo = false, isImported = true)
+    }
+
+    // ---- embedded cover art for imported files ----
+
+    private fun coverCacheFile(id: String): File {
+        val dir = File(appContext.filesDir, "covers")
+        dir.mkdirs()
+        return File(dir, "$id.jpg")
+    }
+
+    /**
+     * Fills in the cover of an imported track from the audio file's embedded artwork.
+     * Extracted images are cached in filesDir; a `.none` marker avoids re-probing files
+     * that have no artwork on every load.
+     */
+    private fun ensureImportedCover(t: Track): Track {
+        if (t.coverUri != null) return t
+        val cached = coverCacheFile(t.id)
+        if (cached.exists()) return t.copy(coverUri = Uri.fromFile(cached).toString())
+        val marker = File(cached.parentFile, "${t.id}.none")
+        if (marker.exists()) return t
+        val bytes = runCatching {
+            val mmr = MediaMetadataRetriever()
+            try {
+                mmr.setDataSource(appContext, Uri.parse(t.uri))
+                mmr.embeddedPicture
+            } finally {
+                mmr.release()
+            }
+        }.getOrNull()
+        return if (bytes != null) {
+            cached.writeBytes(bytes)
+            t.copy(coverUri = Uri.fromFile(cached).toString())
+        } else {
+            runCatching { marker.createNewFile() }
+            t
+        }
     }
 
     fun removeImported(id: String) {
