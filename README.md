@@ -9,8 +9,9 @@ and can also scan the device's own local audio (with permission).
 
 ## Download
 
-**[⬇ Download the APK](https://github.com/Vifuddyxg/ctify-android/raw/main/release/ctify.apk)** — Android 7.0+
+**[⬇ Download the APK](https://github.com/Vifuddyxg/citfy-android/releases/latest/download/ctify.apk)** — Android 7.0+
 
+All versions are on the [Releases page](https://github.com/Vifuddyxg/citfy-android/releases).
 After downloading, open the file and allow "Install from unknown sources" if asked.
 
 ## Features
