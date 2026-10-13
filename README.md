@@ -68,6 +68,14 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Or just open the folder in Android Studio and press Run.
 
+## Credits
+
+The player looks (vinyl, CD, cassette and TP-7 style) are inspired by
+[Spun](https://github.com/yappologistic/Spun), a CD-shaped music player for
+Linux by [@yappologistic](https://github.com/yappologistic). Ctify's versions
+are an independent Jetpack Compose reimplementation; no Spun code or assets are
+included. Thank you for the beautiful designs.
+
 ## Demo assets
 
 The files in `app/src/main/assets/demo/` (audio + cover gradients) are generated
