@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -32,13 +36,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.theme.BgBlack
-import com.ctify.player.ui.theme.SpotifyGreen
+import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextSecondary
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
     Search("Search", Icons.Filled.Search),
     Library("Library", Icons.Filled.LibraryMusic),
+    Sound("Sound", Icons.Filled.GraphicEq),
 }
 
 @Composable
@@ -47,6 +52,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     var showNowPlaying by remember { mutableStateOf(false) }
     var moreTrackId by remember { mutableStateOf<String?>(null) }
     var openedPlaylist by remember { mutableStateOf<String?>(null) }
+    var librarySection by remember { mutableIntStateOf(0) }
 
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val current = viewModel.repository.trackById(ui.currentTrackId)
@@ -73,9 +79,10 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                         progress = progress,
                         onClick = { showNowPlaying = true },
                         onTogglePlay = viewModel::togglePlay,
+                        onNext = viewModel::next,
                     )
                 }
-                NavigationBar(containerColor = Color(0xFF101010)) {
+                NavigationBar(containerColor = Color(0xFF0F131C)) {
                     Tab.entries.forEachIndexed { index, t ->
                         NavigationBarItem(
                             selected = tab == index,
@@ -83,11 +90,11 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                             icon = { Icon(t.icon, t.label) },
                             label = { Text(t.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = SpotifyGreen,
-                                selectedTextColor = SpotifyGreen,
+                                selectedIconColor = Accent,
+                                selectedTextColor = Accent,
                                 unselectedIconColor = TextSecondary,
                                 unselectedTextColor = TextSecondary,
-                                indicatorColor = Color.Transparent,
+                                indicatorColor = Accent.copy(alpha = 0.16f),
                             ),
                         )
                     }
@@ -102,16 +109,20 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     onOpenNowPlaying = { showNowPlaying = true },
                     onMore = onMore,
                     onOpenPlaylist = { name -> openedPlaylist = name; tab = 2 },
+                    onOpenFavorites = { librarySection = 1; openedPlaylist = null; tab = 2 },
                 )
                 1 -> SearchScreen(viewModel, onMore = onMore)
-                else -> LibraryScreen(
+                2 -> LibraryScreen(
                     viewModel,
                     onMore = onMore,
                     onImport = onImport,
                     onImportFolder = onImportFolder,
                     openedPlaylist = openedPlaylist,
                     onOpenPlaylist = { openedPlaylist = it },
+                    section = librarySection,
+                    onSection = { librarySection = it },
                 )
+                else -> SoundScreen()
             }
         }
     }
@@ -125,7 +136,15 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
         enter = slideInVertically(initialOffsetY = { it }),
         exit = slideOutVertically(targetOffsetY = { it }),
     ) {
-        NowPlayingScreen(viewModel, onClose = { showNowPlaying = false })
+        // an in-window overlay, not a Dialog, so system bar insets and Back work
+        BackHandler { showNowPlaying = false }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+        ) {
+            PlayerContent(onClose = { showNowPlaying = false })
+        }
     }
 }
 

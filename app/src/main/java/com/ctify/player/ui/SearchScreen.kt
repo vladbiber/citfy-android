@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -26,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.player.PlayerViewModel
-import com.ctify.player.ui.theme.SpotifyGreen
+import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
@@ -48,13 +50,7 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
 
     LazyColumn(contentPadding = contentPadding()) {
         item {
-            Text(
-                "Search",
-                color = TextPrimary,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 26.sp,
-                modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 12.dp),
-            )
+            ScreenTitle("Search", Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp))
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -63,20 +59,33 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
                     .padding(horizontal = 16.dp),
                 placeholder = { Text("Songs, artists, albums", color = TextMuted) },
                 leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Filled.Close, "Clear search", tint = TextSecondary)
+                    }
+                },
                 singleLine = true,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(28.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = SurfaceElevated,
                     unfocusedContainerColor = SurfaceElevated,
-                    focusedBorderColor = SpotifyGreen,
+                    focusedBorderColor = Accent,
                     unfocusedBorderColor = Color.Transparent,
                     focusedTextColor = TextPrimary,
                     unfocusedTextColor = TextPrimary,
-                    cursorColor = SpotifyGreen,
+                    cursorColor = Accent,
                 ),
             )
         }
 
+        if (query.isBlank()) {
+            item {
+                Text(
+                    "Search your songs by title, artist or album.",
+                    color = TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(16.dp),
+                )
+            }
+        }
         if (query.isNotBlank() && results.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {

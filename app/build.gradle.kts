@@ -12,8 +12,8 @@ android {
         applicationId = "com.ctify.player"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 6
+        versionName = "2.0.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -66,4 +66,5 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    testImplementation("junit:junit:4.13.2")
 }

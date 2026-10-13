@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.player.PlayerViewModel
-import com.ctify.player.ui.theme.SpotifyGreen
+import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceDark
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
@@ -61,7 +61,7 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
             Modifier.fillMaxWidth().clickable { viewModel.addToQueue(trackId); onDismiss() }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Queue, null, tint = SpotifyGreen)
+            Icon(Icons.Filled.Queue, null, tint = Accent)
             Spacer(Modifier.width(12.dp))
             Text("Add to queue", color = TextPrimary, fontWeight = FontWeight.SemiBold)
         }
@@ -70,9 +70,9 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
             Modifier.fillMaxWidth().clickable { showCreate = true }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.PlaylistAdd, null, tint = SpotifyGreen)
+            Icon(Icons.Filled.PlaylistAdd, null, tint = Accent)
             Spacer(Modifier.width(12.dp))
-            Text("New playlist", color = SpotifyGreen, fontWeight = FontWeight.SemiBold)
+            Text("New playlist", color = Accent, fontWeight = FontWeight.SemiBold)
         }
 
         playlists.forEach { pl ->
@@ -91,7 +91,7 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
                     Text(pl.name, color = TextPrimary)
                     if (already) Text("Tap to remove", color = TextMuted, fontSize = 11.sp)
                 }
-                if (already) Icon(Icons.Filled.Check, "in playlist", tint = SpotifyGreen)
+                if (already) Icon(Icons.Filled.Check, "in playlist", tint = Accent)
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -117,7 +117,7 @@ fun CreatePlaylistDialog(viewModel: PlayerViewModel, addTrackId: String? = null,
                     if (addTrackId != null) viewModel.repository.addToPlaylist(n, addTrackId)
                     onDismiss()
                 },
-            ) { Text("Create", color = SpotifyGreen) }
+            ) { Text("Create", color = Accent) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } },
         title = { Text("New playlist", color = TextPrimary) },
@@ -141,7 +141,7 @@ fun RenamePlaylistDialog(currentName: String, onRename: (String) -> Unit, onDism
             TextButton(
                 enabled = name.isNotBlank(),
                 onClick = { onRename(name); onDismiss() },
-            ) { Text("Rename", color = SpotifyGreen) }
+            ) { Text("Rename", color = Accent) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } },
         title = { Text("Rename playlist", color = TextPrimary) },

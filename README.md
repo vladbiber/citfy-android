@@ -16,7 +16,17 @@ After downloading, open the file and allow "Install from unknown sources" if ask
 
 ## Features
 
-- Spotify-like dark UI (green accent), with Home / Search / Library tabs
+- Dark UI with a blue accent, Home / Search / Library / Sound tabs
+- Five interactive player looks: vinyl (tonearm, scratch to seek), CD, cassette,
+  TP-7 style device and plain cover; design inspired by
+  [Spun](https://github.com/yappologistic/Spun) by
+  [@yappologistic](https://github.com/yappologistic) (independent Compose
+  reimplementation, no Spun code or assets)
+- Sound effects: slow + pitch, reverb, bass, "magic Hz" tuning, stereo width,
+  8D rotation, "another room", one-tap presets
+- Real vinyl sound (crackle, wow and flutter, warmth) and calm rain sounds
+- Reverse mode for any track
+- Local files only: import songs or folders through the system picker
 - Bundled offline demo library (9 tracks across 3 albums, generated locally)
 - Full-screen **Now Playing** with album art, scrub bar, shuffle, repeat,
   previous/next, and volume
@@ -35,7 +45,7 @@ After downloading, open the file and allow "Install from unknown sources" if ask
 | `~/.local/state/ctify` (favorites.txt, playlists, playback_state) | `SharedPreferences` (JSON) |
 | `.m3u` playlists | in-app playlists |
 | shuffle / repeat / seek / volume | same controls in Now Playing |
-| blue accent | Spotify green accent |
+| blue accent | blue accent |
 
 ## Build
 

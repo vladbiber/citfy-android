@@ -10,19 +10,25 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-val SpotifyGreen = Color(0xFF1DB954)
-val SpotifyGreenDark = Color(0xFF1AA34A)
-val BgBlack = Color(0xFF0E0E0E)
-val SurfaceDark = Color(0xFF181818)
-val SurfaceElevated = Color(0xFF282828)
+val Accent = Color(0xFF5B9DFF)
+val AccentDark = Color(0xFF7FB8FF)
+val BgBlack = Color(0xFF0B0D12)
+val SurfaceDark = Color(0xFF131722)
+val SurfaceElevated = Color(0xFF1C2230)
 val TextPrimary = Color(0xFFFFFFFF)
-val TextSecondary = Color(0xFFB3B3B3)
-val TextMuted = Color(0xFF7A7A7A)
+val TextSecondary = Color(0xFFA9B2C3)
+val TextMuted = Color(0xFF8A93A6)
 
 private val CtifyColors = darkColorScheme(
-    primary = SpotifyGreen,
-    onPrimary = Color.Black,
-    secondary = SpotifyGreenDark,
+    primary = Accent,
+    onPrimary = Color(0xFF0A1428),
+    secondary = AccentDark,
+    onSecondary = Color(0xFF0A1428),
+    primaryContainer = Color(0xFF1F3A66),
+    onPrimaryContainer = Color(0xFFD7E6FF),
+    secondaryContainer = Color(0xFF243552),
+    onSecondaryContainer = Color(0xFFD7E6FF),
+    outline = Color(0xFF2E3648),
     background = BgBlack,
     onBackground = TextPrimary,
     surface = SurfaceDark,

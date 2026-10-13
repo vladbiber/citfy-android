@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -35,6 +36,11 @@ data class PlayerUiState(
 
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
+    companion object {
+        /** off in screenshot tests, where no media session can be bound */
+        @Volatile var connectService = true
+    }
+
     val repository: MusicRepository = (app as CtifyApp).repository
 
     private var controller: MediaController? = null
@@ -44,11 +50,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = syncFromPlayer()
+        override fun onPlaybackStateChanged(state: Int) {
+            if (state == Player.STATE_ENDED && PlayerHub.reverseOn.value) reverseStep(+1)
+        }
     }
 
+    private val reverser = ReverseDecoder(app)
+    /** the forward queue that reverse mode walks through, track by track */
+    private var reverseQueue: List<Track> = emptyList()
+    private var reverseIndex = 0
+
     init {
+        PlayerHub.init(app)
+        PlayerHub.controls = this
         viewModelScope.launch { repository.load(includeDevice = false) }
-        connectController()
+        if (connectService) connectController()
         startPositionLoop()
     }
 
@@ -77,10 +93,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val token = SessionToken(ctx, ComponentName(ctx, PlaybackService::class.java))
         val future = MediaController.Builder(ctx, token).buildAsync()
         future.addListener({
-            val c = future.get()
+            val c = runCatching { future.get() }.getOrNull() ?: return@addListener
             controller = c
             c.addListener(listener)
             restoreSnapshot(c)
+            applyRate()
             syncFromPlayer()
         }, ContextCompat.getMainExecutor(ctx))
     }
@@ -104,30 +121,63 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 controller?.let { c ->
                     if (c.isPlaying) {
                         _ui.value = _ui.value.copy(
-                            positionMs = c.currentPosition,
+                            positionMs = shownPosition(c),
                             durationMs = c.duration.coerceAtLeast(0L),
                         )
+                        publish()
                     }
                 }
-                delay(500)
+                delay(250)
             }
         }
     }
 
     private fun syncFromPlayer() {
         val c = controller ?: return
+        val rev = PlayerHub.reverseOn.value
         _ui.value = PlayerUiState(
-            currentTrackId = c.currentMediaItem?.mediaId,
+            currentTrackId = c.currentMediaItem?.mediaId?.removePrefix(REV),
             isPlaying = c.isPlaying,
-            positionMs = c.currentPosition.coerceAtLeast(0L),
+            positionMs = shownPosition(c),
             durationMs = c.duration.coerceAtLeast(0L),
             shuffle = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
             volume = c.volume,
-            queueIds = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId },
-            currentIndex = c.currentMediaItemIndex,
+            queueIds = if (rev) reverseQueue.map { it.id } else (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId },
+            currentIndex = if (rev) reverseIndex else c.currentMediaItemIndex,
         )
-        persistSnapshot()
+        publish()
+        if (!rev) persistSnapshot()
+    }
+
+    /** In reverse mode the file runs backwards, so the shown position is mirrored. */
+    private fun shownPosition(c: MediaController): Long {
+        val pos = c.currentPosition.coerceAtLeast(0L)
+        return if (PlayerHub.reverseOn.value && c.duration > 0) (c.duration - pos).coerceAtLeast(0L) else pos
+    }
+
+    private fun publish() {
+        val u = _ui.value
+        val track = repository.trackById(u.currentTrackId)
+        PlayerHub.playback.value = if (track == null) null else NowState(
+            track = track,
+            isPlaying = u.isPlaying,
+            progressMs = u.positionMs.toInt(),
+            durationMs = if (u.durationMs > 0) u.durationMs else track.durationMs,
+            shuffle = u.shuffle,
+            repeat = when (u.repeatMode) {
+                Player.REPEAT_MODE_ONE -> "track"
+                Player.REPEAT_MODE_ALL -> "context"
+                else -> "off"
+            },
+            volumePercent = (u.volume * 100).toInt(),
+        )
+    }
+
+    /** Speed and pitch move together, like slowva's resampler. */
+    fun applyRate() {
+        val r = PlayerHub.fx.rate
+        controller?.playbackParameters = PlaybackParameters(r, r)
     }
 
     private fun persistSnapshot() {
@@ -148,6 +198,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun playQueue(tracks: List<Track>, startIndex: Int) {
         val c = controller ?: return
         if (tracks.isEmpty()) return
+        if (PlayerHub.reverseOn.value) {
+            reverseQueue = tracks
+            reverseIndex = startIndex.coerceIn(0, tracks.lastIndex)
+            viewModelScope.launch { launchReverse(tracks[reverseIndex], 0L) }
+            return
+        }
         c.setMediaItems(tracks.map { it.toMediaItem() }, startIndex.coerceIn(0, tracks.lastIndex), 0L)
         c.prepare()
         c.play()
@@ -175,7 +231,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         else {
             when (c.playbackState) {
                 Player.STATE_IDLE -> c.prepare()
-                // After a track ends, play() alone is a no-op — rewind first so the
+                // After a track ends, play() alone does nothing; rewind first so the
                 // single tap actually restarts playback.
                 Player.STATE_ENDED -> c.seekTo(0)
             }
@@ -185,21 +241,33 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Jumps to a specific song in the current play queue. */
     fun playQueueIndex(index: Int) {
+        if (PlayerHub.reverseOn.value) {
+            val t = reverseQueue.getOrNull(index) ?: return
+            reverseIndex = index
+            viewModelScope.launch { launchReverse(t, 0L) }
+            return
+        }
         val c = controller ?: return
         if (index < 0 || index >= c.mediaItemCount) return
         c.seekTo(index, 0L)
         c.play()
     }
 
-    fun next() = controller?.seekToNext().let { }
+    fun next() {
+        if (PlayerHub.reverseOn.value) reverseStep(+1) else controller?.seekToNext()
+    }
+
     fun previous() {
+        if (PlayerHub.reverseOn.value) { reverseStep(-1); return }
         val c = controller ?: return
         // After 5s of playback, the back arrow restarts the current track instead of skipping back.
         if (c.currentPosition > 5000) c.seekTo(0) else c.seekToPrevious()
     }
 
     fun seekTo(ms: Long) {
-        controller?.seekTo(ms)
+        val c = controller ?: return
+        if (PlayerHub.reverseOn.value && c.duration > 0) c.seekTo((c.duration - ms).coerceAtLeast(0L))
+        else c.seekTo(ms)
         _ui.value = _ui.value.copy(positionMs = ms)
     }
 
@@ -227,15 +295,80 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = _ui.value.copy(volume = v.coerceIn(0f, 1f))
     }
 
+    // ---- reverse mode ----
+
+    fun toggleReverse() {
+        viewModelScope.launch { if (PlayerHub.reverseOn.value) leaveReverse() else enterReverse() }
+    }
+
+    private suspend fun enterReverse() {
+        val c = controller ?: return
+        val id = c.currentMediaItem?.mediaId ?: return
+        val track = repository.trackById(id) ?: return
+        reverseQueue = (0 until c.mediaItemCount).mapNotNull { repository.trackById(c.getMediaItemAt(it).mediaId) }
+            .ifEmpty { listOf(track) }
+        reverseIndex = reverseQueue.indexOfFirst { it.id == id }.coerceAtLeast(0)
+        val fwd = c.currentPosition.coerceAtLeast(0L)
+        val dur = c.duration.takeIf { it > 0 } ?: track.durationMs
+        PlayerHub.reverseOn.value = true
+        launchReverse(track, (dur - fwd).coerceAtLeast(0L))
+    }
+
+    /** Starts [track] reversed, [revStartMs] into the reversed file. */
+    private suspend fun launchReverse(track: Track, revStartMs: Long) {
+        val c = controller ?: return
+        PlayerHub.reversePreparing.value = true
+        c.pause()
+        val file = reverser.reversed(track).getOrElse {
+            PlayerHub.reversePreparing.value = false
+            PlayerHub.reverseOn.value = false
+            android.widget.Toast.makeText(getApplication(), "Reverse failed: ${it.message}", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        PlayerHub.reversePreparing.value = false
+        if (!PlayerHub.reverseOn.value) return
+        val item = track.toMediaItem().buildUpon()
+            .setMediaId(REV + track.id)
+            .setUri(Uri.fromFile(file))
+            .build()
+        c.setMediaItem(item, revStartMs)
+        c.prepare()
+        c.play()
+    }
+
+    private fun reverseStep(dir: Int) {
+        val next = reverseIndex + dir
+        val track = reverseQueue.getOrNull(next) ?: run {
+            if (dir < 0) controller?.seekTo(0)
+            return
+        }
+        reverseIndex = next
+        viewModelScope.launch { launchReverse(track, 0L) }
+    }
+
+    private fun leaveReverse() {
+        val c = controller ?: return
+        val shown = shownPosition(c)
+        val wasPlaying = c.isPlaying
+        PlayerHub.reverseOn.value = false
+        if (reverseQueue.isEmpty()) return
+        c.setMediaItems(reverseQueue.map { it.toMediaItem() }, reverseIndex.coerceIn(0, reverseQueue.lastIndex), shown)
+        c.prepare()
+        if (wasPlaying) c.play()
+    }
+
     fun toggleFavorite(id: String) = repository.toggleFavorite(id)
 
     override fun onCleared() {
+        if (PlayerHub.controls === this) PlayerHub.controls = null
         persistSnapshot()
         controller?.release()
         controller = null
         super.onCleared()
     }
 }
+
+private const val REV = "rev:"
 
 fun Track.toMediaItem(): MediaItem {
     val metadata = MediaMetadata.Builder()
