@@ -1,22 +1,31 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Beamed eighth notes, dark on the green adaptive-icon background -->
-    <path
-        android:fillColor="#0A0A0A"
-        android:pathData="M40,72 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z" />
-    <path
-        android:fillColor="#0A0A0A"
-        android:pathData="M64,68 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z" />
-    <path
-        android:fillColor="#0A0A0A"
-        android:pathData="M43.5,72 L43.5,38 L47,38 L47,72 Z" />
-    <path
-        android:fillColor="#0A0A0A"
-        android:pathData="M67.5,68 L67.5,34 L71,34 L71,68 Z" />
-    <path
-        android:fillColor="#0A0A0A"
-        android:pathData="M43.5,36 L71,30 L71,40 L43.5,46 Z" />
+    <!-- A record with the blue ctify label, same look as the vinyl player skin -->
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="1.1" android:scaleY="1.1">
+        <path android:fillColor="#735B9DFF" android:pathData="M54,23a31,31 0 1,0 0.01,0z" />
+        <path android:pathData="M54,24a30,30 0 1,0 0.01,0z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="radial" android:centerX="54" android:centerY="54"
+                    android:gradientRadius="30" android:startColor="#1A1F2B" android:endColor="#07090D" />
+            </aapt:attr>
+        </path>
+        <path android:strokeColor="#17FFFFFF" android:strokeWidth="0.6"
+            android:pathData="M54,26.5a27.5,27.5 0 1,0 0.01,0z M54,29a25,25 0 1,0 0.01,0z M54,31.5a22.5,22.5 0 1,0 0.01,0z M54,34a20,20 0 1,0 0.01,0z M54,36.5a17.5,17.5 0 1,0 0.01,0z" />
+        <path android:fillColor="#1AFFFFFF" android:pathData="M54,54L36.2,29.7A30,30 0 0,1 50.9,24.2Z" />
+        <path android:fillColor="#0DFFFFFF" android:pathData="M54,54L71.8,78.3A30,30 0 0,1 57.1,83.8Z" />
+        <path android:pathData="M54,41a13,13 0 1,0 0.01,0z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="44" android:startY="44"
+                    android:endX="64" android:endY="64" android:startColor="#8AB8FF" android:endColor="#2B5FD9" />
+            </aapt:attr>
+        </path>
+        <group android:translateX="45.6" android:translateY="45" android:scaleX="0.72" android:scaleY="0.72">
+            <path android:fillColor="#FFFFFF"
+                android:pathData="M12,3v10.55c-0.59,-0.34 -1.27,-0.55 -2,-0.55c-2.21,0 -4,1.79 -4,4s1.79,4 4,4s4,-1.79 4,-4V7h4V3H12z" />
+        </group>
+    </group>
 </vector>

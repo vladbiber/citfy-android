@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -41,7 +43,30 @@ class PlaybackService : MediaSessionService() {
                 /* handleAudioFocus = */ true,
             )
             .setHandleAudioBecomingNoisy(true)
+            // keeps the CPU awake with the screen off; without it playback dies in deep sleep
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        // one unreadable file should not end the session: skip it and keep going
+        var audioRetries = 0
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) audioRetries = 0
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                // the audio output died (Bluetooth switch, call, audio service restart): pick up where it stopped
+                if (error.errorCode in PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED..PlaybackException.ERROR_CODE_AUDIO_TRACK_OFFLOAD_INIT_FAILED &&
+                    audioRetries++ < 3
+                ) {
+                    player.prepare()
+                    player.play()
+                } else if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem()
+                    player.prepare()
+                    player.play()
+                }
+            }
+        })
 
         mediaSession = MediaSession.Builder(this, player).build()
     }
