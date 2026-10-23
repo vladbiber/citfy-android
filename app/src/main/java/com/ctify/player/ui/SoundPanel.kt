@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.FilterChip
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ctify.player.player.fx.Mood
 import com.ctify.player.player.PlayerHub
+import com.ctify.player.player.fx.FxRange
 import com.ctify.player.player.fx.RETUNE_PRESETS
 import com.ctify.player.player.fx.RainPreset
 import com.ctify.player.player.fx.SLOW_STEPS
@@ -67,8 +69,18 @@ fun SoundPanel(modifier: Modifier = Modifier) {
     val pan8d by PlayerHub.pan8d.collectAsState()
     val muffle by PlayerHub.muffle.collectAsState()
     val vinyl by PlayerHub.vinyl.collectAsState()
+    val range by PlayerHub.fxRange.collectAsState()
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Section(Icons.Default.Tune, "Effect range", rangeLabel(range)) {
+            FxSlider("How far the sliders go", rangeLabel(range), range, 0f..1f, 0f) { PlayerHub.setFxRange(it) }
+            Text(
+                "Extreme: slow down to ${"%.2f".format(FxRange.slow(range).start)}×, speed up to ${"%.2f".format(FxRange.slow(range).endInclusive)}×, " +
+                    "reverb ${(FxRange.reverb(range).endInclusive * 100).roundToInt()}%, bass +${FxRange.bass(range).endInclusive.roundToInt()} dB",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         Section(Icons.Default.AutoAwesome, "Moods", "one tap sets every effect") {
             ChipRow {
                 Mood.entries.forEach { m ->
@@ -82,7 +94,7 @@ fun SoundPanel(modifier: Modifier = Modifier) {
         }
 
         Section(Icons.Default.Speed, "Speed & pitch", "${"%.2f".format(rate)}× · ${semitones(rate)} semitones") {
-            FxSlider("Slow", "${"%.2f".format(rate)}×", rate, 0.5f..1.25f, 1f) { PlayerHub.setRate(it) }
+            FxSlider("Slow", "${"%.2f".format(rate)}×", rate, FxRange.slow(range), 1f) { PlayerHub.setRate(it) }
             Text("Steps", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             ChipRow {
                 SLOW_STEPS.forEachIndexed { index, (stepRate, stepReverb) ->
@@ -96,11 +108,11 @@ fun SoundPanel(modifier: Modifier = Modifier) {
         }
 
         Section(Icons.Default.Waves, "Reverb", "${(reverb * 100).roundToInt()}%") {
-            FxSlider("Reverb", "${(reverb * 100).roundToInt()}%", reverb, 0f..1f, 0f) { PlayerHub.setReverb(it) }
+            FxSlider("Reverb", "${(reverb * 100).roundToInt()}%", reverb, FxRange.reverb(range), 0f) { PlayerHub.setReverb(it) }
         }
 
         Section(Icons.Default.GraphicEq, "Bass", if (bassGain < 0.05f) "off" else "+${"%.1f".format(bassGain)} dB") {
-            FxSlider("Boost", "+${"%.1f".format(bassGain)} dB", bassGain, 0f..12f, 0f) { PlayerHub.setBass(it, bassFreq) }
+            FxSlider("Boost", "+${"%.1f".format(bassGain)} dB", bassGain, FxRange.bass(range), 0f) { PlayerHub.setBass(it, bassFreq) }
             FxSlider("Below", "${bassFreq.roundToInt()} Hz", bassFreq, 40f..320f, 120f, enabled = bassGain > 0.05f) {
                 PlayerHub.setBass(bassGain, it)
             }
@@ -129,9 +141,9 @@ fun SoundPanel(modifier: Modifier = Modifier) {
         }
 
         Section(Icons.Default.Headphones, "Space", spaceSummary(width, pan8d, muffle)) {
-            FxSlider("Stereo width", "${(width * 100).roundToInt()}%", width, 0f..2f, 1f) { PlayerHub.setSpace(width = it) }
+            FxSlider("Stereo width", "${(width * 100).roundToInt()}%", width, FxRange.width(range), 1f) { PlayerHub.setSpace(width = it) }
             FxSlider("8D rotation", "${(pan8d * 100).roundToInt()}%", pan8d, 0f..1f, 0f) { PlayerHub.setSpace(pan8d = it) }
-            FxSlider("Another room", "${(muffle * 100).roundToInt()}%", muffle, 0f..1f, 0f) { PlayerHub.setSpace(muffle = it) }
+            FxSlider("Another room", "${(muffle * 100).roundToInt()}%", muffle, FxRange.muffle(range), 0f) { PlayerHub.setSpace(muffle = it) }
             Text(
                 "8D slowly circles the sound around your head; best on headphones.",
                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -163,7 +175,7 @@ fun SoundPanel(modifier: Modifier = Modifier) {
                     FilterChip(selected = rain == p, onClick = { PlayerHub.setRain(p) }, label = { Text(p.label) })
                 }
             }
-            FxSlider("Rain volume", "${(rainLevel * 100).roundToInt()}%", rainLevel, 0f..1.5f, 1f, enabled = rain != RainPreset.OFF) {
+            FxSlider("Rain volume", "${(rainLevel * 100).roundToInt()}%", rainLevel, FxRange.rain(range), 1f, enabled = rain != RainPreset.OFF) {
                 PlayerHub.setRain(rain, it)
             }
             Text(
@@ -234,6 +246,12 @@ fun FxSlider(
             enabled = enabled, description = label, stateText = valueText,
         )
     }
+}
+
+private fun rangeLabel(t: Float) = when {
+    t < 0.01f -> "normal"
+    t > 0.99f -> "extreme"
+    else -> "+${(t * 100).roundToInt()}%"
 }
 
 private fun spaceSummary(width: Float, pan: Float, muffle: Float): String {

@@ -8,6 +8,7 @@ import androidx.media3.session.SessionCommand
 import com.ctify.player.data.Track
 import com.ctify.player.player.fx.Fx
 import com.ctify.player.player.fx.Mood
+import com.ctify.player.player.fx.FxRange
 import com.ctify.player.player.fx.RETUNE_PRESETS
 import com.ctify.player.player.fx.RainPreset
 import com.ctify.player.player.fx.VinylSettings
@@ -116,6 +117,21 @@ object PlayerHub {
         setSpeed(value / ratio)
     }
 
+    /** 0 normal .. 1 widest effect sliders; lowering it pulls settings back inside. */
+    val fxRange = MutableStateFlow(0f)
+
+    fun setFxRange(value: Float) {
+        val t = value.coerceIn(0f, 1f)
+        fxRange.value = t
+        rate.value.let { r -> FxRange.slow(t).let { if (r !in it) setRate(r.coerceIn(it)) } }
+        if (reverb.value > FxRange.reverb(t).endInclusive) setReverb(FxRange.reverb(t).endInclusive)
+        if (bassGain.value > FxRange.bass(t).endInclusive) setBass(FxRange.bass(t).endInclusive, bassFreq.value)
+        if (width.value > FxRange.width(t).endInclusive) setSpace(width = FxRange.width(t).endInclusive)
+        if (muffle.value > FxRange.muffle(t).endInclusive) setSpace(muffle = FxRange.muffle(t).endInclusive)
+        if (rainLevel.value > FxRange.rain(t).endInclusive) setRain(rain.value, FxRange.rain(t).endInclusive)
+        saveFx()
+    }
+
     fun setReverb(value: Float) {
         reverb.value = value
         fx.reverb = value
@@ -199,6 +215,7 @@ object PlayerHub {
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putFloat("speed", speed.value)
             .putFloat("reverb", reverb.value)
+            .putFloat("fx_range", fxRange.value)
             .putInt("retune", retuneIndex.value)
             .putFloat("bass_gain", bassGain.value)
             .putFloat("bass_freq", bassFreq.value)
@@ -219,6 +236,7 @@ object PlayerHub {
         val p = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         speed.value = p.getFloat("speed", 1f)
         reverb.value = p.getFloat("reverb", 0f)
+        fxRange.value = p.getFloat("fx_range", 0f)
         retuneIndex.value = p.getInt("retune", 0)
         bassGain.value = p.getFloat("bass_gain", 0f)
         bassFreq.value = p.getFloat("bass_freq", 120f)
