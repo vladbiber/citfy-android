@@ -8,7 +8,5 @@
 /captures
 .externalNativeBuild
 .cxx
-.claude-flow/
 .kotlin/
 /release
-.claude/
