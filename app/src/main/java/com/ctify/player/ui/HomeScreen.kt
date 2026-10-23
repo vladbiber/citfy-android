@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.player.PlayerViewModel
+import com.ctify.player.ui.radio.HomeStationRows
 
 @Composable
 fun HomeScreen(
@@ -88,6 +89,7 @@ fun HomeScreen(
                 onClick = onOpenFavorites,
             )
         }
+        full { HomeStationRows() }
         if (playlists.isNotEmpty()) {
             full { GridHeader("Playlists") }
             items(playlists, key = { it.name }) { pl ->

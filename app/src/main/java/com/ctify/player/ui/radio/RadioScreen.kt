@@ -1,0 +1,182 @@
+package com.ctify.player.ui.radio
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ctify.player.radio.RadioRepository
+import com.ctify.player.radio.RadioTab
+import com.ctify.player.radio.Station
+import com.ctify.player.ui.ScreenTitle
+import com.ctify.player.ui.theme.Accent
+import com.ctify.player.ui.theme.BgBlack
+import com.ctify.player.ui.theme.TextMuted
+import com.ctify.player.ui.theme.TextSecondary
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+private const val FIXED_PAGES = 4
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RadioScreen() {
+    val radio = radioRepo()
+    val tabs by radio.tabs.collectAsStateWithLifecycle(initialValue = emptyList())
+    val titles = listOf("For you", "Favorites", "Heard", "Browse") + tabs.map { it.title }
+    val pager = rememberPagerState { titles.size }
+    val scope = rememberCoroutineScope()
+    var editing by remember { mutableStateOf(false) }
+    var settingsFor by remember { mutableStateOf<RadioTab?>(null) }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ScreenTitle("Radio", Modifier.weight(1f))
+            IconButton(onClick = { editing = true }) {
+                Icon(Icons.Filled.Edit, contentDescription = "Add or edit tabs", tint = TextSecondary)
+            }
+        }
+        PrimaryScrollableTabRow(
+            selectedTabIndex = pager.currentPage.coerceAtMost(titles.lastIndex),
+            containerColor = BgBlack,
+            edgePadding = 12.dp,
+        ) {
+            titles.forEachIndexed { i, t ->
+                Tab(
+                    selected = pager.currentPage == i,
+                    onClick = { scope.launch { pager.animateScrollToPage(i) } },
+                    text = { Text(t, maxLines = 1) },
+                    selectedContentColor = Accent,
+                    unselectedContentColor = TextSecondary,
+                )
+            }
+        }
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().weight(1f), key = { pageKey(it, tabs) }) { page ->
+            when (page) {
+                0 -> ForYouPage()
+                1 -> FavoritesPage()
+                2 -> HeardPage()
+                3 -> BrowsePage()
+                else -> tabs.getOrNull(page - FIXED_PAGES)?.let { tab -> PinnedTabPage(tab, onSettings = { settingsFor = tab }) }
+            }
+        }
+    }
+
+    settingsFor?.let { tab ->
+        TabSettingsSheet(tab, onDismiss = { settingsFor = null }, onSave = { radio.updateTab(it); settingsFor = null })
+    }
+
+    AnimatedVisibility(
+        visible = editing,
+        enter = slideInVertically(initialOffsetY = { it }),
+        exit = slideOutVertically(targetOffsetY = { it }),
+    ) {
+        BackHandler { editing = false }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+        ) {
+            EditTabsScreen(tabs, onClose = { editing = false })
+        }
+    }
+}
+
+private fun pageKey(page: Int, tabs: List<RadioTab>): Any =
+    if (page < FIXED_PAGES) "fixed$page" else tabs.getOrNull(page - FIXED_PAGES)?.id ?: "gone$page"
+
+@Composable
+private fun ForYouPage() {
+    val radio = radioRepo()
+    val blocked = rememberRadioBlock()
+    val ui = rememberRadioUi()
+    val state = rememberLoad(
+        "for_you",
+        blocked = blocked,
+        cached = {
+            (radio.cached(RadioRepository.CLIAMP_KEY).orEmpty() + radio.cached(RadioRepository.FOR_YOU_KEY).orEmpty())
+                .distinctBy { it.uuid }.ifEmpty { null }
+        },
+    ) {
+        // read the history once, so a heart doesn't reload the page
+        radio.forYou(radio.recents.first(), radio.favorites.first())
+    }
+    LazyColumn(Modifier.fillMaxSize()) {
+        item(key = "intro") {
+            Text(
+                "The cliamp channels, then stations like the ones you play and heart.",
+                color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+        loadStatus(state, blocked, List<Station>::isEmpty, "Nothing here yet. Try Browse.")
+        state.data?.let { stationRows(it, ui) }
+    }
+}
+
+@Composable
+private fun PinnedTabPage(tab: RadioTab, onSettings: () -> Unit) {
+    val radio = radioRepo()
+    val blocked = rememberRadioBlock()
+    val ui = rememberRadioUi()
+    val key = "tab_${tab.id}"
+    // moving or renaming the tab is not a reason to reload
+    val state = rememberLoad(tab.copy(position = 0, title = ""), blocked = blocked, cached = { radio.cached(key) }) {
+        radio.search(radio.queryFor(tab), cacheKey = key)
+    }
+    LazyColumn(Modifier.fillMaxSize()) {
+        item(key = "filters") {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    tabSummary(tab), color = TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                IconButton(onClick = onSettings) {
+                    Icon(Icons.Filled.Tune, contentDescription = "Settings for ${tab.title}", tint = TextSecondary)
+                }
+            }
+        }
+        loadStatus(state, blocked, List<Station>::isEmpty, "No stations match. Try fewer filters.")
+        state.data?.let { stationRows(it, ui) }
+    }
+}
+
+internal fun tabSummary(tab: RadioTab): String = listOfNotNull(
+    tab.sort.label,
+    tab.countryCode?.let { "${flagOf(it)} $it".trim() },
+    tab.minBitrate.takeIf { it > 0 }?.let { "${it}k+" },
+    if (tab.hideBroken) null else "broken shown",
+).joinToString(" · ")

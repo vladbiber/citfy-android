@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.ctify.player.data.Track
+import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
@@ -236,6 +237,8 @@ fun MiniPlayer(
     onClick: () -> Unit,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit = {},
+    isLive: Boolean = false,
+    status: String? = null,
 ) {
     Column(
         modifier = Modifier
@@ -255,8 +258,9 @@ fun MiniPlayer(
             AlbumArt(track, 44.dp, corner = 10.dp)
             Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                 Text(track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(track.artist, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(status ?: track.artist, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            if (isLive) LiveBadge()
             IconButton(onClick = onTogglePlay) {
                 Icon(
                     if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -264,10 +268,11 @@ fun MiniPlayer(
                 )
             }
             IconButton(onClick = onNext) {
-                Icon(Icons.Filled.SkipNext, "Next track", tint = TextPrimary)
+                Icon(Icons.Filled.SkipNext, if (isLive) "Next station" else "Next track", tint = TextPrimary)
             }
         }
-        LinearProgressIndicator(
+        if (isLive) Spacer(Modifier.height(2.dp))
+        else LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).height(2.dp),
             color = Accent,

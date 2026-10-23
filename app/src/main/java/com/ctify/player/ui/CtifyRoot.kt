@@ -16,6 +16,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
@@ -35,7 +36,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.PlayerViewModel
+import com.ctify.player.ui.radio.RadioScreen
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextSecondary
@@ -44,6 +47,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
     Search("Search", Icons.Filled.Search),
     Library("Library", Icons.Filled.LibraryMusic),
+    Radio("Radio", Icons.Filled.Radio),
     Sound("Sound", Icons.Filled.GraphicEq),
 }
 
@@ -57,7 +61,10 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     var librarySection by remember { mutableIntStateOf(0) }
 
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    val current = viewModel.repository.trackById(ui.currentTrackId)
+    val now by PlayerHub.playback.collectAsStateWithLifecycle()
+    // radio items aren't in the library, so fall back to what the player publishes
+    val current = viewModel.repository.trackById(ui.currentTrackId) ?: now?.track
+    val station = now?.station
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -82,6 +89,8 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                         onClick = { showNowPlaying = true },
                         onTogglePlay = viewModel::togglePlay,
                         onNext = viewModel::next,
+                        isLive = station != null,
+                        status = now?.radioStatus.takeIf { station != null },
                     )
                 }
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
@@ -125,6 +134,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     section = librarySection,
                     onSection = { librarySection = it },
                 )
+                3 -> RadioScreen()
                 else -> SoundScreen()
             }
         }

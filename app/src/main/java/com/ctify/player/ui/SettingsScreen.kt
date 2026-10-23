@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,11 +43,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.ctify.player.CtifyApp
 import com.ctify.player.data.Backup
+import com.ctify.player.net.Feature
+import com.ctify.player.net.NetworkGate
+import com.ctify.player.radio.RadioPrefs
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.ThemeMode
 import com.ctify.player.ui.theme.isAppInDarkTheme
@@ -63,6 +69,11 @@ fun SettingsScreen(onClose: () -> Unit) {
     val pureBlack by Appearance.pureBlack.collectAsState()
     val coverColors by Appearance.coverColors.collectAsState()
     val dark = isAppInDarkTheme()
+    val offline by NetworkGate.offline.collectAsState()
+    val features by NetworkGate.enabled.collectAsState()
+    val wifiOnlyStreaming by NetworkGate.wifiOnlyStreaming.collectAsState()
+    val wifiOnlyDownloads by NetworkGate.wifiOnlyDownloads.collectAsState()
+    val radioOn = features[Feature.RADIO] != false
 
     var message by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -111,6 +122,31 @@ fun SettingsScreen(onClose: () -> Unit) {
             }
             SwitchRow("Pure black", "Black background in dark theme, for OLED screens", pureBlack, Appearance::setPureBlack, enabled = dark)
             SwitchRow("Cover colors in Now Playing", "Tint the player with the album cover instead of the theme", coverColors, Appearance::setCoverColors)
+
+            Header("Network")
+            SwitchRow("Offline mode", "Block all internet use. Your music keeps working.", offline, NetworkGate::setOffline)
+            SwitchRow("Radio", "Station directory and live streams", radioOn, { NetworkGate.setEnabled(Feature.RADIO, it) }, enabled = !offline)
+            SwitchRow(
+                "Radio on mobile data", "Off means radio only plays on Wi-Fi",
+                !wifiOnlyStreaming, { NetworkGate.setWifiOnlyStreaming(!it) }, enabled = !offline && radioOn,
+            )
+            SwitchRow("Downloads on Wi-Fi only", "Wait for Wi-Fi before downloading", wifiOnlyDownloads, NetworkGate::setWifiOnlyDownloads, enabled = !offline)
+            var bufferMin by remember { mutableIntStateOf(RadioPrefs.bufferMinutes(ctx)) }
+            Text("Radio rewind buffer", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
+            Text(
+                if (bufferMin == 0) "Off: radio plays live, no pause or rewind"
+                else "Keeps the last $bufferMin min (about ${bufferMin} MB) so you can pause, rewind and scratch live radio",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Slider(
+                value = bufferMin.toFloat(),
+                onValueChange = { bufferMin = it.toInt() },
+                onValueChangeFinished = { RadioPrefs.setBufferMinutes(ctx, bufferMin) },
+                valueRange = 0f..15f,
+                steps = 14,
+                modifier = Modifier.semantics { contentDescription = "Radio rewind buffer, $bufferMin minutes" },
+            )
 
             Header("Backup")
             Text(

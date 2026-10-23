@@ -51,7 +51,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
@@ -93,6 +92,8 @@ import com.ctify.player.CtifyApp
 import com.ctify.player.ui.theme.isAppInDarkTheme
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.player.PlayerHub
+import com.ctify.player.ui.radio.LiveBadge
+import com.ctify.player.ui.radio.RewindRow
 import com.ctify.player.ui.skins.CdSkin
 import com.ctify.player.ui.skins.CoverSkin
 import com.ctify.player.ui.skins.LiveProgress
@@ -187,7 +188,7 @@ fun PlayerContent(onClose: () -> Unit) {
                                 Skin.TP7 -> Tp7Skin(live, art, accent, track?.let { "${it.title} · ${it.artist}" } ?: "ctify", m)
                                 Skin.COVER -> {
                                     CoverSkin(live, art, accent, m)
-                                    SeekRow(live, accent, Modifier.width(side * 0.86f))
+                                    if (state?.station == null) SeekRow(live, accent, Modifier.width(side * 0.86f))
                                 }
                             }
                         }
@@ -216,29 +217,6 @@ fun PlayerContent(onClose: () -> Unit) {
             contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             QueueSheet()
-        }
-    }
-}
-
-@Composable
-private fun QueueSheet() {
-    val repository = (LocalContext.current.applicationContext as CtifyApp).repository
-    val ui by PlayerHub.ui.collectAsState()
-    Text(
-        "Up next", fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 16.dp, bottom = 8.dp).semantics { heading() },
-    )
-    LazyColumn(Modifier.heightIn(max = 520.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-        itemsIndexed(ui.queueIds) { index, id ->
-            val t = repository.trackById(id) ?: return@itemsIndexed
-            TrackRow(
-                track = t,
-                isCurrent = index == ui.currentIndex,
-                isPlaying = ui.isPlaying && index == ui.currentIndex,
-                isFavorite = false,
-                onClick = { PlayerHub.playQueueIndex(index) },
-                onToggleFavorite = null,
-            )
         }
     }
 }
@@ -406,9 +384,12 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier) {
 private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, onSound: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
-    val repository = (LocalContext.current.applicationContext as CtifyApp).repository
+    val station = state?.station
+    val app = LocalContext.current.applicationContext as CtifyApp
+    val repository = app.repository
     val favorites by repository.favorites.collectAsState()
-    val fav = track != null && track.id in favorites
+    val stationFavs by app.radio.favoriteIds.collectAsState(initial = emptySet())
+    val fav = if (station != null) station.uuid in stationFavs else track != null && track.id in favorites
 
     Surface(color = Glass, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
         Column(Modifier.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 4.dp)) {
@@ -419,18 +400,21 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                         fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        track?.artist ?: "pick something in Library", color = InkDim, fontSize = 12.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        state?.radioStatus.takeIf { station != null } ?: track?.artist ?: "pick something in Library",
+                        color = InkDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = { track?.let { repository.toggleFavorite(it.id) } }) {
+                IconButton(onClick = {
+                    if (station != null) app.radio.toggleFavorite(station, fav)
+                    else track?.let { repository.toggleFavorite(it.id) }
+                }) {
                     Icon(
                         if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
                         tint = if (fav) accent else Ink,
                     )
                 }
-                IconButton(onClick = onQueue) {
+                if (station == null) IconButton(onClick = onQueue) {
                     Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Up next", tint = Ink)
                 }
             }
@@ -438,9 +422,9 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
             run {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Toggle(Icons.Default.Shuffle, "Shuffle", state?.shuffle == true, accent) { PlayerHub.toggleShuffle() }
+                        if (station == null) Toggle(Icons.Default.Shuffle, "Shuffle", state?.shuffle == true, accent) { PlayerHub.toggleShuffle() }
                         IconButton(onClick = { PlayerHub.previous() }) {
-                            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous track", tint = Ink)
+                            Icon(Icons.Default.SkipPrevious, contentDescription = if (station != null) "Previous station" else "Previous track", tint = Ink)
                         }
                         Box(
                             Modifier
@@ -456,10 +440,10 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                             )
                         }
                         IconButton(onClick = { PlayerHub.next() }) {
-                            Icon(Icons.Default.SkipNext, contentDescription = "Next track", tint = Ink)
+                            Icon(Icons.Default.SkipNext, contentDescription = if (station != null) "Next station" else "Next track", tint = Ink)
                         }
                         val repeat = state?.repeat ?: "off"
-                        Toggle(
+                        if (station == null) Toggle(
                             if (repeat == "track") Icons.Default.RepeatOne else Icons.Default.Repeat,
                             if (repeat == "track") "Repeat one" else "Repeat", repeat != "off", accent,
                         ) { PlayerHub.cycleRepeat() }
@@ -468,7 +452,16 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                             Icon(Icons.Default.MoreHoriz, contentDescription = "Sound settings", tint = Ink)
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
+                    val bufferStart = state?.bufferStartMs
+                    val edge = state?.durationMs ?: 0L
+                    if (station != null && bufferStart != null && edge > bufferStart + 5_000) {
+                        RewindRow(live, bufferStart, edge, accent)
+                    } else if (station != null) {
+                        Row(Modifier.heightIn(min = 32.dp).padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            LiveBadge(accent)
+                            Text(station.name, fontSize = 11.sp, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    } else Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
                         Text(formatMs(live.positionMs.toInt()), fontSize = 11.sp, color = InkDim)
                         PillSlider(
                             value = live.fraction,
@@ -502,20 +495,5 @@ private fun Toggle(icon: ImageVector, label: String, on: Boolean, accent: Color,
         ) {
             Icon(icon, contentDescription = null, tint = if (on) accent else Ink, modifier = Modifier.size(20.dp))
         }
-    }
-}
-
-@Composable
-private fun SoundSheet() {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 28.dp)
-    ) {
-        Text("Sound", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
-        Spacer(Modifier.height(12.dp))
-        SoundPanel()
     }
 }
