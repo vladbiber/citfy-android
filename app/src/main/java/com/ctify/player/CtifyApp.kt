@@ -24,5 +24,6 @@ class CtifyApp : Application() {
         YtRuntime.ensure(this)
         Downloads.init(this, database.downloads())
         MusicWatcher.init(this, database.library(), repository)
+        com.ctify.player.youtube.Chapters.start()
     }
 }

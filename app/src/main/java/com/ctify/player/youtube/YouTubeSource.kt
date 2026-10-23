@@ -101,6 +101,13 @@ object YouTubeSource {
         )
     }
 
+    /** The chapter marks of a video; fewer than two means it has none. */
+    suspend fun chapters(videoId: String): List<Chapter> = lookup("Chapters", videoId) {
+        val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
+        info.streamSegments.map { Chapter(it.title.orEmpty(), it.startTimeSeconds * 1000L) }
+            .sortedBy { it.startMs }.distinctBy { it.startMs }.takeIf { it.size >= 2 }.orEmpty()
+    }
+
     /** Resolves an audio-only stream, M4A preferred; see [StreamResolver]. */
     suspend fun stream(videoId: String, fresh: Boolean = false, forDownload: Boolean = false): YtStream =
         StreamResolver.resolve(videoId, fresh, forDownload)

@@ -246,6 +246,7 @@ fun PillSlider(
     track: Color = Color.White.copy(alpha = 0.22f),
     label: String = "",
     stateText: String? = null,
+    marks: List<Float> = emptyList(),
 ) {
     val latest by rememberUpdatedState(value)
     var drag by remember { mutableFloatStateOf(0f) }
@@ -282,6 +283,10 @@ fun PillSlider(
         val x = v * size.width
         drawLine(track, Offset(0f, y), Offset(size.width, y), 2.dp.toPx(), StrokeCap.Round)
         drawLine(accent, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
+        val mh = 8.dp.toPx(); val mw = 2.dp.toPx()
+        marks.forEach { m ->
+            if (m > 0.001f && m < 0.999f) drawRoundRect(ChapterMark, Offset(m * size.width - mw / 2, y - mh / 2), Size(mw, mh), CornerRadius(mw / 2))
+        }
         val tw = 4.dp.toPx(); val th = 14.dp.toPx()
         drawRoundRect(
             accent, Offset(x - tw / 2, y - th / 2), Size(tw, th), CornerRadius(tw / 2)
@@ -290,6 +295,9 @@ fun PillSlider(
 }
 
 const val TAU = (2 * PI).toFloat()
+
+/** the yellow of YouTube's chapter marks */
+val ChapterMark = Color(0xFFFFCC00)
 
 /** TalkBack semantics for a Canvas stage: play/pause on click, seek via adjust and custom actions. */
 fun Modifier.stageSemantics(

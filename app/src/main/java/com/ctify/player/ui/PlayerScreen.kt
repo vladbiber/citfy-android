@@ -372,6 +372,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier) {
             accent = accent,
             label = "Position",
             stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
+            marks = chapterMarks(live),
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(formatMs(live.positionMs.toInt()), fontSize = 11.sp, color = InkDim)
@@ -471,9 +472,11 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                             label = "Position",
                             stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
                             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                            marks = chapterMarks(live),
                         )
                         Text(formatMs(live.durationMs.toInt()), fontSize = 11.sp, color = InkDim)
                     }
+                    if (station == null) ChapterRow(live, Ink)
                 }
             }
         }
