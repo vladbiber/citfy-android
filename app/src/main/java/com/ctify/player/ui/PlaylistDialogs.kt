@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Queue
 import androidx.compose.material.icons.filled.QueueMusic
@@ -23,9 +24,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,6 +40,9 @@ import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.ui.youtube.downloadOne
+import com.ctify.player.ui.youtube.isStreamed
+import kotlinx.coroutines.launch
 
 /** Bottom sheet to add a single track to an existing playlist, or to a brand-new one. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +62,22 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
             Text("${track.title} • ${track.artist}", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp))
         }
         Spacer(Modifier.height(8.dp))
+
+        if (track != null && track.isStreamed()) {
+            val ctx = LocalContext.current
+            val scope = rememberCoroutineScope()
+            Row(
+                Modifier.fillMaxWidth().clickable { scope.launch { downloadOne(ctx, track) }; onDismiss() }.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Download, null, tint = Accent)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("Download", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                    Text("Plays online now; keep it on the phone", color = TextMuted, fontSize = 11.sp)
+                }
+            }
+        }
 
         Row(
             Modifier.fillMaxWidth().clickable { viewModel.addToQueue(trackId); onDismiss() }.padding(16.dp),

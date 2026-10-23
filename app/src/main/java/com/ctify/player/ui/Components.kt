@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -163,6 +164,9 @@ fun TrackRow(
     onToggleFavorite: (() -> Unit)?,
     onMore: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
+    /** small line before the artist, e.g. "Online" or "Downloaded" */
+    status: String? = null,
+    statusIcon: ImageVector? = null,
 ) {
     val titleColor by animateColorAsState(if (isCurrent) Accent else TextPrimary, label = "title")
     Row(
@@ -201,7 +205,13 @@ fun TrackRow(
                 Column(Modifier.weight(1f)) {
                     Text(track.title, color = titleColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(2.dp))
-                    Text(track.artist, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (statusIcon != null) Icon(statusIcon, null, tint = TextMuted, modifier = Modifier.size(14.dp).padding(end = 2.dp))
+                        Text(
+                            if (status != null) "$status · ${track.artist}" else track.artist,
+                            color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Text(formatTime(track.durationMs), color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp))
             }

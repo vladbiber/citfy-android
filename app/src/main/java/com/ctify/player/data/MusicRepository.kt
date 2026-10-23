@@ -89,6 +89,7 @@ class MusicRepository private constructor(private val appContext: Context, datab
             all.forEach { byId[it.id] = it }
         }
         _tracks.value = all
+        swapDownloaded()
     } }
 
     private fun loadDemoTracks(): List<Track> {
@@ -297,7 +298,36 @@ class MusicRepository private constructor(private val appContext: Context, datab
         val rest = _tracks.value.filter { !it.id.startsWith("yt_") && it.uri !in uris }
         synchronized(byId) { youtube.forEach { byId[it.id] = it } }
         _tracks.value = youtube + rest
+        swapDownloaded()
     } }
+
+    /** Points playlists and favorites at the downloaded copy once a saved stream is on the phone. */
+    private fun swapDownloaded() {
+        val done = _tracks.value.mapNotNullTo(HashSet()) { t -> t.id.takeIf { it.startsWith("yt_") }?.removePrefix("yt_") }
+        val swap = { id: String -> if (id.startsWith(STREAM_PREFIX) && id.removePrefix(STREAM_PREFIX) in done) "yt_" + id.removePrefix(STREAM_PREFIX) else id }
+        _playlists.value.forEachIndexed { i, pl ->
+            val ids = pl.trackIds.map(swap).distinct()
+            if (ids != pl.trackIds) {
+                _playlists.value = _playlists.value.toMutableList().also { it[i] = pl.copy(trackIds = ids) }
+                savePlaylist(pl.name)
+            }
+        }
+        val favs = _favorites.value
+        val newFavs = favs.mapTo(LinkedHashSet(), swap)
+        if (newFavs != favs) {
+            _favorites.value = newFavs
+            val now = System.currentTimeMillis()
+            writer.launch {
+                (favs - newFavs).forEach { dao.deleteFavorite(it) }
+                dao.upsertFavorites((newFavs - favs).map { FavoriteEntity(it, now) })
+            }
+        }
+        val streamDone = _tracks.value.filter { it.id.startsWith(STREAM_PREFIX) && it.id.removePrefix(STREAM_PREFIX) in done }
+        if (streamDone.isNotEmpty()) {
+            _tracks.value = _tracks.value - streamDone.toSet()
+            writer.launch { streamDone.forEach { dao.deleteTrack(it.id) } }
+        }
+    }
 
     private suspend fun loadYoutubeTracks(): List<Track> = dao.tracksBySource(TrackSource.YOUTUBE).map {
         val cover = it.youtubeVideoId?.let { v -> File(appContext.filesDir, "yt-covers/$v.jpg") }?.takeIf(File::exists)

@@ -80,6 +80,9 @@ import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.ui.youtube.PlaylistDownloadBar
+import com.ctify.player.ui.youtube.rememberDownloadStates
+import com.ctify.player.ui.youtube.ytStatus
 
 internal fun LazyGridScope.full(content: @Composable () -> Unit) =
     item(span = { GridItemSpan(maxLineSpan) }) { content() }
@@ -289,6 +292,7 @@ private fun PlaylistDetail(
 ) {
     val name = playlist.name
     val plTracks = viewModel.repository.playlistTracks(name)
+    val dlStates = rememberDownloadStates()
     var showPlMenu by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -354,6 +358,7 @@ private fun PlaylistDetail(
                         enabled = plTracks.isNotEmpty(),
                     ) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Shuffle") }
                 }
+                PlaylistDownloadBar(playlist, plTracks, dlStates)
                 Spacer(Modifier.height(10.dp))
             }
         }
@@ -367,6 +372,8 @@ private fun PlaylistDetail(
                     onToggleFavorite = { viewModel.toggleFavorite(t.id) },
                     onRemove = { viewModel.repository.removeFromPlaylist(name, t.id) },
                     onMore = { onMore(t.id) },
+                    status = ytStatus(t, dlStates)?.first,
+                    statusIcon = ytStatus(t, dlStates)?.second,
                 )
             }
         }

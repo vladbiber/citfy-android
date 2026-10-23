@@ -56,6 +56,8 @@ import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.youtube.CardRow
+import com.ctify.player.ui.youtube.rememberDownloadStates
+import com.ctify.player.ui.youtube.ytStatus
 import com.ctify.player.youtube.YouTubeSource
 import com.ctify.player.youtube.YtIntake
 import com.ctify.player.youtube.YtPlaylistRef
@@ -75,6 +77,7 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val radioUi = rememberRadioUi()
+    val dlStates = rememberDownloadStates()
     val radio = radioRepo()
     var query by rememberSaveable { mutableStateOf("") }
     var scope by rememberSaveable { mutableStateOf(Scope.ALL) }
@@ -192,6 +195,8 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
                     onClick = { viewModel.playQueue(local, local.indexOf(track)) },
                     onToggleFavorite = { viewModel.toggleFavorite(track.id) },
                     onMore = { onMore(track.id) },
+                    status = ytStatus(track, dlStates)?.first,
+                    statusIcon = ytStatus(track, dlStates)?.second,
                 )
             }
         }
