@@ -482,6 +482,15 @@ class MusicRepository private constructor(private val appContext: Context, datab
         savePlaylist(name)
     }
 
+    /** Moves the song at [from] to [to] inside a playlist. */
+    fun moveInPlaylist(name: String, from: Int, to: Int) {
+        _playlists.value = _playlists.value.map { pl ->
+            if (pl.name != name || from !in pl.trackIds.indices || to !in pl.trackIds.indices) pl
+            else pl.copy(trackIds = pl.trackIds.toMutableList().apply { add(to, removeAt(from)) })
+        }
+        savePlaylist(name)
+    }
+
     fun removeFromPlaylist(name: String, trackId: String) {
         _playlists.value = _playlists.value.map {
             if (it.name == name) it.copy(trackIds = it.trackIds.filterNot { id -> id == trackId }) else it

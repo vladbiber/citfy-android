@@ -249,7 +249,7 @@ fun FxSlider(
 }
 
 private fun rangeLabel(t: Float) =
-    if (t < 0.01f) "normal" else "up to ${(FxRange.reverb(t).endInclusive * 100).roundToInt()}%"
+    if (t < 0.01f) "normal (x1)" else "x${"%.1f".format(FxRange.factor(t)).removeSuffix(".0")}"
 
 private fun spaceSummary(width: Float, pan: Float, muffle: Float): String {
     val parts = buildList {

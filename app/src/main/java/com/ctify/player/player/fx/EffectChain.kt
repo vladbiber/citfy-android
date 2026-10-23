@@ -10,16 +10,16 @@ import kotlin.math.sqrt
 
 /** Effect settings. ExoPlayer's Sonic stage does the speed; [rate] only drives the vinyl platter. */
 class Fx {
-    @Volatile var speed = 1.0f          // 0.1 .. 4, 1.0 = original tempo
+    @Volatile var speed = 1.0f          // 0.05 .. 8, 1.0 = original tempo
     @Volatile var reverb = 0.0f         // 0 .. 10 wet amount, above 1 a longer tail and less dry
     @Volatile var retune = 1.0f         // tuning ratio, multiplies speed
-    @Volatile var bassGainDb = 0.0f     // 0 .. 36 dB low shelf
+    @Volatile var bassGainDb = 0.0f     // 0 .. 60 dB low shelf
     @Volatile var bassFreq = 120.0f     // 40 .. 320 Hz shelf corner
-    @Volatile var width = 1.0f          // 0 mono .. 1 original .. 10 extra wide
+    @Volatile var width = 1.0f          // 0 mono .. 1 original .. 20 extra wide
     @Volatile var pan8d = 0.0f          // 0 .. 1 depth of the circling "8D" pan
     @Volatile var muffle = 0.0f         // 0 .. 10 "playing in another room" lowpass
     @Volatile var rain = RainPreset.OFF
-    @Volatile var rainLevel = 1.0f       // 0 .. 10 on top of the preset
+    @Volatile var rainLevel = 1.0f       // 0 .. 15 on top of the preset
     @Volatile var vinyl = false         // record emulation on/off
     @Volatile var vinylCrackle = 0.45f  // 0 .. 1 ticks, pops, scratches
     @Volatile var vinylWarmth = 0.6f    // 0 .. 1 rolloff, saturation, mono bass
@@ -28,7 +28,7 @@ class Fx {
     /** device, genre and EQ layers, colour, ReplayGain and balance */
     val hifi = HifiFx()
 
-    val rate: Float get() = (speed * retune).coerceIn(0.1f, 4.0f)
+    val rate: Float get() = (speed * retune).coerceIn(0.05f, 8.0f)
 }
 
 /** 0 at 1, 1 at 10 on a log scale: how far a setting reaches past 100%. */
@@ -143,8 +143,11 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
     private var smoothPre = 1f
     private val hifi = HifiChain(fx.hifi, sampleRate)
 
-    /** Largest boost in the stack in dB. Every gain stage adds its peak gain here. */
-    private fun boostDb(): Float = max(0f, fx.bassGainDb) + max(0f, fx.hifi.layers.headroomDb)
+    /**
+     * How far the preamp turns everything down before the boosts. Only a part of each boost,
+     * so bass and EQ actually get louder; the limiter catches the peaks that are left.
+     */
+    private fun boostDb(): Float = 0.25f * max(0f, fx.bassGainDb) + 0.5f * max(0f, fx.hifi.layers.headroomDb)
 
     private fun preampTarget(): Float = 10.0.pow(-boostDb() / 20.0).toFloat()
 
@@ -177,11 +180,11 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
         val warmth = fx.vinylWarmth.coerceIn(0f, 1f)
         val wow = fx.vinylWow.coerceIn(0f, 1f)
         val surface = fx.vinylSurface.coerceIn(0f, 1f)
-        val targetWidth = fx.width.coerceIn(0f, 10f)
+        val targetWidth = fx.width.coerceIn(0f, 20f)
         val targetPan = fx.pan8d.coerceIn(0f, 1f)
         val muffle = fx.muffle.coerceIn(0f, 10f)
         val rainWant = fx.rain
-        val rainLevel = fx.rainLevel.coerceIn(0f, 10f)
+        val rainLevel = fx.rainLevel.coerceIn(0f, 15f)
         val rate = fx.rate
         val targetPre = preampTarget()
         if (muffle != appliedMuffle) {

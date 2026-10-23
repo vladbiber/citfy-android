@@ -33,6 +33,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
@@ -44,6 +46,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -79,6 +83,7 @@ import com.ctify.player.data.Track
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
+import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.youtube.PlaylistDownloadBar
@@ -304,6 +309,7 @@ private fun PlaylistDetail(
     var showPlMenu by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var reordering by remember { mutableStateOf(false) }
     val coverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.repository.setPlaylistCover(name, uri)
     }
@@ -320,6 +326,7 @@ private fun PlaylistDetail(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to library", tint = TextPrimary)
                 }
                 Spacer(Modifier.weight(1f))
+                if (reordering) TextButton(onClick = { reordering = false }) { Text("Done", color = Accent) }
                 Box {
                     IconButton(onClick = { showPlMenu = true }) {
                         Icon(Icons.Filled.MoreVert, "Playlist options", tint = TextSecondary)
@@ -329,6 +336,11 @@ private fun PlaylistDetail(
                             text = { Text("Rename", color = TextPrimary) },
                             leadingIcon = { Icon(Icons.Filled.Edit, null, tint = TextSecondary) },
                             onClick = { showPlMenu = false; showRename = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Change order", color = TextPrimary) },
+                            leadingIcon = { Icon(Icons.Filled.SwapVert, null, tint = TextSecondary) },
+                            onClick = { showPlMenu = false; reordering = true },
                         )
                         DropdownMenuItem(
                             text = { Text("Change cover", color = TextPrimary) },
@@ -371,7 +383,9 @@ private fun PlaylistDetail(
             }
         }
         if (plTracks.isEmpty()) full { EmptyHint("This playlist is empty. Add songs with the menu on any track.") }
-        plTracks.forEach { t ->
+        if (reordering) plTracks.forEachIndexed { i, t ->
+            full { ReorderRow(t, i, plTracks.size) { to -> viewModel.repository.moveInPlaylist(name, i, to) } }
+        } else plTracks.forEach { t ->
             full {
                 TrackRow(
                     track = t, isCurrent = t.id == currentId, isPlaying = isPlaying && t.id == currentId,
@@ -419,5 +433,23 @@ private fun PlaylistDetail(
             dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel", color = TextSecondary) } },
             containerColor = SurfaceElevated,
         )
+    }
+}
+
+/** One song while a playlist is being reordered: up and down, or straight to the top or bottom. */
+@Composable
+private fun ReorderRow(track: Track, index: Int, size: Int, onMove: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("${index + 1}", color = TextMuted, fontSize = 13.sp, modifier = Modifier.width(28.dp))
+        Column(Modifier.weight(1f)) {
+            Text(track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        IconButton(onClick = { onMove(0) }, enabled = index > 0) { Icon(Icons.Filled.VerticalAlignTop, "Move ${track.title} to the top") }
+        IconButton(onClick = { onMove(index - 1) }, enabled = index > 0) { Icon(Icons.Filled.ArrowUpward, "Move ${track.title} up") }
+        IconButton(onClick = { onMove(index + 1) }, enabled = index < size - 1) { Icon(Icons.Filled.ArrowDownward, "Move ${track.title} down") }
     }
 }

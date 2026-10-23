@@ -16,8 +16,9 @@ internal class Limiter(sampleRate: Float) {
     private val delayL = FloatArray(win)
     private val delayR = FloatArray(win)
     private val avgBuf = FloatArray(win)
-    private val qVal = FloatArray(win)
-    private val qAt = IntArray(win)
+    // one spare slot: the newest value goes in before the oldest is dropped
+    private val qVal = FloatArray(win + 1)
+    private val qAt = IntArray(win + 1)
     private var qHead = 0
     private var qSize = 0
     private var n = 0
@@ -43,10 +44,10 @@ internal class Limiter(sampleRate: Float) {
             val peak = max(abs(l), abs(r))
             val need = if (peak > CEILING) CEILING / peak else 1f
             // sliding minimum of the needed gain over the window
-            while (qSize > 0 && qVal[(qHead + qSize - 1) % win] >= need) qSize--
-            val tail = (qHead + qSize) % win
+            while (qSize > 0 && qVal[(qHead + qSize - 1) % (win + 1)] >= need) qSize--
+            val tail = (qHead + qSize) % (win + 1)
             qVal[tail] = need; qAt[tail] = n; qSize++
-            while (n - qAt[qHead] >= win) { qHead = (qHead + 1) % win; qSize-- }
+            while (n - qAt[qHead] >= win) { qHead = (qHead + 1) % (win + 1); qSize-- }
             val held = qVal[qHead]
             avgSum += held - avgBuf[pos]
             avgBuf[pos] = held
