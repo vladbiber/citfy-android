@@ -27,6 +27,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -203,27 +204,19 @@ fun rememberArtPainter(url: String?): Painter {
  * the most common saturated hue, lifted to a soft, readable tint.
  */
 @Composable
-fun rememberArtAccent(url: String?, fallback: Color = CtifyBlue): Color {
+fun rememberArtAccent(url: String?, fallback: Color): Color {
     val ctx = LocalContext.current
     var picked by remember { mutableStateOf(fallback) }
     LaunchedEffect(url) {
         if (url == null) { picked = fallback; return@LaunchedEffect }
         val req = ImageRequest.Builder(ctx).data(url).size(48).allowHardware(false).build()
         val bmp = (ctx.imageLoader.execute(req) as? SuccessResult)?.drawable?.toBitmap(48, 48, Bitmap.Config.ARGB_8888)
-        // ctify keeps its blue identity; the cover only tints toward it
-        picked = bmp?.let { dominantPastel(it) }?.let { blueTint(it) } ?: fallback
+        // a little of the theme color keeps covers from clashing with the rest of the app
+        picked = bmp?.let { dominantPastel(it) }?.let { lerp(it, fallback, 0.15f) } ?: fallback
     }
     val animated by animateColorAsState(picked, tween(700), label = "accent")
     return animated
 }
-
-val CtifyBlue = Color(0xFF8AB8FF)
-
-private fun blueTint(c: Color): Color = Color(
-    red = c.red * 0.25f + CtifyBlue.red * 0.75f,
-    green = c.green * 0.25f + CtifyBlue.green * 0.75f,
-    blue = c.blue * 0.25f + CtifyBlue.blue * 0.75f,
-)
 
 private fun dominantPastel(bmp: Bitmap): Color? {
     val bins = FloatArray(24); val hueSum = FloatArray(24)

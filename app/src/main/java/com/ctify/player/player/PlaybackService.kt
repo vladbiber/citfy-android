@@ -1,6 +1,7 @@
 package com.ctify.player.player
 
 import android.content.Context
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -14,12 +15,19 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.ctify.player.player.fx.FxProcessorChain
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
+import com.ctify.player.CtifyApp
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 
 /** ExoPlayer + MediaSession; media3 provides the notification and lock-screen controls. */
 @OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+    private var playback: PlaybackController? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -68,7 +76,32 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
-        mediaSession = MediaSession.Builder(this, player).build()
+        playback = PlaybackController(this, player, (application as CtifyApp).repository)
+        mediaSession = MediaSession.Builder(this, player).setCallback(SessionCallback()).build()
+    }
+
+    /** Only Ctify itself may send the custom playback commands. */
+    private inner class SessionCallback : MediaSession.Callback {
+        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+            if (controller.packageName != packageName) return super.onConnect(session, controller)
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .apply { Cmd.ALL.forEach { add(SessionCommand(it, Bundle.EMPTY)) } }
+                .build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
+                .setAvailableSessionCommands(commands)
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            val ok = controller.packageName == packageName &&
+                playback?.handle(customCommand.customAction, args) == true
+            return Futures.immediateFuture(SessionResult(if (ok) SessionResult.RESULT_SUCCESS else SessionError.ERROR_NOT_SUPPORTED))
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
@@ -81,6 +114,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        playback?.release()
+        playback = null
         mediaSession?.run {
             player.release()
             release()

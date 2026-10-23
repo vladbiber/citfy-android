@@ -17,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -50,6 +51,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 fun CtifyRoot(viewModel: PlayerViewModel) {
     var tab by remember { mutableIntStateOf(0) }
     var showNowPlaying by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var moreTrackId by remember { mutableStateOf<String?>(null) }
     var openedPlaylist by remember { mutableStateOf<String?>(null) }
     var librarySection by remember { mutableIntStateOf(0) }
@@ -82,7 +84,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                         onNext = viewModel::next,
                     )
                 }
-                NavigationBar(containerColor = Color(0xFF0F131C)) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                     Tab.entries.forEachIndexed { index, t ->
                         NavigationBarItem(
                             selected = tab == index,
@@ -110,6 +112,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     onMore = onMore,
                     onOpenPlaylist = { name -> openedPlaylist = name; tab = 2 },
                     onOpenFavorites = { librarySection = 1; openedPlaylist = null; tab = 2 },
+                    onOpenSettings = { showSettings = true },
                 )
                 1 -> SearchScreen(viewModel, onMore = onMore)
                 2 -> LibraryScreen(
@@ -129,6 +132,15 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
 
     moreTrackId?.let { id ->
         AddToPlaylistSheet(viewModel, trackId = id, onDismiss = { moreTrackId = null })
+    }
+
+    AnimatedVisibility(
+        visible = showSettings,
+        enter = slideInVertically(initialOffsetY = { it }),
+        exit = slideOutVertically(targetOffsetY = { it }),
+    ) {
+        BackHandler { showSettings = false }
+        SettingsScreen(onClose = { showSettings = false })
     }
 
     AnimatedVisibility(

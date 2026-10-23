@@ -70,6 +70,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -86,6 +89,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.ctify.player.CtifyApp
+import com.ctify.player.ui.theme.isAppInDarkTheme
+import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.skins.CdSkin
 import com.ctify.player.ui.skins.CoverSkin
@@ -117,9 +123,9 @@ import androidx.compose.ui.semantics.stateDescription
 import com.ctify.player.player.fx.RETUNE_PRESETS
 import kotlin.math.abs
 
-private val Glass = Color(0xD91C1A1F)
-private val Ink = Color(0xFFECE8EE)
-private val InkDim = Color(0xFFA9A3AE)
+private val Glass: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f)
+private val Ink: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
+private val InkDim: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,13 +136,16 @@ fun PlayerContent(onClose: () -> Unit) {
     var skin by remember { mutableStateOf(Skin.load(ctx)) }
     var sheet by remember { mutableStateOf(false) }
     var queue by remember { mutableStateOf(false) }
-    val accent = rememberArtAccent(track?.coverUri)
+    val dark = isAppInDarkTheme()
+    val coverColors by Appearance.coverColors.collectAsState()
+    val accent = rememberArtAccent(if (coverColors) track?.coverUri else null, MaterialTheme.colorScheme.primary)
+        .let { if (dark) it else it.darkened() }
     val art = rememberArtPainter(track?.coverUri)
     val live = rememberLiveProgress()
 
     // not inside a Surface, so set the text color here or bare Text turns black
     CompositionLocalProvider(LocalContentColor provides Ink) {
-    Box(Modifier.fillMaxSize().background(Color(0xFF0E0D10))) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Backdrop(track?.coverUri, accent)
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
             // very short screens (or huge fonts) scroll; otherwise the stage takes what is left
@@ -213,29 +222,38 @@ fun PlayerContent(onClose: () -> Unit) {
 
 @Composable
 private fun QueueSheet() {
-    val vm = PlayerHub.controls ?: return
-    val ui by vm.ui.collectAsState()
+    val repository = (LocalContext.current.applicationContext as CtifyApp).repository
+    val ui by PlayerHub.ui.collectAsState()
     Text(
         "Up next", fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(start = 16.dp, bottom = 8.dp).semantics { heading() },
     )
     LazyColumn(Modifier.heightIn(max = 520.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
         itemsIndexed(ui.queueIds) { index, id ->
-            val t = vm.repository.trackById(id) ?: return@itemsIndexed
+            val t = repository.trackById(id) ?: return@itemsIndexed
             TrackRow(
                 track = t,
                 isCurrent = index == ui.currentIndex,
                 isPlaying = ui.isPlaying && index == ui.currentIndex,
                 isFavorite = false,
-                onClick = { vm.playQueueIndex(index) },
+                onClick = { PlayerHub.playQueueIndex(index) },
                 onToggleFavorite = null,
             )
         }
     }
 }
 
+/** Pastel cover accents are too light on a light background; keep the hue, lower the lightness. */
+private fun Color.darkened(): Color {
+    val hsl = FloatArray(3)
+    androidx.core.graphics.ColorUtils.colorToHSL(toArgb(), hsl)
+    hsl[2] = hsl[2].coerceAtMost(0.40f)
+    return Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
+}
+
 @Composable
 private fun Backdrop(art: String?, accent: Color) {
+    val scrim = MaterialTheme.colorScheme.background
     val blurry = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     AsyncImage(
         model = art,
@@ -250,7 +268,7 @@ private fun Backdrop(art: String?, accent: Color) {
     Box(
         Modifier.fillMaxSize().background(
             Brush.verticalGradient(
-                listOf(accent.copy(alpha = 0.10f), Color.Black.copy(alpha = 0.25f), Color.Black.copy(alpha = 0.7f))
+                listOf(accent.copy(alpha = 0.10f), scrim.copy(alpha = 0.25f), scrim.copy(alpha = 0.7f))
             )
         )
     )
@@ -283,7 +301,7 @@ private fun TopPill(skin: Skin, onClose: () -> Unit, onSkin: (Skin) -> Unit, onS
                             fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .background(if (on) Color.White.copy(alpha = 0.12f) else Color.Transparent)
+                                .background(if (on) Ink.copy(alpha = 0.12f) else Color.Transparent)
                                 .padding(horizontal = 8.dp, vertical = 7.dp),
                         )
                     }
@@ -388,7 +406,8 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier) {
 private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, onSound: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
-    val favorites by (PlayerHub.controls?.repository?.favorites ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet())).collectAsState()
+    val repository = (LocalContext.current.applicationContext as CtifyApp).repository
+    val favorites by repository.favorites.collectAsState()
     val fav = track != null && track.id in favorites
 
     Surface(color = Glass, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
@@ -404,7 +423,7 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = { track?.let { PlayerHub.controls?.toggleFavorite(it.id) } }) {
+                IconButton(onClick = { track?.let { repository.toggleFavorite(it.id) } }) {
                     Icon(
                         if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
@@ -433,7 +452,7 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                         ) {
                             Icon(
                                 if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = Color(0xFF1A1719),
+                                contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = if (accent.luminance() > 0.4f) Color(0xFF1A1719) else Color.White,
                             )
                         }
                         IconButton(onClick = { PlayerHub.next() }) {

@@ -19,8 +19,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,6 +47,7 @@ fun HomeScreen(
     onMore: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onOpenFavorites: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
@@ -61,15 +65,18 @@ fun HomeScreen(
             Row(Modifier.padding(start = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 CtifyLogo(size = 40.dp)
                 Spacer(Modifier.width(12.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     ScreenTitle("ctify")
+                }
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
         full {
             HeroCard(
                 "Shuffle everything", "${tracks.size} songs on this phone", Icons.Filled.Shuffle,
-                listOf(Color(0xFF2B5FD9), Color(0xFF8AB8FF)),
+                listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer),
             ) {
                 if (tracks.isNotEmpty()) { viewModel.playQueue(tracks.shuffled(), 0); onOpenNowPlaying() }
             }
@@ -77,7 +84,7 @@ fun HomeScreen(
         full {
             HeroCard(
                 "Favorites", if (favorites.isEmpty()) "Tap a heart to save songs" else "${favorites.size} songs",
-                Icons.Filled.Favorite, listOf(Color(0xFF3B3F9E), Color(0xFF5B9DFF)),
+                Icons.Filled.Favorite, listOf(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer),
                 onClick = onOpenFavorites,
             )
         }
@@ -109,6 +116,7 @@ fun HomeScreen(
 
 @Composable
 private fun HeroCard(title: String, subtitle: String, icon: ImageVector, colors: List<Color>, onClick: () -> Unit) {
+    val ink = MaterialTheme.colorScheme.onPrimaryContainer
     Row(
         Modifier
             .fillMaxWidth()
@@ -120,13 +128,13 @@ private fun HeroCard(title: String, subtitle: String, icon: ImageVector, colors:
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.2f)),
+            Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(ink.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = null, tint = Color.White) }
+        ) { Icon(icon, contentDescription = null, tint = ink) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            Text(subtitle, fontSize = 13.sp, color = Color.White.copy(alpha = 0.88f))
+            Text(title, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = ink)
+            Text(subtitle, fontSize = 13.sp, color = ink.copy(alpha = 0.85f))
         }
     }
 }

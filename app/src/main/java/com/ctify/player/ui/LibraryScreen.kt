@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -252,7 +253,7 @@ private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             label,
-            color = if (selected) Color(0xFF0A1428) else TextPrimary,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else TextPrimary,
             fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
             modifier = Modifier
                 .clip(CircleShape)
@@ -309,8 +310,8 @@ private fun PlaylistDetail(
                             onClick = { showPlMenu = false; coverLauncher.launch(arrayOf("image/*")) },
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete playlist", color = Color(0xFFFF8A8A)) },
-                            leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Color(0xFFFF8A8A)) },
+                            text = { Text("Delete playlist", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error) },
                             onClick = { showPlMenu = false; showDeleteConfirm = true },
                         )
                     }
@@ -374,7 +375,7 @@ private fun PlaylistDetail(
                     showDeleteConfirm = false
                     viewModel.repository.deletePlaylist(name)
                     onOpenPlaylist(null)
-                }) { Text("Delete", color = Color(0xFFFF8A8A)) }
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel", color = TextSecondary) } },
             containerColor = SurfaceElevated,

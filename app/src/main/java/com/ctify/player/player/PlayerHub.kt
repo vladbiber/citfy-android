@@ -1,6 +1,10 @@
 package com.ctify.player.player
 
 import android.content.Context
+import android.os.Bundle
+import androidx.media3.common.Player
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import com.ctify.player.data.Track
 import com.ctify.player.player.fx.Fx
 import com.ctify.player.player.fx.Mood
@@ -30,7 +34,11 @@ object PlayerHub {
     /** true while a reversed copy of the track is being decoded */
     val reversePreparing = MutableStateFlow(false)
 
-    @Volatile var controls: PlayerViewModel? = null
+    /** what the playback controller in the service publishes */
+    val ui = MutableStateFlow(PlayerUiState())
+
+    /** session handle held while the app is open; all transport goes through the service */
+    @Volatile var remote: MediaController? = null
 
     fun init(context: Context) {
         if (::app.isInitialized) return
@@ -38,14 +46,42 @@ object PlayerHub {
         loadFx()
     }
 
-    fun togglePlay() { controls?.togglePlay() }
-    fun next() { controls?.next() }
-    fun previous() { controls?.previous() }
-    fun seek(ms: Int) { controls?.seekTo(ms.toLong()) }
-    fun setVolume(percent: Int) { controls?.setVolume(percent / 100f) }
-    fun toggleShuffle() { controls?.toggleShuffle() }
-    fun cycleRepeat() { controls?.cycleRepeat() }
-    fun toggleReverse() { controls?.toggleReverse() }
+    fun togglePlay() {
+        val c = remote ?: return
+        if (c.isPlaying) c.pause()
+        else {
+            when (c.playbackState) {
+                Player.STATE_IDLE -> c.prepare()
+                // After a track ends, play() alone does nothing; rewind first so the
+                // single tap actually restarts playback.
+                Player.STATE_ENDED -> c.seekTo(0)
+            }
+            c.play()
+        }
+    }
+    fun next() = send(Cmd.NEXT)
+    fun previous() = send(Cmd.PREVIOUS)
+    fun seek(ms: Int) = send(Cmd.SEEK) { putLong(Cmd.ARG_MS, ms.toLong()) }
+    fun setVolume(percent: Int) { remote?.volume = (percent / 100f).coerceIn(0f, 1f) }
+    fun toggleShuffle() { remote?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled } }
+    fun cycleRepeat() {
+        val c = remote ?: return
+        c.repeatMode = when (c.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+    }
+    fun toggleReverse() = send(Cmd.TOGGLE_REVERSE)
+    fun playQueue(ids: List<String>, startIndex: Int) = send(Cmd.PLAY_QUEUE) {
+        putStringArray(Cmd.ARG_IDS, ids.toTypedArray()); putInt(Cmd.ARG_INDEX, startIndex)
+    }
+    fun addToQueue(id: String) = send(Cmd.ADD_TO_QUEUE) { putString(Cmd.ARG_ID, id) }
+    fun playQueueIndex(index: Int) = send(Cmd.PLAY_INDEX) { putInt(Cmd.ARG_INDEX, index) }
+
+    private fun send(action: String, args: Bundle.() -> Unit = {}) {
+        remote?.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), Bundle().apply(args))
+    }
 
     // ---- effects --------------------------------------------------------
 
@@ -62,7 +98,7 @@ object PlayerHub {
     fun setSpeed(value: Float) {
         speed.value = value
         fx.speed = value
-        rate.value = fx.rate; controls?.applyRate()
+        rate.value = fx.rate
         saveFx()
     }
 
@@ -90,7 +126,7 @@ object PlayerHub {
         val preset = RETUNE_PRESETS.getOrNull(index) ?: return
         retuneIndex.value = index
         fx.retune = preset.ratio
-        rate.value = fx.rate; controls?.applyRate()
+        rate.value = fx.rate
         if (preset.reverb > 0f) setReverb(preset.reverb) else saveFx()
     }
 
@@ -183,7 +219,7 @@ object PlayerHub {
         fx.retune = RETUNE_PRESETS.getOrNull(retuneIndex.value)?.ratio ?: 1f
         fx.bassGainDb = bassGain.value
         fx.bassFreq = bassFreq.value
-        rate.value = fx.rate; controls?.applyRate()
+        rate.value = fx.rate
         width.value = p.getFloat("width", 1f)
         pan8d.value = p.getFloat("pan8d", 0f)
         muffle.value = p.getFloat("muffle", 0f)

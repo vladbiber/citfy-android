@@ -271,7 +271,7 @@ fun MiniPlayer(
             progress = { progress.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).height(2.dp),
             color = Accent,
-            trackColor = Color.White.copy(alpha = 0.15f),
+            trackColor = TextPrimary.copy(alpha = 0.15f),
         )
         Spacer(Modifier.height(4.dp))
     }

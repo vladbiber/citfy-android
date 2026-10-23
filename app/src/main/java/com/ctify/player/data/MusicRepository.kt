@@ -8,10 +8,20 @@ import android.net.Uri
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
+import com.ctify.player.data.db.CtifyDatabase
+import com.ctify.player.data.db.FavoriteEntity
+import com.ctify.player.data.db.PlaybackSnapshotEntity
+import com.ctify.player.data.db.TrackEntity
+import com.ctify.player.data.db.TrackSource
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -23,20 +33,27 @@ import java.io.File
  * Mirrors the original C `ctify`: bundled demo tracks plus an optional scan of the
  * device's local audio, with favorites and `.m3u`-style playlists persisted between runs.
  */
-class MusicRepository private constructor(private val appContext: Context) {
+class MusicRepository private constructor(private val appContext: Context, database: CtifyDatabase) {
 
+    /** pre-Room storage, read once by [migrateFromPrefs] */
     private val prefs = appContext.getSharedPreferences("ctify_state", Context.MODE_PRIVATE)
+    private val dao = database.library()
+    /** one writer thread keeps database writes in the order the user made them */
+    private val writer = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    private var stateLoaded = false
 
     private val _tracks = MutableStateFlow<List<Track>>(emptyList())
     val tracks: StateFlow<List<Track>> = _tracks.asStateFlow()
 
-    private val _favorites = MutableStateFlow(loadFavorites())
+    private val _favorites = MutableStateFlow<Set<String>>(emptySet())
     val favorites: StateFlow<Set<String>> = _favorites.asStateFlow()
 
-    private val _playlists = MutableStateFlow(loadPlaylists())
+    private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
     private val byId = HashMap<String, Track>()
+    /** the app and the playback service can both trigger a load */
+    private val loadLock = Mutex()
 
     fun trackById(id: String?): Track? = id?.let { byId[it] }
 
@@ -48,7 +65,14 @@ class MusicRepository private constructor(private val appContext: Context) {
     }
 
     /** Loads demo assets, then user-imported files, then merges any device audio. */
-    suspend fun load(includeDevice: Boolean) = withContext(Dispatchers.IO) {
+    suspend fun load(includeDevice: Boolean) = withContext(Dispatchers.IO) { loadLock.withLock {
+        if (!stateLoaded) {
+            migrateFromPrefs()
+            // in memory from here on; later loads must not overwrite queued writes
+            _favorites.value = dao.favoriteIds().toSet()
+            _playlists.value = dao.playlists().map { Playlist(it.name, dao.playlistTrackIds(it.id), it.coverUri) }
+            stateLoaded = true
+        }
         val demo = loadDemoTracks()
         val imported = loadImportedTracks().map { ensureImportedCover(it) }
         val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()) else emptyList()
@@ -56,7 +80,7 @@ class MusicRepository private constructor(private val appContext: Context) {
         byId.clear()
         all.forEach { byId[it.id] = it }
         _tracks.value = all
-    }
+    } }
 
     private fun loadDemoTracks(): List<Track> {
         val json = appContext.assets.open("demo/manifest.json").bufferedReader().use { it.readText() }
@@ -128,8 +152,7 @@ class MusicRepository private constructor(private val appContext: Context) {
             )
         }
         val track = buildImportedTrack(uri, queryDisplayName(uri))
-        val current = loadImportedRaw().filterNot { it.id == track.id } + track
-        saveImported(current)
+        dao.upsertTracks(listOf(track.toEntity()))
         load(includeDevice = false)
         track.id
     }
@@ -151,14 +174,9 @@ class MusicRepository private constructor(private val appContext: Context) {
         collectAudio(root, audioDocs, depth = 0)
         if (audioDocs.isEmpty()) return@withContext folderName to 0
 
-        val byUri = loadImportedRaw().associateBy { it.uri }.toMutableMap()
-        val ids = ArrayList<String>()
-        audioDocs.forEach { doc ->
-            val track = buildImportedTrack(doc.uri, doc.name)
-            byUri[track.uri] = track
-            ids.add(track.id)
-        }
-        saveImported(byUri.values.toList())
+        val tracks = audioDocs.map { buildImportedTrack(it.uri, it.name) }
+        val ids = tracks.map { it.id }
+        dao.upsertTracks(tracks.map { it.toEntity() })
         createPlaylistWithTracks(folderName, ids)
         load(includeDevice = false)
         folderName to ids.size
@@ -247,8 +265,7 @@ class MusicRepository private constructor(private val appContext: Context) {
     }
 
     fun removeImported(id: String) {
-        val remaining = loadImportedRaw().filterNot { it.id == id }
-        saveImported(remaining)
+        writer.launch { dao.deleteTrack(id) }
         runCatching { appContext.contentResolver.releasePersistableUriPermission(Uri.parse(byId[id]?.uri ?: ""), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
     }
 
@@ -259,38 +276,21 @@ class MusicRepository private constructor(private val appContext: Context) {
             }
         }.getOrNull()
 
-    private fun loadImportedRaw(): List<Track> {
-        val raw = prefs.getString("imported", null) ?: return emptyList()
-        val arr = JSONArray(raw)
-        return (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            Track(
-                id = o.getString("id"),
-                title = o.getString("title"),
-                artist = o.getString("artist"),
-                album = o.getString("album"),
-                uri = o.getString("uri"),
-                coverUri = null,
-                durationMs = o.optLong("durationMs", 0L),
-                isDemo = false,
-                isImported = true,
-            )
+    private suspend fun loadImportedTracks(): List<Track> =
+        dao.tracksBySource(TrackSource.IMPORTED).map {
+            Track(it.id, it.title, it.artist, it.album, it.uri, null, it.durationMs, isDemo = false, isImported = true)
         }
-    }
 
-    private fun loadImportedTracks(): List<Track> = loadImportedRaw()
-
-    private fun saveImported(list: List<Track>) {
-        val arr = JSONArray()
-        list.forEach { t ->
-            arr.put(
-                JSONObject()
-                    .put("id", t.id).put("title", t.title).put("artist", t.artist)
-                    .put("album", t.album).put("uri", t.uri).put("durationMs", t.durationMs)
-            )
-        }
-        prefs.edit().putString("imported", arr.toString()).apply()
-    }
+    private fun Track.toEntity() = TrackEntity(
+        id = id,
+        source = TrackSource.IMPORTED,
+        title = title,
+        artist = artist,
+        album = album,
+        uri = uri,
+        durationMs = durationMs,
+        addedAt = System.currentTimeMillis(),
+    )
 
     // ---- favorites ----
 
@@ -298,16 +298,14 @@ class MusicRepository private constructor(private val appContext: Context) {
         val set = _favorites.value.toMutableSet()
         if (!set.add(id)) set.remove(id)
         _favorites.value = set
-        prefs.edit().putString("favorites", JSONArray(set.toList()).toString()).apply()
+        val added = id in set
+        writer.launch {
+            if (added) dao.upsertFavorites(listOf(FavoriteEntity(id, System.currentTimeMillis())))
+            else dao.deleteFavorite(id)
+        }
     }
 
     fun isFavorite(id: String): Boolean = id in _favorites.value
-
-    private fun loadFavorites(): Set<String> {
-        val raw = prefs.getString("favorites", null) ?: return emptySet()
-        val arr = JSONArray(raw)
-        return (0 until arr.length()).map { arr.getString(it) }.toSet()
-    }
 
     // ---- playlists ----
 
@@ -315,12 +313,12 @@ class MusicRepository private constructor(private val appContext: Context) {
         val trimmed = name.trim()
         if (trimmed.isEmpty() || _playlists.value.any { it.name == trimmed }) return
         _playlists.value = _playlists.value + Playlist(trimmed, emptyList())
-        savePlaylists()
+        savePlaylist(trimmed)
     }
 
     fun deletePlaylist(name: String) {
         _playlists.value = _playlists.value.filterNot { it.name == name }
-        savePlaylists()
+        writer.launch { dao.deletePlaylist(name) }
     }
 
     /** Renames a playlist. Returns false if the new name is empty or already taken. */
@@ -332,7 +330,7 @@ class MusicRepository private constructor(private val appContext: Context) {
         _playlists.value = _playlists.value.map {
             if (it.name == oldName) it.copy(name = trimmed) else it
         }
-        savePlaylists()
+        writer.launch { dao.renamePlaylist(oldName, trimmed) }
         return true
     }
 
@@ -346,7 +344,7 @@ class MusicRepository private constructor(private val appContext: Context) {
         _playlists.value = _playlists.value.map {
             if (it.name == name) it.copy(coverUri = uri.toString()) else it
         }
-        savePlaylists()
+        savePlaylist(name)
     }
 
     /** Creates a playlist with the given tracks, or appends to it if one already exists by name. */
@@ -360,72 +358,112 @@ class MusicRepository private constructor(private val appContext: Context) {
                 if (it.name == trimmed) it.copy(trackIds = (it.trackIds + trackIds).distinct()) else it
             }
         }
-        savePlaylists()
+        savePlaylist(trimmed)
     }
 
     fun addToPlaylist(name: String, trackId: String) {
         _playlists.value = _playlists.value.map {
             if (it.name == name && trackId !in it.trackIds) it.copy(trackIds = it.trackIds + trackId) else it
         }
-        savePlaylists()
+        savePlaylist(name)
     }
 
     fun removeFromPlaylist(name: String, trackId: String) {
         _playlists.value = _playlists.value.map {
             if (it.name == name) it.copy(trackIds = it.trackIds.filterNot { id -> id == trackId }) else it
         }
-        savePlaylists()
+        savePlaylist(name)
     }
 
-    private fun loadPlaylists(): List<Playlist> {
-        val raw = prefs.getString("playlists", null) ?: return emptyList()
-        val arr = JSONArray(raw)
-        return (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            val ids = o.getJSONArray("tracks")
-            Playlist(
-                o.getString("name"),
-                (0 until ids.length()).map { ids.getString(it) },
-                o.optString("cover").takeIf { it.isNotEmpty() },
+    /** Queues a write of the in-memory state of one playlist. */
+    private fun savePlaylist(name: String) {
+        val list = _playlists.value
+        val index = list.indexOfFirst { it.name == name }
+        val pl = list.getOrNull(index) ?: return
+        writer.launch { dao.savePlaylist(pl.name, pl.coverUri, index, pl.trackIds) }
+    }
+
+    // ---- one-time move from SharedPreferences ----
+
+    private suspend fun migrateFromPrefs() {
+        if (prefs.getBoolean(MIGRATED_KEY, false)) return
+        prefs.getString("imported", null)?.let { raw ->
+            val arr = JSONArray(raw)
+            val now = System.currentTimeMillis()
+            dao.upsertTracks((0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                TrackEntity(
+                    id = o.getString("id"),
+                    source = TrackSource.IMPORTED,
+                    title = o.getString("title"),
+                    artist = o.getString("artist"),
+                    album = o.getString("album"),
+                    uri = o.getString("uri"),
+                    durationMs = o.optLong("durationMs", 0L),
+                    addedAt = now + i,
+                )
+            })
+        }
+        prefs.getString("favorites", null)?.let { raw ->
+            val arr = JSONArray(raw)
+            val now = System.currentTimeMillis()
+            dao.upsertFavorites((0 until arr.length()).map { FavoriteEntity(arr.getString(it), now + it) })
+        }
+        prefs.getString("playlists", null)?.let { raw ->
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val ids = o.getJSONArray("tracks")
+                dao.savePlaylist(
+                    o.getString("name"),
+                    o.optString("cover").takeIf { it.isNotEmpty() },
+                    i,
+                    (0 until ids.length()).map { ids.getString(it) },
+                )
+            }
+        }
+        if (prefs.contains("pb_track") || prefs.contains("pb_volume")) {
+            dao.saveSnapshot(
+                PlaybackSnapshotEntity(
+                    trackId = prefs.getString("pb_track", null),
+                    positionMs = prefs.getLong("pb_pos", 0L),
+                    shuffle = prefs.getBoolean("pb_shuffle", false),
+                    repeatMode = prefs.getInt("pb_repeat", 0),
+                    volume = prefs.getFloat("pb_volume", 1f),
+                )
             )
         }
-    }
-
-    private fun savePlaylists() {
-        val arr = JSONArray()
-        _playlists.value.forEach { pl ->
-            val o = JSONObject().put("name", pl.name).put("tracks", JSONArray(pl.trackIds))
-            pl.coverUri?.let { o.put("cover", it) }
-            arr.put(o)
-        }
-        prefs.edit().putString("playlists", arr.toString()).apply()
+        // the old keys stay as a fallback copy; only the flag is new
+        prefs.edit().putBoolean(MIGRATED_KEY, true).commit()
     }
 
     // ---- playback snapshot ----
 
     fun savePlayback(state: PlaybackState) {
-        prefs.edit()
-            .putString("pb_track", state.trackId)
-            .putLong("pb_pos", state.positionMs)
-            .putBoolean("pb_shuffle", state.shuffle)
-            .putInt("pb_repeat", state.repeatMode)
-            .putFloat("pb_volume", state.volume)
-            .apply()
+        writer.launch {
+            dao.saveSnapshot(
+                PlaybackSnapshotEntity(
+                    trackId = state.trackId,
+                    positionMs = state.positionMs,
+                    shuffle = state.shuffle,
+                    repeatMode = state.repeatMode,
+                    volume = state.volume,
+                )
+            )
+        }
     }
 
-    fun loadPlayback(): PlaybackState = PlaybackState(
-        trackId = prefs.getString("pb_track", null),
-        positionMs = prefs.getLong("pb_pos", 0L),
-        shuffle = prefs.getBoolean("pb_shuffle", false),
-        repeatMode = prefs.getInt("pb_repeat", 0),
-        volume = prefs.getFloat("pb_volume", 1f),
-    )
+    suspend fun loadPlayback(): PlaybackState = withContext(Dispatchers.IO) {
+        val s = dao.snapshot() ?: return@withContext PlaybackState()
+        PlaybackState(s.trackId, s.positionMs, s.shuffle, s.repeatMode, s.volume)
+    }
 
     companion object {
+        private const val MIGRATED_KEY = "migrated_to_room_v1"
         @Volatile private var instance: MusicRepository? = null
-        fun get(context: Context): MusicRepository =
+        fun get(context: Context, database: CtifyDatabase): MusicRepository =
             instance ?: synchronized(this) {
-                instance ?: MusicRepository(context.applicationContext).also { instance = it }
+                instance ?: MusicRepository(context.applicationContext, database).also { instance = it }
             }
     }
 }
