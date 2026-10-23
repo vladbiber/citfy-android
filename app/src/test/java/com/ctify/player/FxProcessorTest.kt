@@ -47,9 +47,12 @@ class FxProcessorTest {
 
     @Test
     fun `effects off pass audio through unchanged`() {
-        val out = run(Fx(), 2, 44100, 4) { t -> (sin(2 * PI * 440 * t / 44100) * 10000).toInt().toShort() }
-        val expect = (sin(2 * PI * 440 * 100 / 44100) * 10000).toInt()
-        assertTrue(abs(out[200] - expect) <= 1)
+        val gen = { t: Int -> (sin(2 * PI * 440 * t / 44100) * 10000).toInt().toShort() }
+        val out = run(Fx(), 2, 44100, 4, gen)
+        for (t in 0 until out.size / 2) {
+            assertEquals(gen(t), out[t * 2])
+            assertEquals(gen(t), out[t * 2 + 1])
+        }
     }
 
     @Test
@@ -62,11 +65,14 @@ class FxProcessorTest {
 
     @Test
     fun `loud audio with every effect never hard clips`() {
-        val fx = Fx().apply {
+        val every = Fx().apply {
             reverb = 1f; bassGainDb = 12f; vinyl = true; rain = RainPreset.STORM; pan8d = 1f; width = 2f
         }
-        val out = run(fx, 2, 44100, 30) { t -> (sin(2 * PI * 80 * t / 44100) * 30000).toInt().toShort() }
-        val clipped = out.count { abs(it.toInt()) >= 32767 }
-        assertTrue("clipped $clipped of ${out.size}", clipped < out.size / 200)
+        val bassOnly = Fx().apply { bassGainDb = 12f }
+        for (fx in listOf(every, bassOnly)) {
+            val out = run(fx, 2, 44100, 30) { t -> (sin(2 * PI * 80 * t / 44100) * 32767).toInt().toShort() }
+            val clipped = out.count { abs(it.toInt()) >= 32767 }
+            assertEquals("bass ${fx.bassGainDb} rain ${fx.rain}", 0, clipped)
+        }
     }
 }

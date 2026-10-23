@@ -22,6 +22,9 @@ data class NowState(
     val shuffle: Boolean,
     val repeat: String,
     val volumePercent: Int,
+    /** set while live radio plays */
+    val station: com.ctify.player.radio.Station? = null,
+    val radioStatus: String? = null,
 )
 
 /** Sound settings, spectrum and transport shared by the UI, view model and audio processor. */
@@ -77,6 +80,9 @@ object PlayerHub {
         putStringArray(Cmd.ARG_IDS, ids.toTypedArray()); putInt(Cmd.ARG_INDEX, startIndex)
     }
     fun addToQueue(id: String) = send(Cmd.ADD_TO_QUEUE) { putString(Cmd.ARG_ID, id) }
+    fun playStations(stations: List<com.ctify.player.radio.Station>, index: Int) = send(Cmd.PLAY_STATIONS) {
+        putString(Cmd.ARG_STATIONS, com.ctify.player.radio.Station.toJson(stations)); putInt(Cmd.ARG_INDEX, index)
+    }
     fun playQueueIndex(index: Int) = send(Cmd.PLAY_INDEX) { putInt(Cmd.ARG_INDEX, index) }
 
     private fun send(action: String, args: Bundle.() -> Unit = {}) {

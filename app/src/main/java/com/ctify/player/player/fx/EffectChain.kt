@@ -3,6 +3,7 @@ package com.ctify.player.player.fx
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -110,7 +111,8 @@ private class LowShelf {
 
 /**
  * Everything slowva does after its resampler, one stereo frame at a time:
- * reverb, bass shelf, vinyl, width / 8D / another room, rain, soft limit.
+ * headroom preamp, reverb, bass shelf, vinyl, width / 8D / another room, rain.
+ * Peaks are left to the [Limiter] after it.
  */
 class EffectChain(private val fx: Fx, private val sampleRate: Float) {
     private val verbL = Verb(0)
@@ -132,8 +134,15 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
     private var smoothWet = 0f
     private var appliedWet = -1f
     private val frame = FloatArray(2)
+    private var smoothPre = 1f
+
+    /** Largest boost in the stack in dB. Every gain stage adds its peak gain here. */
+    private fun boostDb(): Float = max(0f, fx.bassGainDb)
+
+    private fun preampTarget(): Float = 10.0.pow(-boostDb() / 20.0).toFloat()
 
     fun reset() {
+        smoothPre = preampTarget()
         smoothWet = fx.reverb
         smoothWidth = fx.width
         smoothPan = fx.pan8d
@@ -147,7 +156,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
         get() = fx.reverb < 0.001f && smoothWet < 0.001f && fx.bassGainDb < 0.01f && !fx.vinyl && vinylMix < 0.0005f &&
             kotlin.math.abs(fx.width - 1f) < 0.002f && kotlin.math.abs(smoothWidth - 1f) < 0.002f &&
             fx.pan8d < 0.002f && smoothPan < 0.002f && fx.muffle < 0.001f &&
-            fx.rain == RainPreset.OFF && rainMix < 0.0005f
+            fx.rain == RainPreset.OFF && rainMix < 0.0005f && smoothPre > 0.9999f
 
     /** Processes [frames] interleaved stereo samples of [buf] in place. */
     fun process(buf: FloatArray, frames: Int) {
@@ -166,6 +175,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
         val rainWant = fx.rain
         val rainLevel = fx.rainLevel.coerceIn(0f, 1.5f)
         val rate = fx.rate
+        val targetPre = preampTarget()
         if (muffle != appliedMuffle) {
             val cut = (18000.0 * Math.pow(350.0 / 18000.0, muffle.toDouble())).toFloat()
             roomL.lowpass(cut, 0.75f, sampleRate); roomR.lowpass(cut, 0.75f, sampleRate)
@@ -175,8 +185,9 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
             smoothWet += (targetWet - smoothWet) * 0.002f
             val wet = smoothWet
             if (wet != appliedWet) { verbL.set(wet); verbR.set(wet); appliedWet = wet }
+            smoothPre += (targetPre - smoothPre) * 0.002f
             for (ch in 0..1) {
-                val dry = buf[i * 2 + ch]
+                val dry = buf[i * 2 + ch] * smoothPre
                 var s = dry
                 if (wet > 0.0005f) {
                     val w = (if (ch == 0) verbL else verbR).run(dry * 0.015f)
@@ -222,8 +233,8 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
                 frame[0] = softClip(frame[0] + rainFrame[0] * rainMix)
                 frame[1] = softClip(frame[1] + rainFrame[1] * rainMix)
             }
-            buf[i * 2] = frame[0].coerceIn(-1f, 1f)
-            buf[i * 2 + 1] = frame[1].coerceIn(-1f, 1f)
+            buf[i * 2] = frame[0]
+            buf[i * 2 + 1] = frame[1]
         }
     }
 

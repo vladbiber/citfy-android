@@ -9,6 +9,8 @@ import androidx.media3.common.Player
 import com.ctify.player.data.MusicRepository
 import com.ctify.player.data.PlaybackState
 import com.ctify.player.data.Track
+import com.ctify.player.radio.RadioRepository
+import com.ctify.player.radio.Station
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -35,12 +37,16 @@ object Cmd {
     const val PREVIOUS = "ctify.PREVIOUS"
     const val SEEK = "ctify.SEEK"
     const val TOGGLE_REVERSE = "ctify.TOGGLE_REVERSE"
-    val ALL = listOf(PLAY_QUEUE, ADD_TO_QUEUE, PLAY_INDEX, NEXT, PREVIOUS, SEEK, TOGGLE_REVERSE)
+    const val PLAY_STATIONS = "ctify.PLAY_STATIONS"
+    val ALL = listOf(PLAY_QUEUE, ADD_TO_QUEUE, PLAY_INDEX, NEXT, PREVIOUS, SEEK, TOGGLE_REVERSE, PLAY_STATIONS)
+    /** safe for any controller, e.g. the system media controls and Bluetooth */
+    val PUBLIC = listOf(NEXT, PREVIOUS)
 
     const val ARG_IDS = "ids"
     const val ARG_ID = "id"
     const val ARG_INDEX = "index"
     const val ARG_MS = "ms"
+    const val ARG_STATIONS = "stations"
 }
 
 /** Queue, reverse mode and snapshot logic. Owned by [PlaybackService], so it works with no UI. */
@@ -48,8 +54,12 @@ class PlaybackController(
     private val context: Context,
     private val player: Player,
     private val repository: MusicRepository,
+    radioRepository: RadioRepository,
+    onRadioActiveChanged: (Boolean) -> Unit,
 ) {
     private val scope = MainScope()
+    private val radio = RadioMode(player, radioRepository, scope, onChanged = { sync() }, onActiveChanged = onRadioActiveChanged)
+    private val radioRepo = radioRepository
     private val reverser = ReverseDecoder(context)
     /** the forward queue that reverse mode walks through, track by track */
     private var reverseQueue: List<Track> = emptyList()
@@ -60,6 +70,8 @@ class PlaybackController(
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED && PlayerHub.reverseOn.value) reverseStep(+1)
         }
+        override fun onIsPlayingChanged(isPlaying: Boolean) = radio.onIsPlayingChanged(isPlaying)
+        override fun onMetadata(metadata: androidx.media3.common.Metadata) = radio.onMetadata(metadata)
     }
 
     init {
@@ -97,7 +109,13 @@ class PlaybackController(
             Cmd.NEXT -> next()
             Cmd.PREVIOUS -> previous()
             Cmd.SEEK -> seekTo(args.getLong(Cmd.ARG_MS).coerceAtLeast(0L))
-            Cmd.TOGGLE_REVERSE -> scope.launch { if (PlayerHub.reverseOn.value) leaveReverse() else enterReverse() }
+            Cmd.TOGGLE_REVERSE -> if (!radio.active) scope.launch { if (PlayerHub.reverseOn.value) leaveReverse() else enterReverse() }
+            Cmd.PLAY_STATIONS -> {
+                val stations = Station.fromJson(args.getString(Cmd.ARG_STATIONS) ?: return false)
+                if (stations.isEmpty()) return false
+                PlayerHub.reverseOn.value = false
+                radio.play(stations, args.getInt(Cmd.ARG_INDEX))
+            }
             else -> return false
         }
         return true
@@ -108,6 +126,10 @@ class PlaybackController(
         player.shuffleModeEnabled = snap.shuffle
         player.repeatMode = snap.repeatMode
         player.volume = snap.volume
+        if (snap.trackId?.startsWith(Station.MEDIA_PREFIX) == true && player.mediaItemCount == 0) {
+            radioRepo.stationById(snap.trackId.removePrefix(Station.MEDIA_PREFIX))?.let { radio.restore(it) }
+            return
+        }
         val track = repository.trackById(snap.trackId)
         if (track != null && player.mediaItemCount == 0) {
             player.setMediaItem(track.toMediaItem(), snap.positionMs)
@@ -141,6 +163,30 @@ class PlaybackController(
 
     private fun publish() {
         val u = PlayerHub.ui.value
+        radio.station?.let { s ->
+            val t = radio.title
+            PlayerHub.playback.value = NowState(
+                track = Track(
+                    id = s.mediaId,
+                    title = if (t.isAd) "Advertisement" else t.title ?: s.name,
+                    artist = if (t.title != null && !t.isAd) t.artist ?: s.name else s.description ?: s.detail.ifEmpty { "Live radio" },
+                    album = s.name,
+                    uri = s.streamUrl,
+                    coverUri = s.favicon,
+                    durationMs = 0L,
+                    isDemo = false,
+                ),
+                isPlaying = u.isPlaying,
+                progressMs = 0,
+                durationMs = 0L,
+                shuffle = false,
+                repeat = "off",
+                volumePercent = (u.volume * 100).toInt(),
+                station = s,
+                radioStatus = radio.status,
+            )
+            return
+        }
         val track = repository.trackById(u.currentTrackId)
         PlayerHub.playback.value = if (track == null) null else NowState(
             track = track,
@@ -171,6 +217,7 @@ class PlaybackController(
 
     private fun playQueue(tracks: List<Track>, startIndex: Int) {
         if (tracks.isEmpty()) return
+        radio.stop()
         if (PlayerHub.reverseOn.value) {
             reverseQueue = tracks
             reverseIndex = startIndex.coerceIn(0, tracks.lastIndex)
@@ -185,6 +232,7 @@ class PlaybackController(
     /** Appends a track to the end of the current play queue, starting one if nothing is loaded. */
     private fun addToQueue(trackId: String) {
         val track = repository.trackById(trackId) ?: return
+        if (radio.active) { radio.stop(); player.clearMediaItems() }
         if (player.mediaItemCount == 0) {
             player.setMediaItem(track.toMediaItem())
             player.prepare()
@@ -209,10 +257,12 @@ class PlaybackController(
     }
 
     private fun next() {
-        if (PlayerHub.reverseOn.value) reverseStep(+1) else player.seekToNext()
+        if (radio.active) radio.next()
+        else if (PlayerHub.reverseOn.value) reverseStep(+1) else player.seekToNext()
     }
 
     private fun previous() {
+        if (radio.active) { radio.previous(); return }
         if (PlayerHub.reverseOn.value) { reverseStep(-1); return }
         // After 5s of playback, the back arrow restarts the current track instead of skipping back.
         if (player.currentPosition > 5000) player.seekTo(0) else player.seekToPrevious()
@@ -276,6 +326,9 @@ class PlaybackController(
         player.prepare()
         if (wasPlaying) player.play()
     }
+
+    /** Radio reconnects instead of skipping; local files keep the skip in the service. */
+    fun onPlayerError(error: androidx.media3.common.PlaybackException): Boolean = radio.onPlayerError(error)
 
     fun release() {
         if (!PlayerHub.reverseOn.value) persistSnapshot()

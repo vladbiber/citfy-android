@@ -48,6 +48,25 @@ object NetworkGate {
             .build()
     }
 
+    /**
+     * Client for ExoPlayer's HTTP data source, which builds its own requests: they are tagged
+     * from the X-Ctify-Feature header (default [Feature.RADIO]) before the gate sees them.
+     */
+    val mediaClient: OkHttpClient by lazy {
+        client.newBuilder().apply {
+            interceptors().add(0, Interceptor { chain ->
+                val req = chain.request()
+                val feature = req.header(FEATURE_HEADER)?.let { h -> Feature.entries.firstOrNull { it.key == h } } ?: Feature.RADIO
+                chain.proceed(
+                    req.newBuilder().removeHeader(FEATURE_HEADER)
+                        .tag(Feature::class.java, feature)
+                        .tag(Traffic::class.java, Traffic.STREAM)
+                        .build()
+                )
+            })
+        }.build()
+    }
+
     fun init(context: Context) {
         if (::app.isInitialized) return
         app = context.applicationContext
@@ -106,4 +125,5 @@ object NetworkGate {
     }
 
     const val PREFS = "ctify-net"
+    const val FEATURE_HEADER = "X-Ctify-Feature"
 }
