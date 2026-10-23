@@ -21,7 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** The Sound tab: every effect, the same panel the player's sheet shows. */
+/** The Sound tab: genre presets, headphones, hi-fi, EQ, then the effects the player sheet also shows. */
 @Composable
 fun SoundScreen() {
     Column(
@@ -32,7 +32,7 @@ fun SoundScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ScreenTitle("Sound", Modifier.padding(top = 8.dp))
-        SoundPanel()
+        com.ctify.player.ui.sound.SoundTab()
         val uri = LocalUriHandler.current
         Text(
             "Player designs inspired by Spun by @yappologistic",

@@ -4,6 +4,9 @@ import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import com.ctify.player.player.fx.Fx
 import com.ctify.player.player.fx.FxAudioProcessor
+import com.ctify.player.player.fx.CrossfeedPreset
+import com.ctify.player.player.fx.EqSpec
+import com.ctify.player.player.fx.Layers
 import com.ctify.player.player.fx.RainPreset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -73,6 +76,35 @@ class FxProcessorTest {
             val out = run(fx, 2, 44100, 30) { t -> (sin(2 * PI * 80 * t / 44100) * 32767).toInt().toShort() }
             val clipped = out.count { abs(it.toInt()) >= 32767 }
             assertEquals("bass ${fx.bassGainDb} rain ${fx.rain}", 0, clipped)
+        }
+    }
+
+    @Test
+    fun `every stage switched off again is bit exact`() {
+        val fx = Fx()
+        fx.hifi.layers = Layers(EqSpec.graphic(FloatArray(10) { 3f }), CrossfeedPreset.JAN_MEIER, headroomDb = 3f)
+        fx.hifi.tape = 0.5f; fx.hifi.night = true; fx.hifi.gainDb = -4f; fx.hifi.balance = 0.2f
+        val gen = { t: Int ->
+            if (t == 2048 * 10) {
+                fx.hifi.layers = Layers.FLAT
+                fx.hifi.tape = 0f; fx.hifi.night = false; fx.hifi.gainDb = 0f; fx.hifi.balance = 0f
+            }
+            (sin(2 * PI * 440 * t / 44100) * 10000).toInt().toShort()
+        }
+        val out = run(fx, 2, 44100, 60, gen)
+        for (t in 2048 * 50 until out.size / 2) {
+            assertEquals(gen(t), out[t * 2])
+            assertEquals(gen(t), out[t * 2 + 1])
+        }
+    }
+
+    @Test
+    fun `eq at +12 dB on every band never clips`() {
+        val eq = EqSpec.graphic(FloatArray(10) { 12f })
+        val fx = Fx().apply { hifi.layers = Layers(user = eq, headroomDb = EqSpec.peakDb(eq)) }
+        for (hz in listOf(60, 1000, 9000)) {
+            val out = run(fx, 2, 44100, 20) { t -> (sin(2 * PI * hz * t / 44100) * 32767).toInt().toShort() }
+            assertEquals("$hz Hz", 0, out.count { abs(it.toInt()) >= 32767 })
         }
     }
 }

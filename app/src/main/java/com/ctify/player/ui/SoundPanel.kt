@@ -69,7 +69,7 @@ fun SoundPanel(modifier: Modifier = Modifier) {
     val vinyl by PlayerHub.vinyl.collectAsState()
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Section(Icons.Default.AutoAwesome, "Presets", "one tap sets everything") {
+        Section(Icons.Default.AutoAwesome, "Moods", "one tap sets every effect") {
             ChipRow {
                 Mood.entries.forEach { m ->
                     val on = abs(speed - m.rate) < 0.005f && retune == 0 && abs(reverb - m.reverb) < 0.005f &&
@@ -185,7 +185,7 @@ fun SoundPanel(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Section(icon: ImageVector, title: String, summary: String, content: @Composable () -> Unit) {
+internal fun Section(icon: ImageVector, title: String, summary: String, content: @Composable () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         shape = RoundedCornerShape(18.dp),
@@ -207,7 +207,7 @@ private fun Section(icon: ImageVector, title: String, summary: String, content: 
 }
 
 @Composable
-private fun ChipRow(content: @Composable () -> Unit) {
+internal fun ChipRow(content: @Composable () -> Unit) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         content()
     }

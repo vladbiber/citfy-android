@@ -7,6 +7,8 @@ import androidx.media3.common.audio.AudioProcessorChain
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
+import com.ctify.player.player.sound.PcmFormat
+import com.ctify.player.player.sound.SignalPath
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -35,9 +37,9 @@ class FxAudioProcessor(
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         // anything unexpected plays untouched instead of failing the whole track
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount < 1) {
-            return AudioProcessor.AudioFormat.NOT_SET
-        }
+        val ok = inputAudioFormat.encoding == C.ENCODING_PCM_16BIT && inputAudioFormat.channelCount >= 1
+        SignalPath.decoderOut.value = PcmFormat(inputAudioFormat.sampleRate, inputAudioFormat.channelCount, inputAudioFormat.encoding, ok)
+        if (!ok) return AudioProcessor.AudioFormat.NOT_SET
         inChannels = inputAudioFormat.channelCount
         buildDownmix(inChannels)
         if (chain == null || rate != inputAudioFormat.sampleRate) {

@@ -25,6 +25,8 @@ class Fx {
     @Volatile var vinylWarmth = 0.6f    // 0 .. 1 rolloff, saturation, mono bass
     @Volatile var vinylWow = 0.4f       // 0 .. 1 wow and flutter
     @Volatile var vinylSurface = 0.4f   // 0 .. 1 hiss and rumble
+    /** device, genre and EQ layers, colour, ReplayGain and balance */
+    val hifi = HifiFx()
 
     val rate: Float get() = (speed * retune).coerceIn(0.4f, 2.0f)
 }
@@ -110,9 +112,9 @@ private class LowShelf {
 
 
 /**
- * Everything slowva does after its resampler, one stereo frame at a time:
- * headroom preamp, reverb, bass shelf, vinyl, width / 8D / another room, rain.
- * Peaks are left to the [Limiter] after it.
+ * Everything after the resampler: headroom preamp, device / genre / EQ / loudness layers,
+ * reverb, bass shelf, vinyl, width / 8D / another room, rain, then tape, tube, night mode,
+ * ReplayGain and balance. Peaks are left to the [Limiter] after it.
  */
 class EffectChain(private val fx: Fx, private val sampleRate: Float) {
     private val verbL = Verb(0)
@@ -135,9 +137,10 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
     private var appliedWet = -1f
     private val frame = FloatArray(2)
     private var smoothPre = 1f
+    private val hifi = HifiChain(fx.hifi, sampleRate)
 
     /** Largest boost in the stack in dB. Every gain stage adds its peak gain here. */
-    private fun boostDb(): Float = max(0f, fx.bassGainDb)
+    private fun boostDb(): Float = max(0f, fx.bassGainDb) + max(0f, fx.hifi.layers.headroomDb)
 
     private fun preampTarget(): Float = 10.0.pow(-boostDb() / 20.0).toFloat()
 
@@ -149,6 +152,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
         vinylMix = if (fx.vinyl) 1f else 0f
         rainMix = if (fx.rain != RainPreset.OFF) fx.rainLevel else 0f
         if (fx.rain != RainPreset.OFF) rainPreset = fx.rain
+        hifi.reset()
     }
 
     /** true when the chain would leave the audio untouched (lets silence stay silent) */
@@ -156,7 +160,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
         get() = fx.reverb < 0.001f && smoothWet < 0.001f && fx.bassGainDb < 0.01f && !fx.vinyl && vinylMix < 0.0005f &&
             kotlin.math.abs(fx.width - 1f) < 0.002f && kotlin.math.abs(smoothWidth - 1f) < 0.002f &&
             fx.pan8d < 0.002f && smoothPan < 0.002f && fx.muffle < 0.001f &&
-            fx.rain == RainPreset.OFF && rainMix < 0.0005f && smoothPre > 0.9999f
+            fx.rain == RainPreset.OFF && rainMix < 0.0005f && smoothPre > 0.9999f && hifi.idle
 
     /** Processes [frames] interleaved stereo samples of [buf] in place. */
     fun process(buf: FloatArray, frames: Int) {
@@ -181,13 +185,17 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
             roomL.lowpass(cut, 0.75f, sampleRate); roomR.lowpass(cut, 0.75f, sampleRate)
             appliedMuffle = muffle
         }
+        for (i in 0 until frames * 2) {
+            if (i and 1 == 0) smoothPre += (targetPre - smoothPre) * 0.002f
+            buf[i] *= smoothPre
+        }
+        hifi.pre(buf, frames)
         for (i in 0 until frames) {
             smoothWet += (targetWet - smoothWet) * 0.002f
             val wet = smoothWet
             if (wet != appliedWet) { verbL.set(wet); verbR.set(wet); appliedWet = wet }
-            smoothPre += (targetPre - smoothPre) * 0.002f
             for (ch in 0..1) {
-                val dry = buf[i * 2 + ch] * smoothPre
+                val dry = buf[i * 2 + ch]
                 var s = dry
                 if (wet > 0.0005f) {
                     val w = (if (ch == 0) verbL else verbR).run(dry * 0.015f)
@@ -236,6 +244,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
             buf[i * 2] = frame[0]
             buf[i * 2 + 1] = frame[1]
         }
+        hifi.post(buf, frames)
     }
 
     private fun softClip(x: Float): Float {

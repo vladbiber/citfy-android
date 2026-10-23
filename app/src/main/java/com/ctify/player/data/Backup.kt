@@ -19,7 +19,7 @@ object Backup {
     private const val DB_ENTRY = "ctify.db"
     private const val PREFS_DIR = "prefs/"
     /** effects, appearance and network switches; library state lives in the database */
-    private val PREF_FILES = listOf("ctify-fx.xml", "ctify-ui.xml", "ctify-net.xml", "ctify-radio.xml")
+    private val PREF_FILES = listOf("ctify-fx.xml", "ctify-ui.xml", "ctify-net.xml", "ctify-radio.xml", "ctify-sound.xml")
     private const val MAX_ENTRY_BYTES = 256L * 1024 * 1024
 
     suspend fun export(context: Context, db: CtifyDatabase, target: Uri): Result<Unit> = withContext(Dispatchers.IO) {

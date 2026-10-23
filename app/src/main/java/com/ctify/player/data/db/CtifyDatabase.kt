@@ -30,6 +30,11 @@ import com.ctify.player.radio.StationRecent
         RadioTab::class,
         RadioCacheEntry::class,
         HeardSong::class,
+        SongGenreOverride::class,
+        ArtistGenre::class,
+        GenrePresetEntity::class,
+        DevicePresetEntity::class,
+        TrackLoudness::class,
     ],
     version = CtifyDatabase.VERSION,
     exportSchema = true,
@@ -37,6 +42,7 @@ import com.ctify.player.radio.StationRecent
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5),
     ],
 )
 abstract class CtifyDatabase : RoomDatabase() {
@@ -44,10 +50,11 @@ abstract class CtifyDatabase : RoomDatabase() {
     abstract fun diagnostics(): DiagnosticsDao
     abstract fun radio(): RadioDao
     abstract fun heardSongs(): HeardSongDao
+    abstract fun sound(): SoundDao
 
     companion object {
         const val NAME = "ctify.db"
-        const val VERSION = 4
+        const val VERSION = 5
 
         fun open(context: Context): CtifyDatabase =
             Room.databaseBuilder(context.applicationContext, CtifyDatabase::class.java, NAME).build()

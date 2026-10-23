@@ -39,6 +39,7 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         PlayerHub.init(this)
+        com.ctify.player.player.sound.SoundEngine.init(this)
         // effects run in our own processor chain, after ExoPlayer's speed stage
         val renderers = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(

@@ -12,6 +12,7 @@ internal class Biquad {
     private var b0 = 1f; private var b1 = 0f; private var b2 = 0f
     private var a1 = 0f; private var a2 = 0f
     private var z1 = 0f; private var z2 = 0f
+    private val scratch = DoubleArray(5)
 
     fun lowpass(freq: Float, q: Float, sr: Float) = set(freq, q, sr, false)
     fun highpass(freq: Float, q: Float, sr: Float) = set(freq, q, sr, true)
@@ -23,6 +24,15 @@ internal class Biquad {
         b0 = (alpha / a0).toFloat(); b1 = 0f; b2 = (-alpha / a0).toFloat()
         a1 = (-2.0 * cos(w) / a0).toFloat(); a2 = ((1.0 - alpha) / a0).toFloat()
     }
+
+    /** Any [FilterType], peaks and shelves included. */
+    fun design(type: FilterType, freq: Float, gainDb: Float, q: Float, sr: Float) {
+        val c = scratch
+        Rbj.design(type.ordinal, freq.toDouble(), gainDb.toDouble(), q.toDouble(), sr.toDouble(), c, 0)
+        b0 = c[0].toFloat(); b1 = c[1].toFloat(); b2 = c[2].toFloat(); a1 = c[3].toFloat(); a2 = c[4].toFloat()
+    }
+
+    fun clear() { z1 = 0f; z2 = 0f }
 
     private fun set(freq: Float, q: Float, sr: Float, high: Boolean) {
         val w = 2.0 * PI * freq.coerceIn(5f, sr * 0.45f) / sr
