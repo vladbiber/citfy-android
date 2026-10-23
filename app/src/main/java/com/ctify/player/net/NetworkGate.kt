@@ -18,6 +18,7 @@ enum class Feature(val label: String, val key: String) {
     YOUTUBE("YouTube", "youtube"),
     MUSICBRAINZ("Genre lookup (MusicBrainz)", "musicbrainz"),
     VERSION_CHECK("Version check", "version_check"),
+    SPOTIFY_IMPORT("Spotify playlist import", "spotify_import"),
 }
 
 /** What a request is for; downloads and streams obey "Wi-Fi only", small lookups don't. */

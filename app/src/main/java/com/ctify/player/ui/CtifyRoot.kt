@@ -50,6 +50,7 @@ import com.ctify.player.ui.youtube.YouTubeScreen
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.ui.youtube.SpotifyImportDialog
 import com.ctify.player.youtube.YtIntake
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -149,6 +150,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     section = librarySection,
                     onSection = { librarySection = it },
                     onYouTube = { showYouTube = true },
+                    onSpotify = { YtIntake.spotify.value = "" },
                     onDownloads = { showDownloads = true },
                 )
                 3 -> RadioScreen()
@@ -189,6 +191,11 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     }
 
     if (showDownloads) DownloadsSheet(onDismiss = { showDownloads = false })
+
+    val spotifyLink by YtIntake.spotify.collectAsState()
+    spotifyLink?.let { link ->
+        SpotifyImportDialog(viewModel.repository, link.ifBlank { null }, onDismiss = { YtIntake.spotify.value = null })
+    }
 
     moreTrackId?.let { id ->
         AddToPlaylistSheet(viewModel, trackId = id, onDismiss = { moreTrackId = null })

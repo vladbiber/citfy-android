@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Queue
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -75,6 +77,20 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
                 Column {
                     Text("Download", color = TextPrimary, fontWeight = FontWeight.SemiBold)
                     Text("Plays online now; keep it on the phone", color = TextMuted, fontSize = 11.sp)
+                }
+            }
+        }
+
+        if (track != null && track.isStreamed() && viewModel.repository.isSaved(trackId)) {
+            Row(
+                Modifier.fillMaxWidth().clickable { viewModel.repository.removeStreamed(trackId); onDismiss() }.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("Remove from library", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                    Text("Also takes it out of your playlists and favorites", color = TextMuted, fontSize = 11.sp)
                 }
             }
         }

@@ -29,17 +29,15 @@ import com.ctify.player.ui.GridHeader
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
 
-/** Home's "Favorite stations" and "Recently played stations" rows; each hides when empty. */
+/** Home's "Favorite stations" row, hidden when there are none. Recent stations live on the Radio tab. */
 @Composable
 fun HomeStationRows() {
     val radio = radioRepo()
     val favorites by radio.favorites.collectAsStateWithLifecycle(initialValue = emptyList())
-    val recents by radio.recents.collectAsStateWithLifecycle(initialValue = emptyList())
     val now by PlayerHub.playback.collectAsStateWithLifecycle()
     val current = now?.station?.uuid
     Column {
         if (favorites.isNotEmpty()) StationCarousel("Favorite stations", favorites, current)
-        if (recents.isNotEmpty()) StationCarousel("Recently played stations", recents, current)
     }
 }
 

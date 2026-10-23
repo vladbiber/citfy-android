@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.MaterialTheme
@@ -81,6 +82,7 @@ import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.youtube.PlaylistDownloadBar
+import com.ctify.player.ui.youtube.isStreamed
 import com.ctify.player.ui.youtube.rememberDownloadStates
 import com.ctify.player.ui.youtube.ytStatus
 
@@ -147,6 +149,7 @@ fun LibraryScreen(
     section: Int = 0,
     onSection: (Int) -> Unit = {},
     onYouTube: () -> Unit = {},
+    onSpotify: () -> Unit = {},
     onDownloads: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
@@ -192,6 +195,11 @@ fun LibraryScreen(
                             text = { Text("Add from YouTube", color = TextPrimary) },
                             leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
                             onClick = { showAddMenu = false; onYouTube() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Import from Spotify", color = TextPrimary) },
+                            leadingIcon = { Icon(Icons.Filled.QueueMusic, null, tint = TextSecondary) },
+                            onClick = { showAddMenu = false; onSpotify() },
                         )
                         DropdownMenuItem(
                             text = { Text("Downloads", color = TextPrimary) },
@@ -390,7 +398,17 @@ private fun PlaylistDetail(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete playlist?", color = TextPrimary) },
-            text = { Text("\"$name\" will be deleted. The songs stay in your library.", color = TextSecondary) },
+            text = {
+                val online = plTracks.count { it.isStreamed() }
+                Column {
+                    Text("\"$name\" will be deleted. The songs stay in your library.", color = TextSecondary)
+                    if (online > 0) TextButton(onClick = {
+                        showDeleteConfirm = false
+                        viewModel.repository.deletePlaylistWithStreams(name)
+                        onOpenPlaylist(null)
+                    }) { Text("Delete it and its $online saved YouTube songs", color = MaterialTheme.colorScheme.error) }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false

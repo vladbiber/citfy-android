@@ -370,9 +370,21 @@ class MusicRepository private constructor(private val appContext: Context, datab
         }
     }
 
+    /** Takes a saved YouTube song out of the library, its playlists and favorites. */
     fun removeStreamed(id: String) {
+        if (!id.startsWith(STREAM_PREFIX)) return
         _tracks.value = _tracks.value.filterNot { it.id == id }
+        _playlists.value.filter { id in it.trackIds }.forEach { removeFromPlaylist(it.name, id) }
+        if (id in _favorites.value) toggleFavorite(id)
         writer.launch { dao.deleteTrack(id) }
+    }
+
+    /** Deletes a playlist and the saved YouTube songs no other playlist or favorite still uses. */
+    fun deletePlaylistWithStreams(name: String) {
+        val ids = _playlists.value.firstOrNull { it.name == name }?.trackIds.orEmpty().filter { it.startsWith(STREAM_PREFIX) }
+        deletePlaylist(name)
+        val kept = _playlists.value.flatMapTo(HashSet()) { it.trackIds } + _favorites.value
+        ids.filter { it !in kept }.forEach(::removeStreamed)
     }
 
     private fun persistStreamed(ids: Collection<String>) {
