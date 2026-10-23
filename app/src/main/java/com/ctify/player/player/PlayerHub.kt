@@ -25,6 +25,8 @@ data class NowState(
     /** set while live radio plays */
     val station: com.ctify.player.radio.Station? = null,
     val radioStatus: String? = null,
+    /** with the rewind buffer: the oldest position still kept; durationMs is then the live edge */
+    val bufferStartMs: Long? = null,
 )
 
 /** Sound settings, spectrum and transport shared by the UI, view model and audio processor. */

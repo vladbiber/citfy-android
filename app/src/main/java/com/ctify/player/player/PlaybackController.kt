@@ -58,7 +58,7 @@ class PlaybackController(
     onRadioActiveChanged: (Boolean) -> Unit,
 ) {
     private val scope = MainScope()
-    private val radio = RadioMode(player, radioRepository, scope, onChanged = { sync() }, onActiveChanged = onRadioActiveChanged)
+    private val radio = RadioMode(context, player, radioRepository, scope, onChanged = { sync() }, onActiveChanged = onRadioActiveChanged)
     private val radioRepo = radioRepository
     private val reverser = ReverseDecoder(context)
     /** the forward queue that reverse mode walks through, track by track */
@@ -177,13 +177,14 @@ class PlaybackController(
                     isDemo = false,
                 ),
                 isPlaying = u.isPlaying,
-                progressMs = 0,
-                durationMs = 0L,
+                progressMs = if (radio.window() != null) u.positionMs.toInt() else 0,
+                durationMs = radio.window()?.last ?: 0L,
                 shuffle = false,
                 repeat = "off",
                 volumePercent = (u.volume * 100).toInt(),
                 station = s,
                 radioStatus = radio.status,
+                bufferStartMs = radio.window()?.first,
             )
             return
         }
@@ -269,6 +270,11 @@ class PlaybackController(
     }
 
     private fun seekTo(ms: Long) {
+        if (radio.active) {
+            // live radio seeks only inside the rewind buffer
+            radio.clampSeek(ms)?.let { player.seekTo(it); PlayerHub.ui.value = PlayerHub.ui.value.copy(positionMs = it) }
+            return
+        }
         if (PlayerHub.reverseOn.value && player.duration > 0) player.seekTo((player.duration - ms).coerceAtLeast(0L))
         else player.seekTo(ms)
         PlayerHub.ui.value = PlayerHub.ui.value.copy(positionMs = ms)

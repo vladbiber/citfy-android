@@ -13,6 +13,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.extractor.DefaultExtractorsFactory
+import com.ctify.player.radio.RewindRecorder
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.ctify.player.player.fx.FxProcessorChain
@@ -48,9 +50,14 @@ class PlaybackService : MediaSessionService() {
                 .build()
         }
         // http(s) goes through the network gate; files, content:// and assets stay local
-        val dataSources = DefaultDataSource.Factory(this, OkHttpDataSource.Factory(NetworkGate.mediaClient))
+        val dataSources = RoutingDataSourceFactory(DefaultDataSource.Factory(this, OkHttpDataSource.Factory(NetworkGate.mediaClient)))
+        // the rewind buffer has no length; constant-bitrate seeking makes MP3 and AAC seekable anyway
+        val extractors = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
+            .setConstantBitrateSeekingAlwaysEnabled(true)
+        RewindRecorder.clearStale(this)
         val player = ExoPlayer.Builder(this, renderers)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources, extractors))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)

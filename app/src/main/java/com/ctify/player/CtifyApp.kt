@@ -10,7 +10,7 @@ import com.ctify.player.radio.RadioRepository
 class CtifyApp : Application() {
     val database: CtifyDatabase by lazy { CtifyDatabase.open(this) }
     val repository: MusicRepository by lazy { MusicRepository.get(this, database) }
-    val radio: RadioRepository by lazy { RadioRepository(database.radio()) }
+    val radio: RadioRepository by lazy { RadioRepository(database.radio(), database.heardSongs()) }
 
     override fun onCreate() {
         super.onCreate()

@@ -5,6 +5,8 @@ import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.ctify.player.radio.HeardSong
+import com.ctify.player.radio.HeardSongDao
 import com.ctify.player.radio.RadioCacheEntry
 import com.ctify.player.radio.RadioDao
 import com.ctify.player.radio.RadioTab
@@ -27,22 +29,25 @@ import com.ctify.player.radio.StationRecent
         StationRecent::class,
         RadioTab::class,
         RadioCacheEntry::class,
+        HeardSong::class,
     ],
     version = CtifyDatabase.VERSION,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4),
     ],
 )
 abstract class CtifyDatabase : RoomDatabase() {
     abstract fun library(): LibraryDao
     abstract fun diagnostics(): DiagnosticsDao
     abstract fun radio(): RadioDao
+    abstract fun heardSongs(): HeardSongDao
 
     companion object {
         const val NAME = "ctify.db"
-        const val VERSION = 3
+        const val VERSION = 4
 
         fun open(context: Context): CtifyDatabase =
             Room.databaseBuilder(context.applicationContext, CtifyDatabase::class.java, NAME).build()

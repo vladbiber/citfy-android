@@ -1,5 +1,6 @@
 package com.ctify.player.player
 
+import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -12,13 +13,16 @@ import androidx.media3.extractor.metadata.icy.IcyInfo
 import com.ctify.player.diag.Diagnostics
 import com.ctify.player.diag.Failure
 import com.ctify.player.diag.classOf
+import com.ctify.player.integration.HttpStatusException
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkBlockedException
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.net.Traffic
 import com.ctify.player.radio.ExternalNowPlaying
 import com.ctify.player.radio.LiveTitle
+import com.ctify.player.radio.RadioPrefs
 import com.ctify.player.radio.RadioRepository
+import com.ctify.player.radio.RewindRecorder
 import com.ctify.player.radio.Station
 import com.ctify.player.radio.StreamResolver
 import com.ctify.player.radio.StreamTitles
@@ -35,6 +39,7 @@ import kotlinx.coroutines.launch
  * same station's other directory URLs are tried.
  */
 class RadioMode(
+    private val context: Context,
     private val player: Player,
     private val radio: RadioRepository,
     private val scope: CoroutineScope,
@@ -57,6 +62,8 @@ class RadioMode(
     private var reconnectJob: Job? = null
     private var pollJob: Job? = null
     private var watchdogJob: Job? = null
+    /** set when the station plays through the rewind buffer */
+    private var recorder: RewindRecorder? = null
 
     val active: Boolean get() = station != null
 
@@ -88,6 +95,8 @@ class RadioMode(
     fun stop() {
         if (!active) return
         cancelJobs()
+        closeRecorder()
+        radio.endHeard()
         station = null; title = LiveTitle.NONE; status = null
         onActiveChanged(false)
     }
@@ -95,7 +104,7 @@ class RadioMode(
     private fun start(s: Station, fresh: Boolean, autoplay: Boolean = true) {
         val wasActive = active
         startJob?.cancel(); reconnectJob?.cancel()
-        if (fresh) { title = LiveTitle.NONE; triedSiblings = false }
+        if (fresh) { setTitle(LiveTitle.NONE); triedSiblings = false }
         station = s
         if (!wasActive) onActiveChanged(true)
         NetworkGate.blockReason(Feature.RADIO, Traffic.STREAM)?.let { reason ->
@@ -115,10 +124,20 @@ class RadioMode(
                 failed(e, null)
                 return@launch
             }
+            val hls = s.hls || url.contains(".m3u8", true)
+            closeRecorder()
+            val minutes = RadioPrefs.bufferMinutes(context)
+            // HLS plays live only in this version
+            val playUri = if (minutes > 0 && !hls) {
+                val rec = RewindRecorder.create(context, url, minutes, s.bitrate)
+                rec.start()
+                recorder = rec
+                Uri.parse("${RewindRecorder.SCHEME}://${rec.id}")
+            } else Uri.parse(url)
             val item = MediaItem.Builder()
                 .setMediaId(s.mediaId)
-                .setUri(Uri.parse(url))
-                .apply { if (s.hls || url.contains(".m3u8", true)) setMimeType(MimeTypes.APPLICATION_M3U8) }
+                .setUri(playUri)
+                .apply { if (hls) setMimeType(MimeTypes.APPLICATION_M3U8) }
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(s.name)
@@ -145,18 +164,22 @@ class RadioMode(
 
     fun onMetadata(metadata: Metadata) {
         val s = station ?: return
+        // with the buffer, titles follow the playback position instead (see [followBuffer])
+        if (recorder != null) return
         for (i in 0 until metadata.length()) {
             val icy = metadata[i] as? IcyInfo ?: continue
             val parsed = StreamTitles.parse(icy.title, s.name, s.streamUrl)
-            if (parsed != title) { title = parsed; onChanged() }
+            setTitle(parsed)
         }
     }
 
     /** true when the error belonged to a radio stream and was handled here. */
     fun onPlayerError(error: PlaybackException): Boolean {
         if (!active || player.currentMediaItem?.mediaId?.startsWith(Station.MEDIA_PREFIX) != true) return false
+        val root = error.rootCause()
         val status = (error.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
-        failed(error.rootCause(), status)
+            ?: (root as? HttpStatusException)?.status
+        failed(root, status)
         return true
     }
 
@@ -224,7 +247,8 @@ class RadioMode(
                     bufferingSince = 0L
                     failed(java.io.InterruptedIOException("Stream stalled for 20 s"), null)
                 }
-                delay(2000)
+                followBuffer()
+                delay(1000)
             }
         }
     }
@@ -238,12 +262,51 @@ class RadioMode(
                 if (player.isPlaying) {
                     runCatching { fetch() }.getOrNull()?.let { raw ->
                         val parsed = StreamTitles.parse(raw, s.name)
-                        if (parsed != title) { title = parsed; onChanged() }
+                        setTitle(parsed)
                     }
                 }
                 delay(interval)
             }
         }
+    }
+
+    /** Buffered window in player time, or null when the station plays straight from the server. */
+    fun window(): LongRange? {
+        val rec = recorder ?: return null
+        return rec.msAt(rec.windowStart)..rec.msAt(rec.written)
+    }
+
+    /** Where a seek may land: inside the buffer, a little back from both ends. */
+    fun clampSeek(ms: Long): Long? {
+        val w = window() ?: return null
+        val lo = w.first + EDGE_MS
+        val hi = (w.last - EDGE_MS).coerceAtLeast(lo)
+        return ms.coerceIn(lo, hi)
+    }
+
+    /** Shows the title that was on air at the playback position and recovers from falling behind. */
+    private fun followBuffer() {
+        val rec = recorder ?: return
+        val s = station ?: return
+        val pos = player.currentPosition
+        if (rec.offsetAt(pos) < rec.windowStart && rec.written > 0) {
+            clampSeek(pos)?.let { player.seekTo(it) }
+            return
+        }
+        val parsed = StreamTitles.parse(rec.titleAt(rec.offsetAt(pos)), s.name, s.streamUrl)
+        setTitle(parsed)
+    }
+
+    private fun setTitle(t: LiveTitle) {
+        if (t == title) return
+        title = t
+        station?.let { radio.logHeard(it, t) }
+        onChanged()
+    }
+
+    private fun closeRecorder() {
+        recorder?.close()
+        recorder = null
     }
 
     private fun cancelJobs() {
@@ -262,5 +325,6 @@ class RadioMode(
         val BACKOFF_S = intArrayOf(1, 2, 4, 8, 15, 30)
         const val SIBLINGS_AFTER = 3
         const val STALL_MS = 20_000L
+        const val EDGE_MS = 2_000L
     }
 }

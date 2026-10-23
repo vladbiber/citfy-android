@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /** Radio state the UI and the player share: directory lookups, favorites, recents, tabs. */
-class RadioRepository(private val dao: RadioDao) {
+class RadioRepository(private val dao: RadioDao, private val heardDao: HeardSongDao) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val browser = RadioBrowser()
     private val cliampRadio = CliampRadio()
@@ -26,6 +26,7 @@ class RadioRepository(private val dao: RadioDao) {
     val recents: Flow<List<Station>> = dao.recents()
     val customStations: Flow<List<Station>> = dao.customStations()
     val tabs: Flow<List<RadioTab>> = dao.tabs()
+    val heard: Flow<List<HeardSong>> = heardDao.recent()
 
     // ---- lists ----
 
@@ -124,6 +125,47 @@ class RadioRepository(private val dao: RadioDao) {
         dao.removeFavorite(station.uuid)
         dao.deleteStation(station.uuid)
     }
+
+    // ---- heard songs ----
+
+    /** one thread so a song's end is written before the next one starts */
+    private val heardScope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    private var openHeardId: Long? = null
+    private var lastHeardKey: String? = null
+
+    /** Logs a title change; ads, empty titles and the station's own name are skipped. */
+    fun logHeard(station: Station, title: LiveTitle) = heardScope.launch {
+        val song = title.title?.takeIf { !title.isAd }
+        val key = song?.let { "${station.uuid}|${title.artist}|$it" }
+        if (key == lastHeardKey) return@launch
+        val now = System.currentTimeMillis()
+        openHeardId?.let { heardDao.end(it, now) }
+        openHeardId = null
+        lastHeardKey = key
+        if (song != null) {
+            openHeardId = heardDao.insert(
+                HeardSong(
+                    rawTitle = title.display ?: song,
+                    artist = title.artist,
+                    title = song,
+                    stationUuid = station.uuid,
+                    stationName = station.name,
+                    startedAt = now,
+                    genre = station.genre?.name,
+                )
+            )
+        }
+    }
+
+    fun endHeard() = heardScope.launch {
+        openHeardId?.let { heardDao.end(it, System.currentTimeMillis()) }
+        openHeardId = null
+        lastHeardKey = null
+    }
+
+    fun setHeardLiked(song: HeardSong, liked: Boolean) = heardScope.launch { heardDao.setLiked(song.id, liked) }
+    fun deleteHeard(song: HeardSong) = heardScope.launch { heardDao.delete(song.id) }
+    fun clearHeard() = heardScope.launch { heardDao.clear(); openHeardId = null; lastHeardKey = null }
 
     // ---- tabs ----
 
