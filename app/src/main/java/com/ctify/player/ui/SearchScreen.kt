@@ -1,7 +1,10 @@
 package com.ctify.player.ui
 
+import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -19,17 +23,21 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,11 +55,18 @@ import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.ui.youtube.CardRow
 import com.ctify.player.youtube.YouTubeSource
+import com.ctify.player.youtube.YtIntake
+import com.ctify.player.youtube.YtPlaylistRef
+import com.ctify.player.youtube.YtSong
+import com.ctify.player.youtube.download.Downloads
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class Scope(val label: String) { ALL("All"), LIBRARY("Library"), YOUTUBE("YouTube"), RADIO("Radio") }
+private enum class Kind(val label: String) { SONGS("Songs"), ALBUMS("Albums") }
 
 /** One search box: your own songs first, then YouTube, then radio stations. */
 @Composable
@@ -63,7 +78,11 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
     val radio = radioRepo()
     var query by rememberSaveable { mutableStateOf("") }
     var scope by rememberSaveable { mutableStateOf(Scope.ALL) }
-    var yt by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var kind by rememberSaveable { mutableStateOf(Kind.SONGS) }
+    var ytSongs by remember { mutableStateOf<List<YtSong>>(emptyList()) }
+    val yt = remember(ytSongs) { ytSongs.map { it.toTrack() } }
+    var ytAlbums by remember { mutableStateOf<List<YtPlaylistRef>>(emptyList()) }
+    var menuFor by remember { mutableStateOf<YtSong?>(null) }
     var stations by remember { mutableStateOf<List<Station>>(emptyList()) }
     var ytState by remember { mutableStateOf<String?>(null) }
     var radioState by remember { mutableStateOf<String?>(null) }
@@ -75,17 +94,23 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
             // on the phone first, saved streams after
             .sortedBy { if (it.uri.startsWith("ytstream")) 1 else 0 }
     }
+    val localAlbums = remember(q, tracks) {
+        if (q.isEmpty()) emptyList()
+        else tracks.filter { it.album.contains(q, true) || it.artist.contains(q, true) }
+            .groupBy { it.album }.filterKeys { it.isNotBlank() && it != "YouTube" }.values.toList()
+    }
     val wantYt = scope == Scope.ALL || scope == Scope.YOUTUBE
-    val wantRadio = scope == Scope.ALL || scope == Scope.RADIO
+    val wantRadio = (scope == Scope.ALL && kind == Kind.SONGS) || scope == Scope.RADIO
 
-    LaunchedEffect(q, wantYt) {
-        yt = emptyList(); ytState = null
+    LaunchedEffect(q, wantYt, kind) {
+        ytSongs = emptyList(); ytAlbums = emptyList(); ytState = null
         if (q.length < 2 || !wantYt) return@LaunchedEffect
         NetworkGate.blockReason(Feature.YOUTUBE)?.let { ytState = it; return@LaunchedEffect }
         delay(600)
         ytState = LOADING
         ytState = try {
-            yt = YouTubeSource.search(q).map { it.toTrack() }; null
+            if (kind == Kind.ALBUMS) ytAlbums = YouTubeSource.searchAlbums(q) else ytSongs = YouTubeSource.search(q)
+            null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -130,6 +155,9 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Scope.entries.forEach { s -> FilterChip(selected = scope == s, onClick = { scope = s }, label = { Text(s.label) }) }
             }
+            if (scope != Scope.RADIO) Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Kind.entries.forEach { k -> FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(k.label) }) }
+            }
         }
 
         if (q.isEmpty()) {
@@ -142,7 +170,17 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
             return@LazyColumn
         }
 
-        if (scope == Scope.ALL || scope == Scope.LIBRARY) {
+        if ((scope == Scope.ALL || scope == Scope.LIBRARY) && kind == Kind.ALBUMS) {
+            header("Your albums")
+            if (localAlbums.isEmpty()) note("No albums in your library match \"$q\"")
+            items(localAlbums, key = { "la" + it.first().album }) { list ->
+                CardRow(list.firstNotNullOfOrNull { it.coverUri }, list.first().album, "${list.first().artist} · ${list.size} songs") {
+                    viewModel.playQueue(list, 0)
+                }
+            }
+        }
+
+        if ((scope == Scope.ALL || scope == Scope.LIBRARY) && kind == Kind.SONGS) {
             header("Your library")
             if (local.isEmpty()) note("Nothing in your library matches \"$q\"")
             items(local, key = { "l" + it.id }) { track ->
@@ -158,7 +196,16 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
             }
         }
 
-        if (wantYt) {
+        if (wantYt && kind == Kind.ALBUMS) {
+            header("Albums on YouTube")
+            status(ytState, ytAlbums.isEmpty() && q.length >= 2, "No albums found on YouTube")
+            items(ytAlbums, key = { "ya" + it.id }) { a ->
+                // opens in the YouTube page, which has Play, Save and Download for the album
+                CardRow(a.thumbnail, a.title, a.subtitle) { YtIntake.offer("https://music.youtube.com/playlist?list=${a.id}") }
+            }
+        }
+
+        if (wantYt && kind == Kind.SONGS) {
             header("YouTube")
             status(ytState, yt.isEmpty() && q.length >= 2, "No songs found on YouTube")
             items(yt, key = { "y" + it.id }) { track ->
@@ -169,7 +216,7 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
                     isFavorite = track.id in favorites,
                     onClick = { viewModel.repository.remember(yt); viewModel.playQueue(yt, yt.indexOf(track)) },
                     onToggleFavorite = { viewModel.repository.remember(listOf(track)); viewModel.toggleFavorite(track.id) },
-                    onMore = { viewModel.repository.remember(listOf(track)); onMore(track.id) },
+                    onMore = { menuFor = ytSongs.getOrNull(yt.indexOf(track)) },
                 )
             }
         }
@@ -180,6 +227,37 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
             stationRows(stations, radioUi, keyPrefix = "r")
         }
     }
+
+    menuFor?.let { YtSongMenu(it, viewModel, onMore, onDismiss = { menuFor = null }) }
+}
+
+@Composable
+private fun YtSongMenu(song: YtSong, viewModel: PlayerViewModel, onAddToPlaylist: (String) -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val track = song.toTrack()
+    fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(song.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column {
+                MenuLine("Download") {
+                    onDismiss()
+                    scope.launch { toast(if (Downloads.enqueue(listOf(song)) == 0) "Already saved or in the queue" else "Added to downloads") }
+                }
+                MenuLine("Save to library (streams, no download)") { onDismiss(); viewModel.repository.saveStreamed(listOf(track)); toast("Saved to your library") }
+                MenuLine("Add to playlist") { onDismiss(); viewModel.repository.remember(listOf(track)); onAddToPlaylist(track.id) }
+                MenuLine("Add to queue") { onDismiss(); viewModel.repository.remember(listOf(track)); viewModel.addToQueue(track.id) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun MenuLine(label: String, onClick: () -> Unit) {
+    Text(label, color = TextPrimary, fontSize = 16.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
 }
 
 private const val LOADING = "\u0000loading"
