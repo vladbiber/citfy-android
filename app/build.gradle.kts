@@ -12,8 +12,8 @@ android {
         applicationId = "com.ctify.player"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "2.1.0-test4"
+        versionCode = 10
+        versionName = "2.1.0-test5"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -30,6 +30,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     buildFeatures {
@@ -38,7 +39,13 @@ android {
     }
 
     packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/versions/**"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE*"
+            excludes += "/META-INF/NOTICE*"
+        }
     }
 }
 
@@ -79,6 +86,9 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.okhttp)
+    implementation(libs.levyra.extractor)
+    implementation(libs.work.runtime.ktx)
+    coreLibraryDesugaring(libs.desugar.jdk.libs.nio)
 
     testImplementation(libs.junit)
 }

@@ -39,6 +39,7 @@ interface WheelSource {
     fun toggleFavorite(item: WheelItem) {}
     val canAddToPlaylist: Boolean get() = false
     val canDownload: Boolean get() = false
+    fun download(item: WheelItem) {}
 }
 
 /** Which part of the library the library source spins over. */
@@ -117,8 +118,8 @@ class PendingSource(override val id: String, override val label: String) : Wheel
     override fun play(winner: WheelItem, wheel: List<WheelItem>) {}
 }
 
-fun pendingYouTubeSources() = listOf(
-    PendingSource("genre", "Genre roulette"),
+fun pendingYouTubeSources(repo: MusicRepository) = listOf(
+    GenreRouletteSource(repo),
     PendingSource("deep", "Deep random"),
     PendingSource("charts", "World charts"),
     PendingSource("taste", "Your taste"),

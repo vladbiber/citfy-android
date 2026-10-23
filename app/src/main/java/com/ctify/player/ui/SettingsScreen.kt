@@ -55,6 +55,7 @@ import com.ctify.player.radio.RadioPrefs
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.ThemeMode
 import com.ctify.player.ui.theme.isAppInDarkTheme
+import com.ctify.player.youtube.download.Downloads
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import kotlin.system.exitProcess
@@ -74,6 +75,8 @@ fun SettingsScreen(onClose: () -> Unit) {
     val wifiOnlyStreaming by NetworkGate.wifiOnlyStreaming.collectAsState()
     val wifiOnlyDownloads by NetworkGate.wifiOnlyDownloads.collectAsState()
     val radioOn = features[Feature.RADIO] != false
+    val youtubeOn = features[Feature.YOUTUBE] != false
+    val chargingOnly by Downloads.chargingOnly.collectAsState()
 
     var message by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -124,13 +127,21 @@ fun SettingsScreen(onClose: () -> Unit) {
             SwitchRow("Cover colors in Now Playing", "Tint the player with the album cover instead of the theme", coverColors, Appearance::setCoverColors)
 
             Header("Network")
-            SwitchRow("Offline mode", "Block all internet use. Your music keeps working.", offline, NetworkGate::setOffline)
+            SwitchRow("Offline mode", "Block all internet use. Your music keeps working.", offline, { NetworkGate.setOffline(it); if (!it) Downloads.kick() })
             SwitchRow("Radio", "Station directory and live streams", radioOn, { NetworkGate.setEnabled(Feature.RADIO, it) }, enabled = !offline)
             SwitchRow(
                 "Radio on mobile data", "Off means radio only plays on Wi-Fi",
                 !wifiOnlyStreaming, { NetworkGate.setWifiOnlyStreaming(!it) }, enabled = !offline && radioOn,
             )
-            SwitchRow("Downloads on Wi-Fi only", "Wait for Wi-Fi before downloading", wifiOnlyDownloads, NetworkGate::setWifiOnlyDownloads, enabled = !offline)
+            SwitchRow(
+                "YouTube", "Search, stream and download songs and albums",
+                youtubeOn, { NetworkGate.setEnabled(Feature.YOUTUBE, it); if (it) Downloads.kick() }, enabled = !offline,
+            )
+            SwitchRow(
+                "Downloads on Wi-Fi only", "Wait for Wi-Fi before downloading", wifiOnlyDownloads,
+                { NetworkGate.setWifiOnlyDownloads(it); Downloads.kick(replace = true) }, enabled = !offline,
+            )
+            SwitchRow("Downloads only while charging", "Wait until the phone is plugged in", chargingOnly, Downloads::setChargingOnly, enabled = !offline && youtubeOn)
             var bufferMin by remember { mutableIntStateOf(RadioPrefs.bufferMinutes(ctx)) }
             Text("Radio rewind buffer", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
             Text(

@@ -16,6 +16,15 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // nanojson for the vendored extractor
+        maven("https://jitpack.io") { content { includeGroup("com.github.TeamNewPipe") } }
+    }
+}
+
+// YouTube extractor built from source, as Levyra does
+includeBuild("third_party/LevyraExtractor") {
+    dependencySubstitution {
+        substitute(module("com.github.LUC4N3X:LevyraExtractor")).using(project(":"))
     }
 }
 

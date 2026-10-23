@@ -233,7 +233,7 @@ fun WheelScreen(
                             tint = if (hearted) Accent else TextSecondary,
                         )
                     }
-                    if (src.canDownload) IconButton(onClick = {}) { Icon(Icons.Filled.Download, "Download", tint = TextSecondary) }
+                    if (src.canDownload) IconButton(onClick = { src.download(item); android.widget.Toast.makeText(ctx, "Added to downloads", android.widget.Toast.LENGTH_SHORT).show() }) { Icon(Icons.Filled.Download, "Download", tint = TextSecondary) }
                     if (src.canAddToPlaylist) IconButton(onClick = { onAddToPlaylist(item.id) }) {
                         Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", tint = TextSecondary)
                     }

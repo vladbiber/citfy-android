@@ -1,0 +1,163 @@
+package com.ctify.player.youtube
+
+import com.ctify.player.data.Track
+import com.ctify.player.diag.Diagnostics
+import com.ctify.player.diag.Failure
+import com.ctify.player.diag.classOf
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.schabi.newpipe.extractor.InfoItem
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.playlist.PlaylistInfo
+import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
+import org.schabi.newpipe.extractor.search.SearchInfo
+import org.schabi.newpipe.extractor.search.filter.FilterItem
+import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
+import org.schabi.newpipe.extractor.stream.StreamInfoItem
+
+/** A song on YouTube Music. */
+data class YtSong(
+    val videoId: String,
+    val title: String,
+    val artist: String,
+    val album: String? = null,
+    val durationMs: Long = 0L,
+    val thumbnail: String? = null,
+    val trackNumber: Int? = null,
+) {
+    val url: String get() = "https://music.youtube.com/watch?v=$videoId"
+
+    /** A playable track that streams through ytstream:// until it's downloaded. */
+    fun toTrack() = Track(
+        id = STREAM_PREFIX + videoId,
+        title = title,
+        artist = artist,
+        album = album ?: "YouTube",
+        uri = YT_SCHEME + "://" + videoId,
+        coverUri = thumbnail,
+        durationMs = durationMs,
+        isDemo = false,
+    )
+
+    companion object {
+        const val STREAM_PREFIX = "yts_"
+        const val YT_SCHEME = "ytstream"
+    }
+}
+
+data class YtAlbum(val id: String, val title: String, val artist: String, val thumbnail: String?, val songs: List<YtSong>)
+
+/** Search, stream and browse YouTube Music. Every call goes through NetworkGate. */
+object YouTubeSource {
+    private const val MAX_ITEMS = 200
+
+    suspend fun search(query: String): List<YtSong> = lookup("Search songs", query) {
+        val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), null))
+        info.relatedItems.mapNotNull(::toSong)
+    }
+
+    suspend fun searchAlbums(query: String): List<YtPlaylistRef> = lookup("Search albums", query) {
+        val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS), null))
+        info.relatedItems.filterIsInstance<PlaylistInfoItem>().mapNotNull { p ->
+            val id = listId(p.url) ?: return@mapNotNull null
+            YtPlaylistRef(id, p.name, p.uploaderName.orEmpty(), p.thumbnailUrl)
+        }
+    }
+
+    /** Resolves an audio-only stream, M4A preferred; see [StreamResolver]. */
+    suspend fun stream(videoId: String, fresh: Boolean = false, forDownload: Boolean = false): YtStream =
+        StreamResolver.resolve(videoId, fresh, forDownload)
+
+    /** An album playlist (OLAK5uy...) with track numbers and one shared cover. */
+    suspend fun album(id: String): YtAlbum = lookup("Open album", id) {
+        val (info, items) = playlist("https://www.youtube.com/playlist?list=$id")
+        val artist = info.uploaderName?.removeSuffix(" - Topic")?.takeIf { it.isNotBlank() }
+        // album playlists are named "Album - <title>" in the session language
+        val title = info.name.replace(Regex("^\\S+ [-–] "), "")
+        val songs = items.mapIndexedNotNull { i, s -> toSong(s)?.copy(album = title, trackNumber = i + 1, thumbnail = info.thumbnailUrl ?: s.thumbnailUrl) }
+        YtAlbum(id, title, artist ?: songs.firstOrNull()?.artist ?: "Unknown artist", info.thumbnailUrl, songs)
+    }
+
+    /** Songs of any playlist id, VL prefix allowed. */
+    suspend fun playlistSongs(id: String): List<YtSong> = lookup("Open playlist", id) {
+        playlist("https://www.youtube.com/playlist?list=${id.removePrefix("VL")}").second.mapNotNull(::toSong)
+    }
+
+    /** Song radio: the RDAMVM mix that YouTube Music plays after a song. */
+    suspend fun radio(videoId: String): List<YtSong> = lookup("Song radio", videoId) {
+        playlist("https://www.youtube.com/watch?v=$videoId&list=RDAMVM$videoId", maxPages = 2).second.mapNotNull(::toSong)
+    }
+
+    suspend fun moodsAndGenres(): List<YtCategory> = lookup("Browse moods and genres", null) {
+        YtBrowse.categories(YtBrowse.browse("FEmusic_moods_and_genres"))
+    }
+
+    suspend fun categoryPlaylists(c: YtCategory): List<YtPlaylistRef> = lookup("Browse ${c.title}", c.browseId) {
+        YtBrowse.playlists(YtBrowse.browse(c.browseId, c.params))
+    }
+
+    suspend fun charts(): List<YtPlaylistRef> = lookup("Browse charts", null) {
+        YtBrowse.playlists(YtBrowse.browse("FEmusic_charts"))
+    }
+
+    private fun playlist(url: String, maxPages: Int = 10): Pair<PlaylistInfo, List<StreamInfoItem>> {
+        val info = PlaylistInfo.getInfo(ServiceList.YouTube, url)
+        val items = ArrayList<StreamInfoItem>(info.relatedItems)
+        var page = info.nextPage
+        var n = 1
+        while (page != null && n < maxPages && items.size < MAX_ITEMS) {
+            val more = PlaylistInfo.getMoreItems(ServiceList.YouTube, url, page)
+            items += more.items
+            page = more.nextPage
+            n++
+        }
+        return info to items.distinctBy { it.url }
+    }
+
+    private fun filter(name: String): List<FilterItem> {
+        val f = ServiceList.YouTube.searchQHFactory.availableContentFilter.filterGroups
+            .flatMap { it.filterItems.asList() }.firstOrNull { it.name == name } ?: throw YtParseException("Search filter $name missing")
+        return listOf(f)
+    }
+
+    fun videoId(url: String?): String? = url?.let {
+        Regex("(?:v=|youtu\\.be/|/shorts/)([A-Za-z0-9_-]{11})").find(it)?.groupValues?.get(1)
+    }
+
+    private fun listId(url: String?): String? = url?.let { Regex("[?&]list=([A-Za-z0-9_-]+)").find(it)?.groupValues?.get(1) }
+
+    private fun toSong(item: InfoItem): YtSong? {
+        val s = item as? StreamInfoItem ?: return null
+        val id = videoId(s.url) ?: return null
+        return YtSong(
+            videoId = id,
+            title = s.name,
+            artist = s.uploaderName?.removeSuffix(" - Topic")?.takeIf { it.isNotBlank() } ?: "Unknown artist",
+            durationMs = s.duration.coerceAtLeast(0L) * 1000L,
+            thumbnail = s.thumbnailUrl,
+        )
+    }
+
+    /** Runs a lookup on IO and files a diagnostic when it fails. */
+    private suspend fun <T> lookup(action: String, item: String?, block: suspend () -> T): T = withContext(Dispatchers.IO) {
+        YtRuntime.ensure()
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Diagnostics.record(
+                Failure(
+                    feature = "YouTube",
+                    action = action,
+                    component = StreamResolver.COMPONENT,
+                    item = item,
+                    error = e,
+                    errorClass = YtFailures.errorClass(e) ?: classOf(e, (e as? YtHttpException)?.status),
+                )
+            )
+            throw e
+        }
+    }
+}

@@ -43,6 +43,8 @@ import com.ctify.player.ui.radio.radioRepo
 import com.ctify.player.ui.wheel.WheelScreen
 import com.ctify.player.ui.wheel.liveRadioSource
 import com.ctify.player.ui.wheel.pendingYouTubeSources
+import com.ctify.player.ui.youtube.DownloadsSheet
+import com.ctify.player.ui.youtube.YouTubeScreen
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextSecondary
@@ -61,6 +63,8 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     var showNowPlaying by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showWheel by remember { mutableStateOf(false) }
+    var showYouTube by remember { mutableStateOf(false) }
+    var showDownloads by remember { mutableStateOf(false) }
     var moreTrackId by remember { mutableStateOf<String?>(null) }
     var openedPlaylist by remember { mutableStateOf<String?>(null) }
     var librarySection by remember { mutableIntStateOf(0) }
@@ -139,6 +143,8 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     onOpenPlaylist = { openedPlaylist = it },
                     section = librarySection,
                     onSection = { librarySection = it },
+                    onYouTube = { showYouTube = true },
+                    onDownloads = { showDownloads = true },
                 )
                 3 -> RadioScreen()
                 else -> SoundScreen()
@@ -153,7 +159,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     ) {
         BackHandler { showWheel = false }
         val radio = radioRepo()
-        val extra = remember(radio) { listOf(liveRadioSource(radio)) + pendingYouTubeSources() }
+        val extra = remember(radio) { listOf(liveRadioSource(radio)) + pendingYouTubeSources(viewModel.repository) }
         Box(
             Modifier
                 .fillMaxSize()
@@ -167,6 +173,17 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
             )
         }
     }
+
+    AnimatedVisibility(
+        visible = showYouTube,
+        enter = slideInVertically(initialOffsetY = { it }),
+        exit = slideOutVertically(targetOffsetY = { it }),
+    ) {
+        BackHandler { showYouTube = false }
+        YouTubeScreen(viewModel, onClose = { showYouTube = false }, onOpenDownloads = { showDownloads = true })
+    }
+
+    if (showDownloads) DownloadsSheet(onDismiss = { showDownloads = false })
 
     moreTrackId?.let { id ->
         AddToPlaylistSheet(viewModel, trackId = id, onDismiss = { moreTrackId = null })

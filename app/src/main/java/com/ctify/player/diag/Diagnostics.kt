@@ -92,6 +92,8 @@ object Diagnostics {
         "blocked_by_settings", "no_network", "tls_or_clock" -> Verdict.FIX_YOUR_SIDE
         "http_429", "http_5xx", "timeout" -> Verdict.TEMPORARY
         "http_404", "http_410", "unavailable" -> Verdict.NOT_A_BREAKAGE
+        "yt_all_clients_failed", "yt_extractor_parse_failed", "yt_stream_decode_failed" -> Verdict.WAIT_FOR_UPDATE
+        "yt_bot_check", "yt_login_required" -> Verdict.TEMPORARY
         "crash" -> Verdict.CTIFY_BUG
         else -> Verdict.UNKNOWN
     }

@@ -55,7 +55,10 @@ class MusicRepository private constructor(private val appContext: Context, datab
     /** the app and the playback service can both trigger a load */
     private val loadLock = Mutex()
 
-    fun trackById(id: String?): Track? = id?.let { byId[it] }
+    fun trackById(id: String?): Track? = id?.let { synchronized(byId) { byId[it] } }
+
+    /** Makes streamed YouTube tracks findable by id without adding them to the library. */
+    fun remember(tracks: List<Track>) = synchronized(byId) { tracks.forEach { byId.putIfAbsent(it.id, it) } }
 
     fun favoriteTracks(): List<Track> = _tracks.value.filter { it.id in _favorites.value }
 
@@ -75,10 +78,16 @@ class MusicRepository private constructor(private val appContext: Context, datab
         }
         val demo = loadDemoTracks()
         val imported = loadImportedTracks().map { ensureImportedCover(it) }
-        val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()) else emptyList()
-        val all = imported + demo + device
-        byId.clear()
-        all.forEach { byId[it.id] = it }
+        val youtube = loadYoutubeTracks()
+        val ytUris = youtube.mapTo(HashSet()) { it.uri }
+        val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()).filter { it.uri !in ytUris } else emptyList()
+        val all = youtube + imported + demo + device
+        synchronized(byId) {
+            val streamed = byId.values.filter { it.id.startsWith(STREAM_PREFIX) }
+            byId.clear()
+            streamed.forEach { byId[it.id] = it }
+            all.forEach { byId[it.id] = it }
+        }
         _tracks.value = all
     } }
 
@@ -281,6 +290,20 @@ class MusicRepository private constructor(private val appContext: Context, datab
             Track(it.id, it.title, it.artist, it.album, it.uri, null, it.durationMs, isDemo = false, isImported = true)
         }
 
+    /** Re-reads saved YouTube songs after a download without rescanning the device. */
+    suspend fun refreshYoutube() = withContext(Dispatchers.IO) { loadLock.withLock {
+        val youtube = loadYoutubeTracks()
+        val uris = youtube.mapTo(HashSet()) { it.uri }
+        val rest = _tracks.value.filter { !it.id.startsWith("yt_") && it.uri !in uris }
+        synchronized(byId) { youtube.forEach { byId[it.id] = it } }
+        _tracks.value = youtube + rest
+    } }
+
+    private suspend fun loadYoutubeTracks(): List<Track> = dao.tracksBySource(TrackSource.YOUTUBE).map {
+        val cover = it.youtubeVideoId?.let { v -> File(appContext.filesDir, "yt-covers/$v.jpg") }?.takeIf(File::exists)
+        Track(it.id, it.title, it.artist, it.album, it.uri, cover?.let(Uri::fromFile)?.toString(), it.durationMs, isDemo = false)
+    }
+
     private fun Track.toEntity() = TrackEntity(
         id = id,
         source = TrackSource.IMPORTED,
@@ -460,6 +483,7 @@ class MusicRepository private constructor(private val appContext: Context, datab
 
     companion object {
         private const val MIGRATED_KEY = "migrated_to_room_v1"
+        private const val STREAM_PREFIX = "yts_"
         @Volatile private var instance: MusicRepository? = null
         fun get(context: Context, database: CtifyDatabase): MusicRepository =
             instance ?: synchronized(this) {

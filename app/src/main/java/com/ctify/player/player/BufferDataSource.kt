@@ -55,7 +55,11 @@ class RoutingDataSourceFactory(private val fallback: DataSource.Factory) : DataS
         private var active: DataSource = other
 
         override fun open(dataSpec: DataSpec): Long {
-            active = if (dataSpec.uri.scheme == RewindRecorder.SCHEME) BufferDataSource() else other
+            active = when (dataSpec.uri.scheme) {
+                RewindRecorder.SCHEME -> BufferDataSource()
+                YtStreamDataSource.SCHEME -> YtStreamDataSource()
+                else -> other
+            }
             return active.open(dataSpec)
         }
 

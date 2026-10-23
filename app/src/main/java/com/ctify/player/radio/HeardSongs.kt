@@ -37,6 +37,7 @@ interface HeardSongDao {
     @Query("SELECT * FROM heard_songs ORDER BY startedAt DESC LIMIT :limit") fun recent(limit: Int = 500): Flow<List<HeardSong>>
     @Query("UPDATE heard_songs SET liked = :liked WHERE id = :id") suspend fun setLiked(id: Long, liked: Boolean)
     @Query("UPDATE heard_songs SET youtubeVideoId = :videoId WHERE id = :id") suspend fun setVideoId(id: Long, videoId: String)
+    @Query("UPDATE heard_songs SET downloadedTrackId = :trackId WHERE id = :id") suspend fun setDownloaded(id: Long, trackId: String)
     @Query("DELETE FROM heard_songs WHERE id = :id") suspend fun delete(id: Long)
     @Query("DELETE FROM heard_songs") suspend fun clear()
 }

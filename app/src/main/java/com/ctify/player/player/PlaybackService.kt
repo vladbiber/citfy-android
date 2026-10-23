@@ -70,6 +70,8 @@ class PlaybackService : MediaSessionService() {
             // keeps the CPU awake with the screen off; without it playback dies in deep sleep
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        // YouTube's progressive file carries video too; this is an audio player
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build()
         // one unreadable file should not end the session: skip it and keep going
         var audioRetries = 0
         player.addListener(object : Player.Listener {

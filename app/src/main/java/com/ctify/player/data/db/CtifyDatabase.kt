@@ -13,6 +13,8 @@ import com.ctify.player.radio.RadioTab
 import com.ctify.player.radio.Station
 import com.ctify.player.radio.StationFavorite
 import com.ctify.player.radio.StationRecent
+import com.ctify.player.youtube.download.DownloadDao
+import com.ctify.player.youtube.download.DownloadEntity
 
 /** Every schema change bumps [version] and adds a real migration; schemas are exported to app/schemas. */
 @Database(
@@ -35,6 +37,7 @@ import com.ctify.player.radio.StationRecent
         GenrePresetEntity::class,
         DevicePresetEntity::class,
         TrackLoudness::class,
+        DownloadEntity::class,
     ],
     version = CtifyDatabase.VERSION,
     exportSchema = true,
@@ -43,6 +46,7 @@ import com.ctify.player.radio.StationRecent
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6),
     ],
 )
 abstract class CtifyDatabase : RoomDatabase() {
@@ -51,10 +55,11 @@ abstract class CtifyDatabase : RoomDatabase() {
     abstract fun radio(): RadioDao
     abstract fun heardSongs(): HeardSongDao
     abstract fun sound(): SoundDao
+    abstract fun downloads(): DownloadDao
 
     companion object {
         const val NAME = "ctify.db"
-        const val VERSION = 5
+        const val VERSION = 6
 
         fun open(context: Context): CtifyDatabase =
             Room.databaseBuilder(context.applicationContext, CtifyDatabase::class.java, NAME).build()

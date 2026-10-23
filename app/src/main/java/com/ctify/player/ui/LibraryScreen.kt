@@ -34,12 +34,14 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
@@ -141,6 +143,8 @@ fun LibraryScreen(
     onOpenPlaylist: (String?) -> Unit,
     section: Int = 0,
     onSection: (Int) -> Unit = {},
+    onYouTube: () -> Unit = {},
+    onDownloads: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
@@ -180,6 +184,16 @@ fun LibraryScreen(
                             text = { Text("Add a song", color = TextPrimary) },
                             leadingIcon = { Icon(Icons.Filled.LibraryAdd, null, tint = TextSecondary) },
                             onClick = { showAddMenu = false; onImport() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Find on YouTube", color = TextPrimary) },
+                            leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
+                            onClick = { showAddMenu = false; onYouTube() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Downloads", color = TextPrimary) },
+                            leadingIcon = { Icon(Icons.Filled.Download, null, tint = TextSecondary) },
+                            onClick = { showAddMenu = false; onDownloads() },
                         )
                         DropdownMenuItem(
                             text = { Text("New playlist", color = TextPrimary) },

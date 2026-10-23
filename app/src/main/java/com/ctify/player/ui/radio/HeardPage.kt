@@ -45,6 +45,8 @@ import com.ctify.player.ui.GridHeader
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.ui.youtube.HeardAction
+import com.ctify.player.ui.youtube.HeardYouTube
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
@@ -89,6 +91,7 @@ private fun HeardRow(song: HeardSong) {
     val radio = radioRepo()
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
+    var ytAction by remember { mutableStateOf<HeardAction?>(null) }
     val open: (String) -> Unit = { url ->
         runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
@@ -113,6 +116,8 @@ private fun HeardRow(song: HeardSong) {
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More for ${song.title}", tint = TextSecondary) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Play from YouTube") }, onClick = { menu = false; ytAction = HeardAction.PLAY })
+                DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; ytAction = HeardAction.DOWNLOAD })
                 DropdownMenuItem(text = { Text("Find on YouTube") }, onClick = { menu = false; open(SongLinks.youtube(song)) })
                 DropdownMenuItem(text = { Text("Find on YouTube Music") }, onClick = { menu = false; open(SongLinks.youtubeMusic(song)) })
                 DropdownMenuItem(text = { Text("Find on Spotify") }, onClick = { menu = false; open(SongLinks.spotify(song)) })
@@ -124,6 +129,7 @@ private fun HeardRow(song: HeardSong) {
             }
         }
     }
+    ytAction?.let { HeardYouTube(song, it) { ytAction = null } }
 }
 
 private fun dayLabel(at: Long): String {

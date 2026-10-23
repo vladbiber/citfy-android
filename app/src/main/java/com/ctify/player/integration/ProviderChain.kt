@@ -37,6 +37,10 @@ class ProviderChain<T>(
     private val providers: List<Provider<T>>,
     private val pauseAfterFailures: Int = 5,
     private val pauseMs: Long = 10 * 60_000L,
+    /** error class for the diagnostic filed when every provider failed */
+    private val classify: (Throwable?, Int?) -> String = ::classOf,
+    /** failures that end the chain without blaming the provider, e.g. a settings switch */
+    private val stopOn: (Throwable) -> Boolean = { it is NetworkBlockedException },
 ) {
     private val _health = MutableStateFlow(providers.associate { it.name to ProviderHealth() })
     val health: StateFlow<Map<String, ProviderHealth>> = _health.asStateFlow()
@@ -68,7 +72,7 @@ class ProviderChain<T>(
                 lastError = e
                 attempts += Attempt(p.name, (e as? HttpStatusException)?.status?.toString() ?: e.message ?: e.javaClass.simpleName)
                 // a switch in Settings isn't the provider's fault
-                if (e is NetworkBlockedException) break
+                if (stopOn(e)) break
                 update(p.name) {
                     val fails = it.consecutiveFailures + 1
                     it.copy(
@@ -89,7 +93,7 @@ class ProviderChain<T>(
                 attempts = attempts,
                 httpStatus = status,
                 error = lastError,
-                errorClass = classOf(lastError, status),
+                errorClass = classify(lastError, status),
             )
         )
         _status.value = ChainStatus(

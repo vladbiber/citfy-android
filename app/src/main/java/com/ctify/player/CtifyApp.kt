@@ -6,6 +6,10 @@ import com.ctify.player.data.db.CtifyDatabase
 import com.ctify.player.diag.Diagnostics
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.radio.RadioRepository
+import com.ctify.player.youtube.MusicWatcher
+import com.ctify.player.youtube.YtRuntime
+import com.ctify.player.youtube.YtSession
+import com.ctify.player.youtube.download.Downloads
 
 class CtifyApp : Application() {
     val database: CtifyDatabase by lazy { CtifyDatabase.open(this) }
@@ -16,5 +20,9 @@ class CtifyApp : Application() {
         super.onCreate()
         Diagnostics.init(this, database.diagnostics())
         NetworkGate.init(this)
+        YtSession.init(this)
+        YtRuntime.ensure(this)
+        Downloads.init(this, database.downloads())
+        MusicWatcher.init(this, database.library(), repository)
     }
 }
