@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +45,9 @@ import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.ui.wheel.StationListSource
+import com.ctify.player.ui.wheel.WheelScreen
+import com.ctify.player.ui.wheel.WheelSource
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -59,10 +63,14 @@ fun RadioScreen() {
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
     var settingsFor by remember { mutableStateOf<RadioTab?>(null) }
+    var wheelPage by remember { mutableStateOf<Int?>(null) }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             ScreenTitle("Radio", Modifier.weight(1f))
+            IconButton(onClick = { wheelPage = pager.currentPage }) {
+                Icon(Icons.Filled.Casino, contentDescription = "Station wheel", tint = TextSecondary)
+            }
             IconButton(onClick = { editing = true }) {
                 Icon(Icons.Filled.Edit, contentDescription = "Add or edit tabs", tint = TextSecondary)
             }
@@ -111,6 +119,41 @@ fun RadioScreen() {
             EditTabsScreen(tabs, onClose = { editing = false })
         }
     }
+
+    AnimatedVisibility(
+        visible = wheelPage != null,
+        enter = slideInVertically(initialOffsetY = { it }),
+        exit = slideOutVertically(targetOffsetY = { it }),
+    ) {
+        BackHandler { wheelPage = null }
+        // keep the last page while the exit animation runs
+        val page = remember { wheelPage ?: 1 }
+        val blocked = rememberRadioBlock()
+        val sources = remember(page) { stationWheelSources(radio, page, tabs) }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+        ) {
+            WheelScreen(onClose = { wheelPage = null }, sources = sources, title = "Station wheel", notice = blocked)
+        }
+    }
+}
+
+/** The open tab's stations first, then the favorites. Saved lists only, no network. */
+private fun stationWheelSources(radio: RadioRepository, page: Int, tabs: List<RadioTab>): List<WheelSource> {
+    val favorites = StationListSource("favorites", "Favorites", radio) { radio.favorites.first() }
+    val here = when (page) {
+        0 -> StationListSource("for_you", "For you", radio) {
+            radio.cached(RadioRepository.CLIAMP_KEY).orEmpty() + radio.cached(RadioRepository.FOR_YOU_KEY).orEmpty()
+        }
+        2 -> StationListSource("recent", "Recent", radio) { radio.recents.first() }
+        in FIXED_PAGES..Int.MAX_VALUE -> tabs.getOrNull(page - FIXED_PAGES)?.let { tab ->
+            StationListSource("tab_${tab.id}", tab.title, radio) { radio.cached("tab_${tab.id}").orEmpty() }
+        }
+        else -> null
+    }
+    return listOfNotNull(here, favorites)
 }
 
 private fun pageKey(page: Int, tabs: List<RadioTab>): Any =

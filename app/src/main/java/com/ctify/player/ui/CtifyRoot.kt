@@ -39,6 +39,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.radio.RadioScreen
+import com.ctify.player.ui.radio.radioRepo
+import com.ctify.player.ui.wheel.WheelScreen
+import com.ctify.player.ui.wheel.liveRadioSource
+import com.ctify.player.ui.wheel.pendingYouTubeSources
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextSecondary
@@ -56,6 +60,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     var tab by remember { mutableIntStateOf(0) }
     var showNowPlaying by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showWheel by remember { mutableStateOf(false) }
     var moreTrackId by remember { mutableStateOf<String?>(null) }
     var openedPlaylist by remember { mutableStateOf<String?>(null) }
     var librarySection by remember { mutableIntStateOf(0) }
@@ -122,6 +127,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     onOpenPlaylist = { name -> openedPlaylist = name; tab = 2 },
                     onOpenFavorites = { librarySection = 1; openedPlaylist = null; tab = 2 },
                     onOpenSettings = { showSettings = true },
+                    onSpinWheel = { showWheel = true },
                 )
                 1 -> SearchScreen(viewModel, onMore = onMore)
                 2 -> LibraryScreen(
@@ -137,6 +143,28 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                 3 -> RadioScreen()
                 else -> SoundScreen()
             }
+        }
+    }
+
+    AnimatedVisibility(
+        visible = showWheel,
+        enter = slideInVertically(initialOffsetY = { it }),
+        exit = slideOutVertically(targetOffsetY = { it }),
+    ) {
+        BackHandler { showWheel = false }
+        val radio = radioRepo()
+        val extra = remember(radio) { listOf(liveRadioSource(radio)) + pendingYouTubeSources() }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+        ) {
+            WheelScreen(
+                onClose = { showWheel = false },
+                library = viewModel.repository,
+                sources = extra,
+                onAddToPlaylist = { moreTrackId = it },
+            )
         }
     }
 

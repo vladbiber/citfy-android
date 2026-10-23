@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
@@ -49,6 +50,7 @@ fun HomeScreen(
     onOpenPlaylist: (String) -> Unit,
     onOpenFavorites: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onSpinWheel: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
@@ -87,6 +89,13 @@ fun HomeScreen(
                 "Favorites", if (favorites.isEmpty()) "Tap a heart to save songs" else "${favorites.size} songs",
                 Icons.Filled.Favorite, listOf(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer),
                 onClick = onOpenFavorites,
+            )
+        }
+        full {
+            HeroCard(
+                "Spin the wheel", if (tracks.isEmpty()) "Let chance pick a song" else "1 in ${"%,d".format(tracks.size)} songs",
+                Icons.Filled.Casino, listOf(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.primaryContainer),
+                onClick = onSpinWheel,
             )
         }
         full { HomeStationRows() }
