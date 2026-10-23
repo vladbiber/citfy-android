@@ -68,7 +68,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class Scope(val label: String) { ALL("All"), LIBRARY("Library"), YOUTUBE("YouTube"), RADIO("Radio") }
-private enum class Kind(val label: String) { SONGS("Songs"), ALBUMS("Albums") }
+private enum class Kind(val label: String) { SONGS("Songs"), ALBUMS("Albums"), VIDEOS("All videos") }
 
 /** One search box: your own songs first, then YouTube, then radio stations. */
 @Composable
@@ -112,7 +112,11 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
         delay(600)
         ytState = LOADING
         ytState = try {
-            if (kind == Kind.ALBUMS) ytAlbums = YouTubeSource.searchAlbums(q) else ytSongs = YouTubeSource.search(q)
+            when (kind) {
+                Kind.ALBUMS -> ytAlbums = YouTubeSource.searchAlbums(q)
+                Kind.VIDEOS -> ytSongs = YouTubeSource.searchVideos(q)
+                Kind.SONGS -> ytSongs = YouTubeSource.search(q)
+            }
             null
         } catch (e: CancellationException) {
             throw e
@@ -210,8 +214,8 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
             }
         }
 
-        if (wantYt && kind == Kind.SONGS) {
-            header("YouTube")
+        if (wantYt && kind != Kind.ALBUMS) {
+            header(if (kind == Kind.VIDEOS) "All YouTube videos" else "YouTube")
             status(ytState, yt.isEmpty() && q.length >= 2, "No songs found on YouTube")
             items(yt, key = { "y" + it.id }) { track ->
                 TrackRow(

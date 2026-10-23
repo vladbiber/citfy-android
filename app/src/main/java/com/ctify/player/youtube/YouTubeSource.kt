@@ -64,6 +64,12 @@ object YouTubeSource {
         info.relatedItems.mapNotNull(::toSong)
     }
 
+    /** Every YouTube video, not only music: for live sets, rare uploads and other niche audio. */
+    suspend fun searchVideos(query: String): List<YtSong> = lookup("Search videos", query) {
+        val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.VIDEOS), null))
+        info.relatedItems.mapNotNull(::toSong)
+    }
+
     suspend fun searchAlbums(query: String): List<YtPlaylistRef> = lookup("Search albums", query) {
         val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS), null))
         info.relatedItems.filterIsInstance<PlaylistInfoItem>().mapNotNull { p ->

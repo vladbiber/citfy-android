@@ -82,6 +82,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var albumsMode by remember { mutableStateOf(false) }
+    var videosMode by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var songs by remember { mutableStateOf<List<YtSong>>(emptyList()) }
@@ -114,7 +115,13 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
             }
             return
         }
-        run { if (albumsMode) albums = YouTubeSource.searchAlbums(q) else songs = YouTubeSource.search(q) }
+        run {
+            when {
+                albumsMode -> albums = YouTubeSource.searchAlbums(q)
+                videosMode -> songs = YouTubeSource.searchVideos(q)
+                else -> songs = YouTubeSource.search(q)
+            }
+        }
     }
 
     fun play(list: List<YtSong>, index: Int) {
@@ -179,8 +186,9 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                 keyboardActions = KeyboardActions(onSearch = { search() }),
             )
             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip("Songs", !albumsMode) { albumsMode = false; search() }
-                Chip("Albums", albumsMode) { albumsMode = true; search() }
+                Chip("Songs", !albumsMode && !videosMode) { albumsMode = false; videosMode = false; search() }
+                Chip("Albums", albumsMode) { albumsMode = true; videosMode = false; search() }
+                Chip("All videos", videosMode) { albumsMode = false; videosMode = true; search() }
             }
             Box(Modifier.fillMaxSize()) {
                 val shown = album
