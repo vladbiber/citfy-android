@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -76,7 +77,7 @@ import kotlinx.coroutines.launch
 
 /** Search YouTube Music for songs and albums; play them or save them. */
 @Composable
-fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloads: () -> Unit) {
+fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloads: () -> Unit, onAddToPlaylist: (String) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -137,6 +138,16 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
         shared?.let { query = it; YtIntake.pending.value = null; search() }
     }
 
+    fun save(list: List<YtSong>) {
+        viewModel.repository.saveStreamed(list.map { it.toTrack() })
+        Toast.makeText(ctx, if (list.size == 1) "Saved to your library" else "${list.size} songs saved to your library", Toast.LENGTH_SHORT).show()
+    }
+
+    fun saveAlbum(a: YtAlbum) {
+        viewModel.repository.saveAsPlaylist(a.title, a.songs.map { it.toTrack() }, a.thumbnail)
+        Toast.makeText(ctx, "Saved \"${a.title}\" as a playlist", Toast.LENGTH_SHORT).show()
+    }
+
     BackHandler(enabled = album != null) { album = null }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -176,7 +187,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                 when {
                     loading -> CircularProgressIndicator(Modifier.align(Alignment.Center), color = Accent)
                     error != null -> Hint(error!!)
-                    shown != null -> AlbumDetail(shown, ui.currentTrackId, ui.isPlaying, onPlay = { play(shown.songs, it) }, onDownload = { download(shown.songs, shown) }, onMenu = { menuFor = it })
+                    shown != null -> AlbumDetail(shown, ui.currentTrackId, ui.isPlaying, onPlay = { play(shown.songs, it) }, onDownload = { download(shown.songs, shown) }, onSave = { saveAlbum(shown) }, onMenu = { menuFor = it })
                     albumsMode -> if (albums.isEmpty()) Hint("Search for an album to play or save it whole.") else LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
                         items(albums, key = { it.id }) { a ->
                             CardRow(a.thumbnail, a.title, a.subtitle) { run { album = YouTubeSource.album(a.id) } }
@@ -189,11 +200,16 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                     )
                     else -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
                         item {
-                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                                FilledTonalButton(onClick = { save(songs) }) {
+                                    Icon(Icons.Filled.LibraryAdd, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (songs.size == 1) "Save" else "Save all")
+                                }
                                 FilledTonalButton(onClick = { download(songs) }) {
                                     Icon(Icons.Filled.Download, null, Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text(if (songs.size == 1) "Download" else "Download all ${songs.size}")
+                                    Text(if (songs.size == 1) "Download" else "Download all")
                                 }
                             }
                         }
@@ -216,6 +232,13 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
             title = { Text(s.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
             text = {
                 Column {
+                    MenuItem("Save to library (streams, no download)") { menuFor = null; save(listOf(s)) }
+                    MenuItem("Add to playlist") {
+                        menuFor = null
+                        val t = s.toTrack()
+                        viewModel.repository.remember(listOf(t))
+                        onAddToPlaylist(t.id)
+                    }
                     MenuItem("Download") { menuFor = null; download(listOf(s), album?.takeIf { a -> a.songs.any { it.videoId == s.videoId } }) }
                     MenuItem("Play song radio") {
                         menuFor = null
@@ -235,7 +258,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
 }
 
 @Composable
-private fun AlbumDetail(album: YtAlbum, currentId: String?, playing: Boolean, onPlay: (Int) -> Unit, onDownload: () -> Unit, onMenu: (YtSong) -> Unit) {
+private fun AlbumDetail(album: YtAlbum, currentId: String?, playing: Boolean, onPlay: (Int) -> Unit, onDownload: () -> Unit, onSave: () -> Unit, onMenu: (YtSong) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -247,7 +270,10 @@ private fun AlbumDetail(album: YtAlbum, currentId: String?, playing: Boolean, on
                     Text("${album.songs.size} songs", color = TextMuted, fontSize = 12.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                         FilledTonalButton(onClick = { onPlay(0) }, enabled = album.songs.isNotEmpty()) { Text("Play") }
-                        FilledTonalButton(onClick = onDownload, enabled = album.songs.isNotEmpty()) { Text("Download") }
+                        FilledTonalButton(onClick = onSave, enabled = album.songs.isNotEmpty()) { Text("Save") }
+                    }
+                    Row(Modifier.padding(top = 4.dp)) {
+                        TextButton(onClick = onDownload, enabled = album.songs.isNotEmpty()) { Text("Download") }
                     }
                 }
             }

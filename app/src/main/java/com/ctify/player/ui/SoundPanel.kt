@@ -248,11 +248,8 @@ fun FxSlider(
     }
 }
 
-private fun rangeLabel(t: Float) = when {
-    t < 0.01f -> "normal"
-    t > 0.99f -> "extreme"
-    else -> "+${(t * 100).roundToInt()}%"
-}
+private fun rangeLabel(t: Float) =
+    if (t < 0.01f) "normal" else "up to ${(FxRange.reverb(t).endInclusive * 100).roundToInt()}%"
 
 private fun spaceSummary(width: Float, pan: Float, muffle: Float): String {
     val parts = buildList {

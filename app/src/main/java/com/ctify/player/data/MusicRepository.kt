@@ -35,7 +35,7 @@ import java.io.File
  */
 class MusicRepository private constructor(private val appContext: Context, database: CtifyDatabase) {
 
-    /** pre-Room storage, read once by [migrateFromPrefs] */
+    /** pre-Room storage, read once by [LegacyPrefs] */
     private val prefs = appContext.getSharedPreferences("ctify_state", Context.MODE_PRIVATE)
     private val dao = database.library()
     /** one writer thread keeps database writes in the order the user made them */
@@ -70,7 +70,7 @@ class MusicRepository private constructor(private val appContext: Context, datab
     /** Loads demo assets, then user-imported files, then merges any device audio. */
     suspend fun load(includeDevice: Boolean) = withContext(Dispatchers.IO) { loadLock.withLock {
         if (!stateLoaded) {
-            migrateFromPrefs()
+            LegacyPrefs.migrate(prefs, dao)
             // in memory from here on; later loads must not overwrite queued writes
             _favorites.value = dao.favoriteIds().toSet()
             _playlists.value = dao.playlists().map { Playlist(it.name, dao.playlistTrackIds(it.id), it.coverUri) }
@@ -81,7 +81,7 @@ class MusicRepository private constructor(private val appContext: Context, datab
         val youtube = loadYoutubeTracks()
         val ytUris = youtube.mapTo(HashSet()) { it.uri }
         val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()).filter { it.uri !in ytUris } else emptyList()
-        val all = youtube + imported + demo + device
+        val all = youtube + loadStreamTracks() + imported + demo + device
         synchronized(byId) {
             val streamed = byId.values.filter { it.id.startsWith(STREAM_PREFIX) }
             byId.clear()
@@ -304,6 +304,52 @@ class MusicRepository private constructor(private val appContext: Context, datab
         Track(it.id, it.title, it.artist, it.album, it.uri, cover?.let(Uri::fromFile)?.toString(), it.durationMs, isDemo = false)
     }
 
+    private suspend fun loadStreamTracks(): List<Track> = dao.tracksBySource(TrackSource.STREAM).map {
+        Track(it.id, it.title, it.artist, it.album, it.uri, it.youtubeVideoId?.let(::ytCover), it.durationMs, isDemo = false)
+    }
+
+    /** Keeps streamed YouTube songs in the library so playlists and favorites survive a restart. */
+    fun saveStreamed(tracks: List<Track>) {
+        val fresh = tracks.filter { it.id.startsWith(STREAM_PREFIX) }.distinctBy { it.id }
+        if (fresh.isEmpty()) return
+        synchronized(byId) { fresh.forEach { byId[it.id] = it } }
+        val have = _tracks.value.mapTo(HashSet()) { it.id }
+        val added = fresh.filter { it.id !in have }
+        if (added.isNotEmpty()) _tracks.value = added + _tracks.value
+        val now = System.currentTimeMillis()
+        writer.launch {
+            dao.upsertTracks(fresh.mapIndexed { i, t ->
+                TrackEntity(
+                    id = t.id, source = TrackSource.STREAM, title = t.title, artist = t.artist, album = t.album,
+                    uri = t.uri, durationMs = t.durationMs, youtubeVideoId = t.id.removePrefix(STREAM_PREFIX), addedAt = now + i,
+                )
+            })
+        }
+    }
+
+    fun isSaved(id: String) = _tracks.value.any { it.id == id }
+
+    /** Saves a YouTube album or playlist as a Ctify playlist that streams. */
+    fun saveAsPlaylist(name: String, tracks: List<Track>, coverUrl: String?) {
+        saveStreamed(tracks)
+        createPlaylistWithTracks(name, tracks.map { it.id })
+        val trimmed = name.trim().ifEmpty { "Folder" }
+        if (coverUrl != null) {
+            _playlists.value = _playlists.value.map { if (it.name == trimmed && it.coverUri == null) it.copy(coverUri = coverUrl) else it }
+            savePlaylist(trimmed)
+        }
+    }
+
+    fun removeStreamed(id: String) {
+        _tracks.value = _tracks.value.filterNot { it.id == id }
+        writer.launch { dao.deleteTrack(id) }
+    }
+
+    private fun persistStreamed(ids: Collection<String>) {
+        val streamed = ids.filter { it.startsWith(STREAM_PREFIX) }.mapNotNull { trackById(it) }
+        if (streamed.isNotEmpty()) saveStreamed(streamed)
+    }
+
     private fun Track.toEntity() = TrackEntity(
         id = id,
         source = TrackSource.IMPORTED,
@@ -318,6 +364,7 @@ class MusicRepository private constructor(private val appContext: Context, datab
     // ---- favorites ----
 
     fun toggleFavorite(id: String) {
+        persistStreamed(listOf(id))
         val set = _favorites.value.toMutableSet()
         if (!set.add(id)) set.remove(id)
         _favorites.value = set
@@ -372,6 +419,7 @@ class MusicRepository private constructor(private val appContext: Context, datab
 
     /** Creates a playlist with the given tracks, or appends to it if one already exists by name. */
     fun createPlaylistWithTracks(name: String, trackIds: List<String>) {
+        persistStreamed(trackIds)
         val trimmed = name.trim().ifEmpty { "Folder" }
         val existing = _playlists.value.firstOrNull { it.name == trimmed }
         _playlists.value = if (existing == null) {
@@ -385,6 +433,7 @@ class MusicRepository private constructor(private val appContext: Context, datab
     }
 
     fun addToPlaylist(name: String, trackId: String) {
+        persistStreamed(listOf(trackId))
         _playlists.value = _playlists.value.map {
             if (it.name == name && trackId !in it.trackIds) it.copy(trackIds = it.trackIds + trackId) else it
         }
@@ -404,60 +453,6 @@ class MusicRepository private constructor(private val appContext: Context, datab
         val index = list.indexOfFirst { it.name == name }
         val pl = list.getOrNull(index) ?: return
         writer.launch { dao.savePlaylist(pl.name, pl.coverUri, index, pl.trackIds) }
-    }
-
-    // ---- one-time move from SharedPreferences ----
-
-    private suspend fun migrateFromPrefs() {
-        if (prefs.getBoolean(MIGRATED_KEY, false)) return
-        prefs.getString("imported", null)?.let { raw ->
-            val arr = JSONArray(raw)
-            val now = System.currentTimeMillis()
-            dao.upsertTracks((0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
-                TrackEntity(
-                    id = o.getString("id"),
-                    source = TrackSource.IMPORTED,
-                    title = o.getString("title"),
-                    artist = o.getString("artist"),
-                    album = o.getString("album"),
-                    uri = o.getString("uri"),
-                    durationMs = o.optLong("durationMs", 0L),
-                    addedAt = now + i,
-                )
-            })
-        }
-        prefs.getString("favorites", null)?.let { raw ->
-            val arr = JSONArray(raw)
-            val now = System.currentTimeMillis()
-            dao.upsertFavorites((0 until arr.length()).map { FavoriteEntity(arr.getString(it), now + it) })
-        }
-        prefs.getString("playlists", null)?.let { raw ->
-            val arr = JSONArray(raw)
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val ids = o.getJSONArray("tracks")
-                dao.savePlaylist(
-                    o.getString("name"),
-                    o.optString("cover").takeIf { it.isNotEmpty() },
-                    i,
-                    (0 until ids.length()).map { ids.getString(it) },
-                )
-            }
-        }
-        if (prefs.contains("pb_track") || prefs.contains("pb_volume")) {
-            dao.saveSnapshot(
-                PlaybackSnapshotEntity(
-                    trackId = prefs.getString("pb_track", null),
-                    positionMs = prefs.getLong("pb_pos", 0L),
-                    shuffle = prefs.getBoolean("pb_shuffle", false),
-                    repeatMode = prefs.getInt("pb_repeat", 0),
-                    volume = prefs.getFloat("pb_volume", 1f),
-                )
-            )
-        }
-        // the old keys stay as a fallback copy; only the flag is new
-        prefs.edit().putBoolean(MIGRATED_KEY, true).commit()
     }
 
     // ---- playback snapshot ----
@@ -482,8 +477,8 @@ class MusicRepository private constructor(private val appContext: Context, datab
     }
 
     companion object {
-        private const val MIGRATED_KEY = "migrated_to_room_v1"
         private const val STREAM_PREFIX = "yts_"
+        private fun ytCover(videoId: String) = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
         @Volatile private var instance: MusicRepository? = null
         fun get(context: Context, database: CtifyDatabase): MusicRepository =
             instance ?: synchronized(this) {

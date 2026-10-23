@@ -10,16 +10,16 @@ import kotlin.math.sqrt
 
 /** Effect settings. ExoPlayer's Sonic stage does the speed; [rate] only drives the vinyl platter. */
 class Fx {
-    @Volatile var speed = 1.0f          // 0.25 .. 2, 1.0 = original tempo
-    @Volatile var reverb = 0.0f         // 0 .. 2 wet amount, above 1 also a longer tail
+    @Volatile var speed = 1.0f          // 0.1 .. 4, 1.0 = original tempo
+    @Volatile var reverb = 0.0f         // 0 .. 10 wet amount, above 1 a longer tail and less dry
     @Volatile var retune = 1.0f         // tuning ratio, multiplies speed
-    @Volatile var bassGainDb = 0.0f     // 0 .. 24 dB low shelf
+    @Volatile var bassGainDb = 0.0f     // 0 .. 36 dB low shelf
     @Volatile var bassFreq = 120.0f     // 40 .. 320 Hz shelf corner
-    @Volatile var width = 1.0f          // 0 mono .. 1 original .. 4 extra wide
+    @Volatile var width = 1.0f          // 0 mono .. 1 original .. 10 extra wide
     @Volatile var pan8d = 0.0f          // 0 .. 1 depth of the circling "8D" pan
-    @Volatile var muffle = 0.0f         // 0 .. 2 "playing in another room" lowpass
+    @Volatile var muffle = 0.0f         // 0 .. 10 "playing in another room" lowpass
     @Volatile var rain = RainPreset.OFF
-    @Volatile var rainLevel = 1.0f       // 0 .. 3 on top of the preset
+    @Volatile var rainLevel = 1.0f       // 0 .. 10 on top of the preset
     @Volatile var vinyl = false         // record emulation on/off
     @Volatile var vinylCrackle = 0.45f  // 0 .. 1 ticks, pops, scratches
     @Volatile var vinylWarmth = 0.6f    // 0 .. 1 rolloff, saturation, mono bass
@@ -28,8 +28,11 @@ class Fx {
     /** device, genre and EQ layers, colour, ReplayGain and balance */
     val hifi = HifiFx()
 
-    val rate: Float get() = (speed * retune).coerceIn(0.25f, 2.0f)
+    val rate: Float get() = (speed * retune).coerceIn(0.1f, 4.0f)
 }
+
+/** 0 at 1, 1 at 10 on a log scale: how far a setting reaches past 100%. */
+internal fun extra(v: Float): Float = if (v <= 1f) 0f else (kotlin.math.ln(v) / kotlin.math.ln(10f)).coerceAtMost(1f)
 
 private class Comb(len: Int) {
     val buf = FloatArray(len)
@@ -50,7 +53,7 @@ private class Verb(offset: Int) {
 
     fun set(amount: Float) {
         // past 1 the tail grows; stays below 1 so the combs never run away
-        val fb = 0.70f + 0.20f * amount.coerceAtMost(1f) + 0.08f * (amount - 1f).coerceIn(0f, 1f)
+        val fb = 0.70f + 0.20f * amount.coerceAtMost(1f) + 0.085f * extra(amount)
         for (c in comb) c.feedback = fb
     }
 
@@ -165,7 +168,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
 
     /** Processes [frames] interleaved stereo samples of [buf] in place. */
     fun process(buf: FloatArray, frames: Int) {
-        val targetWet = fx.reverb.coerceIn(0f, 2f)
+        val targetWet = fx.reverb.coerceIn(0f, 10f)
         shelfL.update(fx.bassGainDb, fx.bassFreq, sampleRate)
         shelfR.update(fx.bassGainDb, fx.bassFreq, sampleRate)
         val boosting = fx.bassGainDb > 0.01f
@@ -174,15 +177,16 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
         val warmth = fx.vinylWarmth.coerceIn(0f, 1f)
         val wow = fx.vinylWow.coerceIn(0f, 1f)
         val surface = fx.vinylSurface.coerceIn(0f, 1f)
-        val targetWidth = fx.width.coerceIn(0f, 4f)
+        val targetWidth = fx.width.coerceIn(0f, 10f)
         val targetPan = fx.pan8d.coerceIn(0f, 1f)
-        val muffle = fx.muffle.coerceIn(0f, 2f)
+        val muffle = fx.muffle.coerceIn(0f, 10f)
         val rainWant = fx.rain
-        val rainLevel = fx.rainLevel.coerceIn(0f, 3f)
+        val rainLevel = fx.rainLevel.coerceIn(0f, 10f)
         val rate = fx.rate
         val targetPre = preampTarget()
         if (muffle != appliedMuffle) {
-            val cut = (18000.0 * Math.pow(350.0 / 18000.0, muffle.toDouble())).coerceAtLeast(90.0).toFloat()
+            val cut = if (muffle <= 1f) (18000.0 * Math.pow(350.0 / 18000.0, muffle.toDouble())).toFloat()
+                else (350.0 * Math.pow(40.0 / 350.0, extra(muffle).toDouble())).toFloat()
             roomL.lowpass(cut, 0.75f, sampleRate); roomR.lowpass(cut, 0.75f, sampleRate)
             appliedMuffle = muffle
         }
@@ -200,7 +204,8 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
                 var s = dry
                 if (wet > 0.0005f) {
                     val w = (if (ch == 0) verbL else verbR).run(dry * 0.015f)
-                    s = dry * (1f - wet.coerceAtMost(1.5f) * 0.35f) + w * wet
+                    val x = extra(wet)
+                    s = dry * (1f - wet.coerceAtMost(1f) * 0.35f - 0.65f * x) + w * (wet.coerceAtMost(1f) + 1.5f * x)
                 }
                 if (boosting) s = (if (ch == 0) shelfL else shelfR).run(s)
                 frame[ch] = s
@@ -231,7 +236,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
                 frame[1] = frame[1] + (mono * gr - frame[1]) * smoothPan
             }
             if (muffle > 0.001f) {
-                val g = 1f + 0.4f * muffle.coerceAtMost(1.5f)
+                val g = 1f + 0.4f * muffle.coerceAtMost(1f) + 0.6f * extra(muffle)
                 frame[0] = roomL.run(frame[0]) * g
                 frame[1] = roomR.run(frame[1]) * g
             }

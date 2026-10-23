@@ -12,8 +12,8 @@ android {
         applicationId = "com.ctify.player"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "2.1.0-test7"
+        versionCode = 13
+        versionName = "2.1.0-test8"
         vectorDrawables { useSupportLibrary = true }
     }
 

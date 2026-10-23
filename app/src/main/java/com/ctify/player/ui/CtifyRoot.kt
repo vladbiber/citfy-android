@@ -185,7 +185,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
         exit = slideOutVertically(targetOffsetY = { it }),
     ) {
         BackHandler { showYouTube = false }
-        YouTubeScreen(viewModel, onClose = { showYouTube = false }, onOpenDownloads = { showDownloads = true })
+        YouTubeScreen(viewModel, onClose = { showYouTube = false }, onOpenDownloads = { showDownloads = true }, onAddToPlaylist = { moreTrackId = it })
     }
 
     if (showDownloads) DownloadsSheet(onDismiss = { showDownloads = false })

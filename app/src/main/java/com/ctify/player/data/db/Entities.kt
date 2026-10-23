@@ -5,7 +5,8 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class TrackSource { LOCAL, DEMO, IMPORTED, YOUTUBE }
+/** STREAM = a YouTube song saved to the library without downloading; it plays online. */
+enum class TrackSource { LOCAL, DEMO, IMPORTED, YOUTUBE, STREAM }
 
 /** Stored tracks: imported and (later) downloaded. Demo and device tracks are rebuilt on load. */
 @Entity(tableName = "tracks")
