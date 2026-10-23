@@ -1,5 +1,6 @@
 package com.ctify.player.ui.youtube
 
+import android.content.ClipboardManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -37,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +66,8 @@ import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.youtube.YouTubeSource
 import com.ctify.player.youtube.YtAlbum
+import com.ctify.player.youtube.YtIntake
+import com.ctify.player.youtube.YtLink
 import com.ctify.player.youtube.YtPlaylistRef
 import com.ctify.player.youtube.YtSong
 import com.ctify.player.youtube.download.DownloadState
@@ -99,6 +104,15 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
         val q = query.trim()
         if (q.isEmpty()) return
         album = null
+        if (YouTubeSource.isLink(q)) {
+            run {
+                when (val link = YouTubeSource.fromLink(q)) {
+                    is YtLink.Album -> album = link.album
+                    is YtLink.Song -> { albumsMode = false; songs = listOf(link.song) }
+                }
+            }
+            return
+        }
         run { if (albumsMode) albums = YouTubeSource.searchAlbums(q) else songs = YouTubeSource.search(q) }
     }
 
@@ -118,6 +132,11 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
         Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
     }
 
+    val shared by YtIntake.pending.collectAsState()
+    LaunchedEffect(shared) {
+        shared?.let { query = it; YtIntake.pending.value = null; search() }
+    }
+
     BackHandler(enabled = album != null) { album = null }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -126,7 +145,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                 IconButton(onClick = { if (album != null) album = null else onClose() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TextPrimary)
                 }
-                Text("YouTube", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Add from YouTube", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 IconButton(onClick = onOpenDownloads) {
                     BadgedBox(badge = { if (pending > 0) Badge { Text("$pending") } }) {
                         Icon(Icons.Filled.Download, "Downloads", tint = TextPrimary)
@@ -137,8 +156,13 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                placeholder = { Text("Songs, artists, albums") },
+                placeholder = { Text("Search, or paste a YouTube link") },
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
+                trailingIcon = {
+                    IconButton(onClick = {
+                        (ctx.getSystemService(ClipboardManager::class.java)?.primaryClip?.getItemAt(0)?.text?.toString())?.takeIf { it.isNotBlank() }?.let { query = it.trim(); search() }
+                    }) { Icon(Icons.Filled.ContentPaste, "Paste link") }
+                },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { search() }),
@@ -158,8 +182,21 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                             CardRow(a.thumbnail, a.title, a.subtitle) { run { album = YouTubeSource.album(a.id) } }
                         }
                     }
-                    songs.isEmpty() -> Hint("Search YouTube Music. Songs play right away; tap the menu to save one.")
+                    songs.isEmpty() -> Hint(
+                        "Search YouTube Music, or paste a link to a song, album or playlist. " +
+                            "You can also share a link from the YouTube app to Ctify.\n\n" +
+                            "Tap a song to listen, or Download to keep it in your library."
+                    )
                     else -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
+                        item {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {
+                                FilledTonalButton(onClick = { download(songs) }) {
+                                    Icon(Icons.Filled.Download, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (songs.size == 1) "Download" else "Download all ${songs.size}")
+                                }
+                            }
+                        }
                         items(songs, key = { it.videoId }) { s ->
                             val t = s.toTrack()
                             TrackRow(

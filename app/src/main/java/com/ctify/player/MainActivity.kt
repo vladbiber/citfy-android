@@ -1,6 +1,7 @@
 package com.ctify.player
 
 import android.Manifest
+import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +21,7 @@ import com.ctify.player.ui.CtifyRoot
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.CtifyTheme
 import com.ctify.player.ui.theme.isAppInDarkTheme
+import com.ctify.player.youtube.YtIntake
 
 class MainActivity : ComponentActivity() {
 
@@ -36,6 +38,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        YtIntake.offer(intent?.getStringExtra(Intent.EXTRA_TEXT))
         setContent {
             CtifyTheme {
                 val dark = isAppInDarkTheme()
@@ -49,5 +52,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        YtIntake.offer(intent.getStringExtra(Intent.EXTRA_TEXT))
     }
 }

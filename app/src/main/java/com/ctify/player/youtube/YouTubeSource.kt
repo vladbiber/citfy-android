@@ -14,6 +14,7 @@ import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
 import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.search.filter.FilterItem
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
+import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
 /** A song on YouTube Music. */
@@ -46,6 +47,12 @@ data class YtSong(
     }
 }
 
+/** What a pasted or shared YouTube link points to. */
+sealed interface YtLink {
+    data class Song(val song: YtSong) : YtLink
+    data class Album(val album: YtAlbum) : YtLink
+}
+
 data class YtAlbum(val id: String, val title: String, val artist: String, val thumbnail: String?, val songs: List<YtSong>)
 
 /** Search, stream and browse YouTube Music. Every call goes through NetworkGate. */
@@ -63,6 +70,29 @@ object YouTubeSource {
             val id = listId(p.url) ?: return@mapNotNull null
             YtPlaylistRef(id, p.name, p.uploaderName.orEmpty(), p.thumbnailUrl)
         }
+    }
+
+    /** True for youtube.com, music.youtube.com and youtu.be links. */
+    fun isLink(text: String) = Regex("(?i)(https?://)?([a-z]+\\.)?(youtube\\.com|youtu\\.be)/").containsMatchIn(text)
+
+    /** Opens a song, album or playlist link; a link with both a video and a list opens the list. */
+    suspend fun fromLink(text: String): YtLink {
+        val url = Regex("\\S*(youtube\\.com|youtu\\.be)/\\S*").find(text)?.value ?: text.trim()
+        listId(url)?.takeUnless { it.startsWith("RD") }?.let { return YtLink.Album(album(it)) }
+        val id = videoId(url) ?: throw YtParseException("This link isn't a YouTube song, album or playlist")
+        return YtLink.Song(song(id))
+    }
+
+    /** Title, artist and length of one video. */
+    suspend fun song(videoId: String): YtSong = lookup("Open song", videoId) {
+        val info = StreamInfo.getInfo(ServiceList.YouTube, "https://www.youtube.com/watch?v=$videoId")
+        YtSong(
+            videoId = videoId,
+            title = info.name,
+            artist = info.uploaderName?.removeSuffix(" - Topic")?.takeIf { it.isNotBlank() } ?: "Unknown artist",
+            durationMs = info.duration.coerceAtLeast(0L) * 1000L,
+            thumbnail = info.thumbnailUrl,
+        )
     }
 
     /** Resolves an audio-only stream, M4A preferred; see [StreamResolver]. */

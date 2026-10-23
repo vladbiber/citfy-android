@@ -26,6 +26,8 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +50,7 @@ import com.ctify.player.ui.youtube.YouTubeScreen
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.youtube.YtIntake
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
@@ -64,6 +67,8 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     var showSettings by remember { mutableStateOf(false) }
     var showWheel by remember { mutableStateOf(false) }
     var showYouTube by remember { mutableStateOf(false) }
+    val sharedLink by YtIntake.pending.collectAsState()
+    LaunchedEffect(sharedLink) { if (sharedLink != null) showYouTube = true }
     var showDownloads by remember { mutableStateOf(false) }
     var moreTrackId by remember { mutableStateOf<String?>(null) }
     var openedPlaylist by remember { mutableStateOf<String?>(null) }

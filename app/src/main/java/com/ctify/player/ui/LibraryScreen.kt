@@ -186,7 +186,7 @@ fun LibraryScreen(
                             onClick = { showAddMenu = false; onImport() },
                         )
                         DropdownMenuItem(
-                            text = { Text("Find on YouTube", color = TextPrimary) },
+                            text = { Text("Add from YouTube", color = TextPrimary) },
                             leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
                             onClick = { showAddMenu = false; onYouTube() },
                         )
