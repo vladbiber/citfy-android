@@ -60,15 +60,13 @@ internal fun HeardPage() {
     val byDay = remember(songs) { songs.groupBy { dayLabel(it.startedAt) } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-        if (songs.isEmpty()) {
-            item { EmptyHint("Songs you hear on the radio show up here, so you can find them later.") }
-        } else {
-            item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { confirmClear = true }) { Text("Clear history") }
-                }
+        item {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { GridHeader("Heard on the radio") }
+                if (songs.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("Clear history") }
             }
         }
+        if (songs.isEmpty()) item { EmptyHint("Songs you hear on the radio show up here, so you can find them later.") }
         byDay.forEach { (day, list) ->
             item(key = "h_$day") { GridHeader(day) }
             items(list, key = { it.id }) { song -> HeardRow(song) }
@@ -87,7 +85,7 @@ internal fun HeardPage() {
 }
 
 @Composable
-private fun HeardRow(song: HeardSong) {
+internal fun HeardRow(song: HeardSong) {
     val radio = radioRepo()
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }

@@ -47,6 +47,7 @@ import com.ctify.player.net.NetworkGate
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.radio.Station
 import com.ctify.player.radio.StationQuery
+import com.ctify.player.ui.radio.HeardRow
 import com.ctify.player.ui.radio.radioRepo
 import com.ctify.player.ui.radio.rememberRadioUi
 import com.ctify.player.ui.radio.stationRows
@@ -67,19 +68,53 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private enum class Scope(val label: String) { ALL("All"), LIBRARY("Library"), YOUTUBE("YouTube"), RADIO("Radio") }
+internal enum class Scope(val label: String) { ALL("All"), LIBRARY("Library"), HEARD("Heard"), YOUTUBE("YouTube"), RADIO("Radio") }
 private enum class Kind(val label: String) { SONGS("Songs"), ALBUMS("Albums"), VIDEOS("All videos") }
 
-/** One search box: your own songs first, then YouTube, then radio stations. */
+/** Home searches everything; Discover swaps your library for songs heard on the radio. */
+internal val HOME_SCOPES = listOf(Scope.ALL, Scope.LIBRARY, Scope.YOUTUBE, Scope.RADIO)
+internal val DISCOVER_SCOPES = listOf(Scope.ALL, Scope.HEARD, Scope.YOUTUBE, Scope.RADIO)
+
+internal fun Track.matches(q: String) = title.contains(q, true) || artist.contains(q, true) || album.contains(q, true)
+
+/** The rounded search box every tab uses. */
 @Composable
-fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
+internal fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQuery,
+        modifier = modifier.fillMaxWidth(),
+        placeholder = { Text(placeholder, color = TextMuted) },
+        leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
+        trailingIcon = {
+            if (query.isNotEmpty()) IconButton(onClick = { onQuery("") }) {
+                Icon(Icons.Filled.Close, "Clear search", tint = TextSecondary)
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(28.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = SurfaceElevated,
+            unfocusedContainerColor = SurfaceElevated,
+            focusedBorderColor = Accent,
+            unfocusedBorderColor = Color.Transparent,
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
+            cursorColor = Accent,
+        ),
+    )
+}
+
+/** Results for [query] from the [scopes] sources, with chips to narrow them: your songs or heard ones first, then YouTube, then radio. */
+@Composable
+internal fun SearchResults(viewModel: PlayerViewModel, query: String, onMore: (String) -> Unit, scopes: List<Scope>) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val radioUi = rememberRadioUi()
     val dlStates = rememberDownloadStates()
     val radio = radioRepo()
-    var query by rememberSaveable { mutableStateOf("") }
+    val heardAll by radio.heard.collectAsStateWithLifecycle(initialValue = emptyList())
     var scope by rememberSaveable { mutableStateOf(Scope.ALL) }
     var kind by rememberSaveable { mutableStateOf(Kind.SONGS) }
     var ytSongs by remember { mutableStateOf<List<YtSong>>(emptyList()) }
@@ -93,7 +128,7 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
     val q = query.trim()
     val local = remember(q, tracks) {
         if (q.isEmpty()) emptyList()
-        else tracks.filter { it.title.contains(q, true) || it.artist.contains(q, true) || it.album.contains(q, true) }
+        else tracks.filter { it.matches(q) }
             // on the phone first, saved streams after
             .sortedBy { if (it.uri.startsWith("ytstream")) 1 else 0 }
     }
@@ -102,9 +137,13 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
         else tracks.filter { it.album.contains(q, true) || it.artist.contains(q, true) }
             .groupBy { it.album }.filterKeys { it.isNotBlank() && it != "YouTube" }.values.toList()
     }
+    val heard = remember(q, heardAll) {
+        if (q.isEmpty()) emptyList() else heardAll.filter { it.title.contains(q, true) || it.artist?.contains(q, true) == true }
+    }
+    val wantLibrary = Scope.LIBRARY in scopes && (scope == Scope.ALL || scope == Scope.LIBRARY)
+    val wantHeard = Scope.HEARD in scopes && kind == Kind.SONGS && (scope == Scope.ALL || scope == Scope.HEARD)
     val wantYt = scope == Scope.ALL || scope == Scope.YOUTUBE
     val wantRadio = (scope == Scope.ALL && kind == Kind.SONGS) || scope == Scope.RADIO
-
     LaunchedEffect(q, wantYt, kind) {
         ytSongs = emptyList(); ytAlbums = emptyList(); ytState = null
         if (q.length < 2 || !wantYt) return@LaunchedEffect
@@ -135,49 +174,15 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
 
     LazyColumn(contentPadding = contentPadding()) {
         item {
-            ScreenTitle("Search", Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp))
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                placeholder = { Text("Songs, artists, albums, stations", color = TextMuted) },
-                leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) IconButton(onClick = { query = "" }) {
-                        Icon(Icons.Filled.Close, "Clear search", tint = TextSecondary)
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(28.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = SurfaceElevated,
-                    unfocusedContainerColor = SurfaceElevated,
-                    focusedBorderColor = Accent,
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    cursorColor = Accent,
-                ),
-            )
             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Scope.entries.forEach { s -> FilterChip(selected = scope == s, onClick = { scope = s }, label = { Text(s.label) }) }
+                scopes.forEach { s -> FilterChip(selected = scope == s, onClick = { scope = s }, label = { Text(s.label) }) }
             }
             if (scope != Scope.RADIO) Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Kind.entries.forEach { k -> FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(k.label) }) }
             }
         }
 
-        if (q.isEmpty()) {
-            item {
-                Text(
-                    "Search your songs, YouTube and radio at once. Use the chips to search only one of them.",
-                    color = TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(16.dp),
-                )
-            }
-            return@LazyColumn
-        }
-
-        if ((scope == Scope.ALL || scope == Scope.LIBRARY) && kind == Kind.ALBUMS) {
+        if (wantLibrary && kind == Kind.ALBUMS) {
             header("Your albums")
             if (localAlbums.isEmpty()) note("No albums in your library match \"$q\"")
             items(localAlbums, key = { "la" + it.first().album }) { list ->
@@ -187,7 +192,7 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
             }
         }
 
-        if ((scope == Scope.ALL || scope == Scope.LIBRARY) && kind == Kind.SONGS) {
+        if (wantLibrary && kind == Kind.SONGS) {
             header("Your library")
             if (local.isEmpty()) note("Nothing in your library matches \"$q\"")
             items(local, key = { "l" + it.id }) { track ->
@@ -203,6 +208,12 @@ fun SearchScreen(viewModel: PlayerViewModel, onMore: (String) -> Unit) {
                     statusIcon = ytStatus(track, dlStates)?.second,
                 )
             }
+        }
+
+        if (wantHeard) {
+            header("Heard on the radio")
+            if (heard.isEmpty()) note("No heard songs match \"$q\"")
+            items(heard, key = { "hs" + it.id }) { HeardRow(it) }
         }
 
         if (wantYt && kind == Kind.ALBUMS) {

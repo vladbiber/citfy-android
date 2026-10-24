@@ -51,14 +51,14 @@ import com.ctify.player.ui.wheel.WheelSource
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private const val FIXED_PAGES = 4
+private const val FIXED_PAGES = 3
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RadioScreen() {
     val radio = radioRepo()
     val tabs by radio.tabs.collectAsStateWithLifecycle(initialValue = emptyList())
-    val titles = listOf("For you", "Favorites", "Heard", "Browse") + tabs.map { it.title }
+    val titles = listOf("For you", "Favorites", "Browse") + tabs.map { it.title }
     val pager = rememberPagerState { titles.size }
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
@@ -94,8 +94,7 @@ fun RadioScreen() {
             when (page) {
                 0 -> ForYouPage()
                 1 -> FavoritesPage()
-                2 -> HeardPage()
-                3 -> BrowsePage()
+                2 -> BrowsePage()
                 else -> tabs.getOrNull(page - FIXED_PAGES)?.let { tab -> PinnedTabPage(tab, onSettings = { settingsFor = tab }) }
             }
         }
@@ -147,7 +146,6 @@ private fun stationWheelSources(radio: RadioRepository, page: Int, tabs: List<Ra
         0 -> StationListSource("for_you", "For you", radio) {
             radio.cached(RadioRepository.CLIAMP_KEY).orEmpty() + radio.cached(RadioRepository.FOR_YOU_KEY).orEmpty()
         }
-        2 -> StationListSource("recent", "Recent", radio) { radio.recents.first() }
         in FIXED_PAGES..Int.MAX_VALUE -> tabs.getOrNull(page - FIXED_PAGES)?.let { tab ->
             StationListSource("tab_${tab.id}", tab.title, radio) { radio.cached("tab_${tab.id}").orEmpty() }
         }

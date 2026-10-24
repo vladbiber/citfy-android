@@ -20,14 +20,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,77 +50,80 @@ fun HomeScreen(
     onMore: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onOpenFavorites: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
     onSpinWheel: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val playlists by viewModel.repository.playlists.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(150.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        full {
-            Row(Modifier.padding(start = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                CtifyLogo(size = 40.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
+    Column(Modifier.fillMaxSize()) {
+        // the box stays put above both views, so typing never loses focus when results replace Home
+        SearchField(query, { query = it }, "Songs, artists, albums, stations", Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
+        if (query.isNotBlank()) {
+            SearchResults(viewModel, query, onMore, HOME_SCOPES)
+            return@Column
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(150.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            full {
+                Row(Modifier.padding(start = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CtifyLogo(size = 40.dp)
+                    Spacer(Modifier.width(12.dp))
                     ScreenTitle("ctify")
                 }
-                IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
             }
-        }
-        full {
-            HeroCard(
-                "Shuffle everything", "${tracks.size} songs on this phone", Icons.Filled.Shuffle,
-                listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer),
-            ) {
-                if (tracks.isNotEmpty()) { viewModel.playQueue(tracks.shuffled(), 0); onOpenNowPlaying() }
-            }
-        }
-        full {
-            HeroCard(
-                "Favorites", if (favorites.isEmpty()) "Tap a heart to save songs" else "${favorites.size} songs",
-                Icons.Filled.Favorite, listOf(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer),
-                onClick = onOpenFavorites,
-            )
-        }
-        full {
-            HeroCard(
-                "Spin the wheel", if (tracks.isEmpty()) "Let chance pick a song" else "1 in ${"%,d".format(tracks.size)} songs",
-                Icons.Filled.Casino, listOf(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.primaryContainer),
-                onClick = onSpinWheel,
-            )
-        }
-        full { HomeStationRows() }
-        if (playlists.isNotEmpty()) {
-            full { GridHeader("Playlists") }
-            items(playlists, key = { it.name }) { pl ->
-                PlaylistCard(pl, pl.trackIds.firstNotNullOfOrNull { viewModel.repository.trackById(it) }) {
-                    onOpenPlaylist(pl.name)
-                }
-            }
-        }
-        full { GridHeader("All songs") }
-        if (tracks.isEmpty()) full { EmptyHint("Import a folder from the Library tab to get started.") }
-        tracks.forEach { track ->
             full {
-                TrackRow(
-                    track = track,
-                    isCurrent = track.id == ui.currentTrackId,
-                    isPlaying = ui.isPlaying && track.id == ui.currentTrackId,
-                    isFavorite = track.id in favorites,
-                    onClick = { viewModel.playQueue(tracks, tracks.indexOf(track)) },
-                    onToggleFavorite = { viewModel.toggleFavorite(track.id) },
-                    onMore = { onMore(track.id) },
+                HeroCard(
+                    "Shuffle everything", "${tracks.size} songs on this phone", Icons.Filled.Shuffle,
+                    listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer),
+                ) {
+                    if (tracks.isNotEmpty()) { viewModel.playQueue(tracks.shuffled(), 0); onOpenNowPlaying() }
+                }
+            }
+            full {
+                HeroCard(
+                    "Favorites", if (favorites.isEmpty()) "Tap a heart to save songs" else "${favorites.size} songs",
+                    Icons.Filled.Favorite, listOf(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer),
+                    onClick = onOpenFavorites,
                 )
+            }
+            full {
+                HeroCard(
+                    "Spin the wheel", if (tracks.isEmpty()) "Let chance pick a song" else "1 in ${"%,d".format(tracks.size)} songs",
+                    Icons.Filled.Casino, listOf(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.primaryContainer),
+                    onClick = onSpinWheel,
+                )
+            }
+            full { HomeStationRows() }
+            if (playlists.isNotEmpty()) {
+                full { GridHeader("Playlists") }
+                items(playlists, key = { it.name }) { pl ->
+                    PlaylistCard(pl, pl.trackIds.firstNotNullOfOrNull { viewModel.repository.trackById(it) }) {
+                        onOpenPlaylist(pl.name)
+                    }
+                }
+            }
+            full { GridHeader("All songs") }
+            if (tracks.isEmpty()) full { EmptyHint("Import a folder from the Library tab to get started.") }
+            tracks.forEach { track ->
+                full {
+                    TrackRow(
+                        track = track,
+                        isCurrent = track.id == ui.currentTrackId,
+                        isPlaying = ui.isPlaying && track.id == ui.currentTrackId,
+                        isFavorite = track.id in favorites,
+                        onClick = { viewModel.playQueue(tracks, tracks.indexOf(track)) },
+                        onToggleFavorite = { viewModel.toggleFavorite(track.id) },
+                        onMore = { onMore(track.id) },
+                    )
+                }
             }
         }
     }

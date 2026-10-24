@@ -143,19 +143,67 @@ internal fun EmptyHint(text: String) {
     }
 }
 
+/** What the + menu offers; Library and Discover share it. */
+class AddActions(
+    val importFolder: () -> Unit,
+    val importFile: () -> Unit,
+    val youTube: () -> Unit,
+    val spotify: () -> Unit,
+    val downloads: () -> Unit,
+)
+
+/** The + button and its menu; [onNewPlaylist] adds the playlist entry. */
+@Composable
+internal fun AddMenu(add: AddActions, onNewPlaylist: (() -> Unit)? = null) {
+    var showAddMenu by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { showAddMenu = true }) {
+            Icon(Icons.Filled.Add, if (onNewPlaylist != null) "Add music or a playlist" else "Add music", tint = TextPrimary)
+        }
+        DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }, containerColor = SurfaceElevated) {
+            DropdownMenuItem(
+                text = { Text("Import a folder", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.FolderOpen, null, tint = Accent) },
+                onClick = { showAddMenu = false; add.importFolder() },
+            )
+            DropdownMenuItem(
+                text = { Text("Add a song", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.LibraryAdd, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; add.importFile() },
+            )
+            DropdownMenuItem(
+                text = { Text("Add from YouTube", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; add.youTube() },
+            )
+            DropdownMenuItem(
+                text = { Text("Import from Spotify", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.QueueMusic, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; add.spotify() },
+            )
+            DropdownMenuItem(
+                text = { Text("Downloads", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.Download, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; add.downloads() },
+            )
+            if (onNewPlaylist != null) DropdownMenuItem(
+                text = { Text("New playlist", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; onNewPlaylist() },
+            )
+        }
+    }
+}
+
 @Composable
 fun LibraryScreen(
     viewModel: PlayerViewModel,
     onMore: (String) -> Unit,
-    onImport: () -> Unit,
-    onImportFolder: () -> Unit,
+    add: AddActions,
     openedPlaylist: String?,
     onOpenPlaylist: (String?) -> Unit,
     section: Int = 0,
     onSection: (Int) -> Unit = {},
-    onYouTube: () -> Unit = {},
-    onSpotify: () -> Unit = {},
-    onDownloads: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
@@ -163,7 +211,6 @@ fun LibraryScreen(
     val ui by viewModel.ui.collectAsStateWithLifecycle()
 
     var showCreate by remember { mutableStateOf(false) }
-    var showAddMenu by remember { mutableStateOf(false) }
 
     val opened = openedPlaylist?.takeIf { name -> playlists.any { it.name == name } }
     if (opened != null) {
@@ -181,43 +228,7 @@ fun LibraryScreen(
         full {
             Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 ScreenTitle("Library", Modifier.weight(1f))
-                Box {
-                    IconButton(onClick = { showAddMenu = true }) {
-                        Icon(Icons.Filled.Add, "Add music or a playlist", tint = TextPrimary)
-                    }
-                    DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }, containerColor = SurfaceElevated) {
-                        DropdownMenuItem(
-                            text = { Text("Import a folder", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.FolderOpen, null, tint = Accent) },
-                            onClick = { showAddMenu = false; onImportFolder() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add a song", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.LibraryAdd, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; onImport() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add from YouTube", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; onYouTube() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Import from Spotify", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.QueueMusic, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; onSpotify() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Downloads", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.Download, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; onDownloads() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("New playlist", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; showCreate = true },
-                        )
-                    }
-                }
+                AddMenu(add, onNewPlaylist = { showCreate = true })
             }
         }
         full {
