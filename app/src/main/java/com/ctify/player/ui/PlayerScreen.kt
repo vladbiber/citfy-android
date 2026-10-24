@@ -109,6 +109,8 @@ import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.radio.Station
+import com.ctify.player.ui.visualizer.Visualizer
+import com.ctify.player.ui.visualizer.VisualizerView
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.net.Traffic
@@ -189,6 +191,8 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     var skin by remember { mutableStateOf(Skin.load(ctx)) }
+    // a visualizer, when chosen, takes the stage instead of the skin
+    var visualizer by remember { mutableStateOf(Visualizer.load(ctx)) }
     var sheet by remember { mutableStateOf(false) }
     var sleep by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
@@ -291,17 +295,18 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                         val stageWidth by animateDpAsState(if (lyricsOn) stageMax * 0.42f else stageMax, label = "stage")
                         Box(Modifier.width(stageWidth), contentAlignment = Alignment.Center) {
                             AnimatedContent(
-                                targetState = skin,
+                                targetState = visualizer ?: skin,
                                 transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
                                 label = "skin",
                             ) { s ->
-                                SkinView(s, live, art, accent, track, skinSide(s, stageWidth, stageHeight), seek = state?.station == null, fill = fill)
+                                if (s is Visualizer) VisualizerView(s, art, accent, live.playing, still = false, side = minOf(stageWidth, stageHeight))
+                                else if (s is Skin) SkinView(s, live, art, accent, track, skinSide(s, stageWidth, stageHeight), seek = state?.station == null, fill = fill)
                             }
                         }
                     }
                     }
                 }
-                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onSleep = { sleep = true })
+                ControlCard(live, accent, seekBar = visualizer != null || skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onSleep = { sleep = true })
                 SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
             val pad = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -349,10 +354,19 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     }
     if (picker) {
         val still = remember { LiveProgress(still = true) }
-        SkinPicker(
-            current = skin,
-            preview = { s, side -> SkinView(s, still, art, accent, track, side, seek = false) },
-            onSelect = { skin = it; Skin.save(ctx, it); picker = false },
+        SkinPicker<Enum<*>>(
+            tabs = listOf("Skins" to Skin.entries, "Visualizers" to Visualizer.entries),
+            current = visualizer ?: skin,
+            label = { (it as? Skin)?.label ?: (it as Visualizer).label },
+            preview = { item, space ->
+                if (item is Skin) SkinView(item, still, art, accent, track, skinSide(item, space.width, space.height), seek = false)
+                else if (item is Visualizer) VisualizerView(item, art, accent, playing = false, still = true, side = minOf(space.width, space.height))
+            },
+            onSelect = {
+                if (it is Skin) { skin = it; Skin.save(ctx, it); visualizer = null } else visualizer = it as Visualizer
+                Visualizer.save(ctx, visualizer)
+                picker = false
+            },
             onDismiss = { picker = false },
         )
     }

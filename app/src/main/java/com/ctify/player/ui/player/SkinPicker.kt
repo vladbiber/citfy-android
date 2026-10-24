@@ -18,6 +18,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -28,26 +36,29 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.ctify.player.ui.skinSide
-import com.ctify.player.ui.skins.Skin
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-/** Swipe through the skins, drawn still; Select applies the centred one, outside or back cancels. */
+/**
+ * Swipe through looks drawn still; Select applies the centred one, outside or back cancels.
+ * [tabs] are titled sets of items (Skins, Visualizers...); with one set no tabs are shown.
+ */
 @Composable
-fun SkinPicker(
-    current: Skin,
-    preview: @Composable (skin: Skin, side: Dp) -> Unit,
-    onSelect: (Skin) -> Unit,
+fun <T> SkinPicker(
+    tabs: List<Pair<String, List<T>>>,
+    current: T,
+    label: (T) -> String,
+    preview: @Composable (item: T, space: DpSize) -> Unit,
+    onSelect: (T) -> Unit,
     onDismiss: () -> Unit,
+    title: String = "Player look",
 ) {
-    val pager = rememberPagerState(initialPage = current.ordinal) { Skin.entries.size }
-    val scope = rememberCoroutineScope()
+    var tab by remember { mutableIntStateOf(tabs.indexOfFirst { current in it.second }.coerceAtLeast(0)) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -60,41 +71,59 @@ fun SkinPicker(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "Player look", style = MaterialTheme.typography.titleLarge,
+                    title, style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.semantics { heading() },
                 )
-                HorizontalPager(
-                    state = pager,
-                    contentPadding = PaddingValues(horizontal = 56.dp),
-                    modifier = Modifier.fillMaxWidth().height(320.dp),
-                ) { page ->
-                    val s = Skin.entries[page]
-                    Column(
-                        Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                val off = abs(pager.currentPage - page + pager.currentPageOffsetFraction).coerceAtMost(1f)
-                                scaleX = lerp(1f, 0.85f, off); scaleY = scaleX
-                                alpha = lerp(1f, 0.5f, off)
-                            }
-                            .clickable(role = Role.Tab) { scope.launch { pager.animateScrollToPage(page) } }
-                            // the preview is the real skin: keep its play/seek accessibility actions out
-                            .clearAndSetSemantics {
-                                contentDescription = "${s.label} look"
-                                selected = page == pager.currentPage
-                            },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            preview(s, skinSide(s, maxWidth, maxHeight))
-                            // on top, so touches skip the skin's own play/scratch/seek gestures and reach the pager
-                            Box(Modifier.matchParentSize().pointerInput(Unit) {})
-                        }
-                        Text(s.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+                if (tabs.size > 1) PrimaryTabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
+                    tabs.forEachIndexed { i, (name, _) ->
+                        Tab(selected = i == tab, onClick = { tab = i }, text = { Text(name) })
                     }
                 }
-                Button(onClick = { onSelect(Skin.entries[pager.currentPage]) }) { Text("Select") }
+                key(tab) { LookPager(tabs[tab].second, current, label, preview, onSelect) }
             }
         }
     }
+}
+
+@Composable
+private fun <T> LookPager(
+    items: List<T>,
+    current: T,
+    label: (T) -> String,
+    preview: @Composable (item: T, space: DpSize) -> Unit,
+    onSelect: (T) -> Unit,
+) {
+    val pager = rememberPagerState(initialPage = items.indexOf(current).coerceAtLeast(0)) { items.size }
+    val scope = rememberCoroutineScope()
+    HorizontalPager(
+        state = pager,
+        contentPadding = PaddingValues(horizontal = 56.dp),
+        modifier = Modifier.fillMaxWidth().height(320.dp),
+    ) { page ->
+        val item = items[page]
+        Column(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val off = abs(pager.currentPage - page + pager.currentPageOffsetFraction).coerceAtMost(1f)
+                    scaleX = lerp(1f, 0.85f, off); scaleY = scaleX
+                    alpha = lerp(1f, 0.5f, off)
+                }
+                .clickable(role = Role.Tab) { scope.launch { pager.animateScrollToPage(page) } }
+                // the preview is the real skin: keep its play/seek accessibility actions out
+                .clearAndSetSemantics {
+                    contentDescription = "${label(item)} look"
+                    selected = page == pager.currentPage
+                },
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                preview(item, DpSize(maxWidth, maxHeight))
+                // on top, so touches skip the skin's own play/scratch/seek gestures and reach the pager
+                Box(Modifier.matchParentSize().pointerInput(Unit) {})
+            }
+            Text(label(item), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+    Button(onClick = { onSelect(items[pager.currentPage]) }) { Text("Select") }
 }
