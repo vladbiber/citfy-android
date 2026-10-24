@@ -43,6 +43,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
+import com.ctify.player.data.Track
+import com.ctify.player.ui.theme.Accent
+import com.ctify.player.ui.theme.TextPrimary
+import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.radio.HomeStationRows
 
@@ -59,6 +70,8 @@ fun HomeScreen(
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val playlists by viewModel.repository.playlists.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val recent by remember { viewModel.repository.recentlyPlayed(20) }.collectAsStateWithLifecycle(emptyList())
+    val most by remember { viewModel.repository.mostPlayed(20) }.collectAsStateWithLifecycle(emptyList())
     var query by rememberSaveable { mutableStateOf("") }
 
     Box(Modifier.fillMaxSize()) {
@@ -92,6 +105,7 @@ fun HomeScreen(
                     ScreenTitle("ctify")
                 }
             }
+            if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             full {
                 HeroCard(
                     "Shuffle everything", "${tracks.size} songs on this phone", Icons.Filled.Shuffle,
@@ -115,6 +129,7 @@ fun HomeScreen(
                 )
             }
             full { HomeStationRows() }
+            if (most.isNotEmpty()) full { TrackCarousel("Most played", most, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             if (playlists.isNotEmpty()) {
                 full { SectionHeader("Playlists", Modifier.padding(top = 10.dp, start = 4.dp)) }
                 items(playlists, key = { it.name }) { pl ->
@@ -140,6 +155,40 @@ fun HomeScreen(
             }
         }
     }
+    }
+}
+
+/** A titled row of song covers, like Home's station row; a tap plays the row from that song. */
+@Composable
+private fun TrackCarousel(title: String, list: List<Track>, current: String?, viewModel: PlayerViewModel, onOpenNowPlaying: () -> Unit) {
+    Column {
+        SectionHeader(title, Modifier.padding(top = 10.dp, start = 4.dp))
+        Spacer(Modifier.height(8.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            itemsIndexed(list, key = { _, t -> t.id }) { i, t ->
+                val on = t.id == current
+                Column(
+                    Modifier
+                        .width(112.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable(onClickLabel = "play") {
+                            // streamed songs from history may not be loaded this session
+                            viewModel.repository.remember(list)
+                            viewModel.playQueue(list, i)
+                            onOpenNowPlaying()
+                        }
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "${t.title}, by ${t.artist}"
+                            if (on) stateDescription = "now playing"
+                        },
+                ) {
+                    AlbumArt(t, 112.dp, shape = MaterialTheme.shapes.small)
+                    Spacer(Modifier.height(6.dp))
+                    Text(t.title, color = if (on) Accent else TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(t.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
     }
 }
 

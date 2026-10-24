@@ -38,6 +38,7 @@ import com.ctify.player.youtube.download.DownloadEntity
         DevicePresetEntity::class,
         TrackLoudness::class,
         DownloadEntity::class,
+        PlayEntity::class,
     ],
     version = CtifyDatabase.VERSION,
     exportSchema = true,
@@ -47,6 +48,7 @@ import com.ctify.player.youtube.download.DownloadEntity
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 6, to = 7),
     ],
 )
 abstract class CtifyDatabase : RoomDatabase() {
@@ -59,7 +61,7 @@ abstract class CtifyDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "ctify.db"
-        const val VERSION = 6
+        const val VERSION = 7
 
         fun open(context: Context): CtifyDatabase =
             Room.databaseBuilder(context.applicationContext, CtifyDatabase::class.java, NAME).build()

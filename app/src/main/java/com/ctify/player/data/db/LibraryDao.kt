@@ -1,9 +1,11 @@
 package com.ctify.player.data.db
 
 import androidx.room.Dao
+import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LibraryDao {
@@ -69,4 +71,21 @@ interface LibraryDao {
 
     @Upsert
     suspend fun saveSnapshot(snapshot: PlaybackSnapshotEntity)
+
+    @Insert
+    suspend fun insertPlay(play: PlayEntity)
+
+    @Query("DELETE FROM plays WHERE id NOT IN (SELECT id FROM plays ORDER BY id DESC LIMIT :keep)")
+    suspend fun prunePlays(keep: Int)
+
+    /** The latest play of each track, newest first. */
+    @Query("SELECT * FROM plays WHERE id IN (SELECT MAX(id) FROM plays GROUP BY trackId) ORDER BY id DESC LIMIT :limit")
+    fun recentPlays(limit: Int): Flow<List<PlayEntity>>
+
+    /** Tracks played at least twice, most plays first; one play each would just repeat the recent row. */
+    @Query(
+        "SELECT * FROM plays WHERE id IN (SELECT MAX(id) FROM plays GROUP BY trackId HAVING COUNT(*) >= 2) " +
+            "ORDER BY (SELECT COUNT(*) FROM plays p WHERE p.trackId = plays.trackId) DESC, id DESC LIMIT :limit"
+    )
+    fun mostPlays(limit: Int): Flow<List<PlayEntity>>
 }

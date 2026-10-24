@@ -12,7 +12,11 @@ import com.ctify.player.player.fx.FxRange
 import com.ctify.player.player.fx.RETUNE_PRESETS
 import com.ctify.player.player.fx.RainPreset
 import com.ctify.player.player.fx.VinylSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /** What the player screens read: the current track and transport state. */
 data class NowState(
@@ -32,7 +36,9 @@ data class NowState(
 
 /** Sound settings, spectrum and transport shared by the UI, view model and audio processor. */
 object PlayerHub {
-    private lateinit var app: Context
+    lateinit var app: Context
+        private set
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     val fx = Fx()
     val spectrum = MutableStateFlow(FloatArray(com.ctify.player.player.fx.SpectrumAnalyzer.BAR_COUNT))
     val playback = MutableStateFlow<NowState?>(null)
@@ -50,6 +56,16 @@ object PlayerHub {
         if (::app.isInitialized) return
         app = context.applicationContext
         loadFx()
+        val counter = PlayCounter()
+        scope.launch {
+            playback.collect { s ->
+                val t = s?.track ?: return@collect
+                // radio songs are kept separately as heard songs
+                if (s.station == null && counter.update(t.id, s.progressMs.toLong(), s.durationMs, s.isPlaying)) {
+                    (app as com.ctify.player.CtifyApp).repository.recordPlay(t)
+                }
+            }
+        }
     }
 
     fun togglePlay() {
@@ -269,4 +285,34 @@ object PlayerHub {
     }
 
     private const val PREFS = "ctify-fx"
+}
+
+
+/** Decides when a track counts as played: ~30 s of listening or half the track, whichever comes first. */
+internal class PlayCounter {
+    private var id: String? = null
+    private var lastMs = 0L
+    private var heardMs = 0L
+    private var counted = false
+
+    /** True once per listen, on the update that crosses the threshold; seeking ahead is not listening. */
+    fun update(trackId: String, positionMs: Long, durationMs: Long, playing: Boolean): Boolean {
+        // a new track, or the same one started over (repeat one, previous)
+        if (trackId != id || positionMs < RESTART_MS && lastMs - positionMs > RESTART_MS) {
+            id = trackId; lastMs = positionMs; heardMs = 0; counted = false
+        }
+        val step = positionMs - lastMs
+        lastMs = positionMs
+        if (playing && step in 1..MAX_STEP_MS) heardMs += step
+        if (counted || heardMs < thresholdMs(durationMs)) return false
+        counted = true
+        return true
+    }
+
+    companion object {
+        /** updates come every 250 ms; a bigger jump (fast speed aside) is a seek */
+        private const val MAX_STEP_MS = 3_000L
+        private const val RESTART_MS = 3_000L
+        fun thresholdMs(durationMs: Long) = if (durationMs > 0) minOf(30_000L, durationMs / 2) else 30_000L
+    }
 }
