@@ -109,6 +109,10 @@ import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.radio.Station
+import com.ctify.player.ui.theme.boosted
+import com.ctify.player.ui.theme.rememberMusicPulse
+import androidx.compose.runtime.State
+import androidx.compose.ui.draw.drawBehind
 import com.ctify.player.ui.visualizer.Visualizer
 import com.ctify.player.ui.visualizer.VisualizerView
 import com.ctify.player.net.Feature
@@ -239,8 +243,9 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             .graphicsLayer { translationY = drop.value }
             .background(MaterialTheme.colorScheme.background),
     ) {
-        Backdrop(track?.coverUri, accent)
-        if (!coverColors) LiquidBackground(Modifier.fillMaxSize())
+        val pulse = rememberMusicPulse(live.playing)
+        Backdrop(track?.coverUri, accent, pulse)
+        if (!coverColors) LiquidBackground(Modifier.fillMaxSize(), pulse)
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
             // very short screens (or huge fonts) scroll; otherwise the stage takes what is left
             val compact = maxHeight < 560.dp
@@ -430,26 +435,35 @@ internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, 
     }
 }
 
+/** Blurred cover under a scrim; with a [pulse] the colors are boosted and swell with the bass. */
 @Composable
-private fun Backdrop(art: String?, accent: Color) {
+private fun Backdrop(art: String?, accent: Color, pulse: State<Float>? = null) {
     val scrim = MaterialTheme.colorScheme.background
     val blurry = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glow = if (pulse != null) accent.boosted() else accent
+    val artAlpha = if (blurry) 0.7f else 0.28f
     AsyncImage(
         model = art,
         contentDescription = null,
         contentScale = ContentScale.Crop,
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { scaleX = 1.25f; scaleY = 1.25f }
+            // pulse is read in the layer and draw blocks only, so beats never recompose the player
+            .graphicsLayer { val e = pulse?.value ?: 0f; scaleX = 1.25f + 0.08f * e; scaleY = scaleX }
             .then(if (blurry) Modifier.blur(70.dp) else Modifier)
-            .alpha(if (blurry) 0.7f else 0.28f),
+            .graphicsLayer { alpha = if (pulse == null) artAlpha else (artAlpha * 1.25f + 0.15f * pulse.value).coerceAtMost(1f) },
     )
     Box(
-        Modifier.fillMaxSize().background(
-            Brush.verticalGradient(
-                listOf(accent.copy(alpha = 0.10f), scrim.copy(alpha = 0.25f), scrim.copy(alpha = 0.7f))
+        Modifier.fillMaxSize().drawBehind {
+            val e = pulse?.value ?: 0f
+            // the lower stops stay as they were, so the controls and text keep their contrast
+            val top = if (pulse == null) 0.10f else 0.22f + 0.18f * e
+            drawRect(Brush.verticalGradient(listOf(glow.copy(alpha = top), scrim.copy(alpha = 0.25f), scrim.copy(alpha = 0.7f))))
+            if (e > 0f) drawCircle(
+                Brush.radialGradient(listOf(glow.copy(alpha = 0.35f * e), Color.Transparent), Offset(size.width / 2, size.height * 0.35f), size.maxDimension * 0.6f),
+                size.maxDimension * 0.6f, Offset(size.width / 2, size.height * 0.35f),
             )
-        )
+        }
     )
 }
 
