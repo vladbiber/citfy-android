@@ -78,6 +78,15 @@ interface LibraryDao {
     @Query("DELETE FROM plays WHERE id NOT IN (SELECT id FROM plays ORDER BY id DESC LIMIT :keep)")
     suspend fun prunePlays(keep: Int)
 
+    @Query("DELETE FROM plays WHERE trackId IN (:trackIds)")
+    suspend fun deletePlays(trackIds: List<String>)
+
+    @Query("DELETE FROM plays")
+    suspend fun clearPlays()
+
+    @Query("SELECT EXISTS(SELECT 1 FROM plays WHERE trackId IN (:trackIds))")
+    suspend fun hasPlays(trackIds: List<String>): Boolean
+
     /** The latest play of each track, newest first. */
     @Query("SELECT * FROM plays WHERE id IN (SELECT MAX(id) FROM plays GROUP BY trackId) ORDER BY id DESC LIMIT :limit")
     fun recentPlays(limit: Int): Flow<List<PlayEntity>>

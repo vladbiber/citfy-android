@@ -52,11 +52,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.documentfile.provider.DocumentFile
 import com.ctify.player.CtifyApp
 import com.ctify.player.data.Backup
 import com.ctify.player.net.Feature
@@ -93,10 +96,12 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
     val radioOn = features[Feature.RADIO] != false
     val youtubeOn = features[Feature.YOUTUBE] != false
     val chargingOnly by Downloads.chargingOnly.collectAsState()
+    val folder by Downloads.folder.collectAsState()
 
     var message by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<android.net.Uri?>(null) }
     var restored by remember { mutableStateOf(false) }
+    var confirmClearHistory by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
@@ -107,6 +112,11 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 onFailure = { "Backup failed: ${it.message}" },
             )
         }
+    }
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) runCatching { Downloads.setFolder(uri) }.onFailure { message = "Couldn't use that folder: ${it.message}" }
     }
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -158,6 +168,30 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 { NetworkGate.setWifiOnlyDownloads(it); Downloads.kick(replace = true) }, enabled = !offline,
             )
             SwitchRow("Downloads only while charging", "Wait until the phone is plugged in", chargingOnly, Downloads::setChargingOnly, enabled = !offline && youtubeOn)
+            val folderName = remember(folder) { folder?.let { DocumentFile.fromTreeUri(ctx, it)?.name ?: it.lastPathSegment } }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 64.dp)
+                    .clickable(onClickLabel = "Choose download folder") { folderLauncher.launch(folder) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Download folder", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        folderName ?: "Default (Music/Ctify)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (folder != null) TextButton(onClick = { Downloads.setFolder(null) }) { Text("Use default") }
+            }
+            Text(
+                "New downloads go here. Songs already saved stay where they are.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             var bufferMin by remember { mutableIntStateOf(RadioPrefs.bufferMinutes(ctx)) }
             Text("Radio rewind buffer", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
             Text(
@@ -175,6 +209,15 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 modifier = Modifier.semantics { contentDescription = "Radio rewind buffer, $bufferMin minutes" },
             )
 
+            SectionHeader("History", Modifier.padding(top = 24.dp, bottom = 4.dp))
+            Text(
+                "Songs you played, used for Recently played and Most played.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            FilledTonalButton(onClick = { confirmClearHistory = true }) { Text("Clear listening history") }
+
             SectionHeader("Backup", Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(
                 "Saves your favorites, playlists, imported songs, sound and look settings in one file. " +
@@ -187,6 +230,20 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 FilledTonalButton(onClick = { exportLauncher.launch("ctify-backup-${LocalDate.now()}.zip") }) { Text("Save backup") }
                 FilledTonalButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }) { Text("Restore") }
             }
+
+            SectionHeader("About", Modifier.padding(top = 24.dp, bottom = 4.dp))
+            val uriHandler = LocalUriHandler.current
+            Text(
+                "Data from Last.fm",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(role = Role.Button, onClickLabel = "Open last.fm") { runCatching { uriHandler.openUri("https://www.last.fm") } }
+                    .padding(vertical = 12.dp),
+            )
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -208,6 +265,17 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 }) { Text("Restore") }
             },
             dismissButton = { TextButton(onClick = { pendingRestore = null }) { Text("Cancel") } },
+        )
+    }
+    if (confirmClearHistory) {
+        AlertDialog(
+            onDismissRequest = { confirmClearHistory = false },
+            title = { Text("Clear listening history?") },
+            text = { Text("Recently played and Most played start over. Your songs, favorites and playlists stay.") },
+            confirmButton = {
+                TextButton(onClick = { confirmClearHistory = false; app.repository.clearHistory() }) { Text("Clear") }
+            },
+            dismissButton = { TextButton(onClick = { confirmClearHistory = false }) { Text("Cancel") } },
         )
     }
     if (restored) {
