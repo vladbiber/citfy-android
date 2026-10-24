@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Explore
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -63,7 +62,6 @@ import com.ctify.player.youtube.YtIntake
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
-    Discover("Discover", Icons.Filled.Explore),
     Library("Library", Icons.Filled.LibraryMusic),
     Radio("Radio", Icons.Filled.Radio),
     Settings("Settings", Icons.Filled.Settings),
@@ -155,12 +153,12 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     viewModel,
                     onOpenNowPlaying = { showNowPlaying = true },
                     onMore = onMore,
-                    onOpenPlaylist = { name -> openedPlaylist = name; tab = 2 },
-                    onOpenFavorites = { librarySection = 1; openedPlaylist = null; tab = 2 },
+                    onOpenPlaylist = { name -> openedPlaylist = name; tab = Tab.Library.ordinal },
+                    onOpenFavorites = { librarySection = 1; openedPlaylist = null; tab = Tab.Library.ordinal },
                     onSpinWheel = { showWheel = true },
+                    add = add,
                 )
-                1 -> DiscoverScreen(viewModel, onMore = onMore, add = add)
-                2 -> LibraryScreen(
+                Tab.Library.ordinal -> LibraryScreen(
                     viewModel,
                     onMore = onMore,
                     add = add,
@@ -169,7 +167,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     section = librarySection,
                     onSection = { librarySection = it },
                 )
-                3 -> RadioScreen()
+                Tab.Radio.ordinal -> RadioScreen()
                 else -> SettingsScreen()
             }
         }

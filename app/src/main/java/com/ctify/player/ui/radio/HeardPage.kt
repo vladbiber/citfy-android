@@ -7,11 +7,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.ctify.player.data.Track
+import com.ctify.player.ui.AlbumArt
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
@@ -54,32 +64,38 @@ import com.ctify.player.youtube.SongMatcher
 import com.ctify.player.youtube.YtSong
 import com.ctify.player.youtube.download.Downloads
 import java.text.DateFormat
-import java.util.Calendar
 import java.util.Date
 
-/** Songs heard on the radio, newest first, grouped by day. Text only. */
+/**
+ * Home's "Heard on the radio": Liked / Listened tabs over a row of cover cards, with the download
+ * picker and Clear history. Hidden until something was heard.
+ */
 @Composable
-internal fun HeardPage() {
+internal fun HeardSection() {
     val radio = radioRepo()
     val songs by radio.heard.collectAsStateWithLifecycle(initialValue = emptyList())
     var confirmClear by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
-    val byDay = remember(songs) { songs.groupBy { dayLabel(it.startedAt) } }
+    var likedTab by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    if (songs.isEmpty()) return
+    // opens on Liked when there is something liked
+    val liked = likedTab ?: songs.any { it.liked }
+    val shown = remember(songs, liked) { if (liked) songs.filter { it.liked } else songs }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-        item {
-            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { SectionHeader("Heard on the radio", Modifier.padding(top = 10.dp, start = 4.dp)) }
-                if (songs.isNotEmpty()) {
-                    IconButton(onClick = { picking = true }) { Icon(Icons.Filled.Download, contentDescription = "Download heard songs", tint = TextSecondary) }
-                    TextButton(onClick = { confirmClear = true }) { Text("Clear history") }
-                }
-            }
+    Column {
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { SectionHeader("Heard on the radio", Modifier.padding(top = 10.dp)) }
+            IconButton(onClick = { picking = true }) { Icon(Icons.Filled.Download, contentDescription = "Download heard songs", tint = TextSecondary) }
+            TextButton(onClick = { confirmClear = true }) { Text("Clear history") }
         }
-        if (songs.isEmpty()) item { EmptyHint("Songs you hear on the radio show up here, so you can find them later.") }
-        byDay.forEach { (day, list) ->
-            item(key = "h_$day") { SectionHeader(day, Modifier.padding(top = 10.dp, start = 4.dp)) }
-            items(list, key = { it.id }) { song -> HeardRow(song) }
+        Row(Modifier.padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = liked, onClick = { likedTab = true }, label = { Text("Liked") })
+            FilterChip(selected = !liked, onClick = { likedTab = false }, label = { Text("Listened") })
+        }
+        Spacer(Modifier.height(8.dp))
+        if (shown.isEmpty()) EmptyHint("Tap the heart on a heard song to keep it here.")
+        LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(shown, key = { it.id }) { HeardCard(it) }
         }
     }
 
@@ -116,13 +132,6 @@ internal fun HeardPage() {
 
 @Composable
 internal fun HeardRow(song: HeardSong) {
-    val radio = radioRepo()
-    val ctx = LocalContext.current
-    var menu by remember { mutableStateOf(false) }
-    var ytAction by remember { mutableStateOf<HeardAction?>(null) }
-    val open: (String) -> Unit = { url ->
-        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -134,39 +143,64 @@ internal fun HeardRow(song: HeardSong) {
                 color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = { radio.setHeardLiked(song, !song.liked) }) {
-            Icon(
-                if (song.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                contentDescription = if (song.liked) "Unlike" else "Like",
-                tint = if (song.liked) Accent else TextSecondary,
-            )
+        HeardActions(song)
+    }
+}
+
+/** A heard song as a cover card; a tap plays it from YouTube. */
+@Composable
+private fun HeardCard(song: HeardSong) {
+    var play by remember { mutableStateOf(false) }
+    val cover = song.youtubeVideoId?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }
+    Column(Modifier.width(140.dp)) {
+        Box(
+            Modifier.clip(MaterialTheme.shapes.small)
+                .clickable(onClickLabel = "play from YouTube") { play = true }
+                .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(song.title, song.artist).joinToString(", by ") },
+        ) {
+            AlbumArt(Track("h${song.id}", song.title, song.artist.orEmpty(), song.title, "", cover, 0L, isDemo = false), 140.dp, shape = MaterialTheme.shapes.small)
         }
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More for ${song.title}", tint = TextSecondary) }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Play from YouTube") }, onClick = { menu = false; ytAction = HeardAction.PLAY })
-                DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; ytAction = HeardAction.DOWNLOAD })
-                DropdownMenuItem(text = { Text("Find on YouTube") }, onClick = { menu = false; open(SongLinks.youtube(song)) })
-                DropdownMenuItem(text = { Text("Find on YouTube Music") }, onClick = { menu = false; open(SongLinks.youtubeMusic(song)) })
-                DropdownMenuItem(text = { Text("Find on Spotify") }, onClick = { menu = false; open(SongLinks.spotify(song)) })
-                DropdownMenuItem(text = { Text("Find on Apple Music") }, onClick = { menu = false; open(SongLinks.appleMusic(song)) })
-                DropdownMenuItem(
-                    text = { Text("Remove", color = MaterialTheme.colorScheme.error) },
-                    onClick = { menu = false; radio.deleteHeard(song) },
-                )
-            }
+        Spacer(Modifier.height(6.dp))
+        Text(song.title, color = TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(song.artist ?: song.stationName, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.align(Alignment.End)) { HeardActions(song) }
+    }
+    if (play) HeardYouTube(song, HeardAction.PLAY) { play = false }
+}
+
+/** The heart and the "more" menu of a heard song. */
+@Composable
+private fun HeardActions(song: HeardSong) {
+    val radio = radioRepo()
+    val ctx = LocalContext.current
+    var menu by remember { mutableStateOf(false) }
+    var ytAction by remember { mutableStateOf<HeardAction?>(null) }
+    val open: (String) -> Unit = { url ->
+        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+    IconButton(onClick = { radio.setHeardLiked(song, !song.liked) }) {
+        Icon(
+            if (song.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+            contentDescription = if (song.liked) "Unlike" else "Like",
+            tint = if (song.liked) Accent else TextSecondary,
+        )
+    }
+    Box {
+        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More for ${song.title}", tint = TextSecondary) }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("Play from YouTube") }, onClick = { menu = false; ytAction = HeardAction.PLAY })
+            DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; ytAction = HeardAction.DOWNLOAD })
+            DropdownMenuItem(text = { Text("Find on YouTube") }, onClick = { menu = false; open(SongLinks.youtube(song)) })
+            DropdownMenuItem(text = { Text("Find on YouTube Music") }, onClick = { menu = false; open(SongLinks.youtubeMusic(song)) })
+            DropdownMenuItem(text = { Text("Find on Spotify") }, onClick = { menu = false; open(SongLinks.spotify(song)) })
+            DropdownMenuItem(text = { Text("Find on Apple Music") }, onClick = { menu = false; open(SongLinks.appleMusic(song)) })
+            DropdownMenuItem(
+                text = { Text("Remove", color = MaterialTheme.colorScheme.error) },
+                onClick = { menu = false; radio.deleteHeard(song) },
+            )
         }
     }
     ytAction?.let { HeardYouTube(song, it) { ytAction = null } }
-}
-
-private fun dayLabel(at: Long): String {
-    val day = Calendar.getInstance().apply { timeInMillis = at }
-    val today = Calendar.getInstance()
-    fun same(a: Calendar, b: Calendar) = a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR)
-    if (same(day, today)) return "Today"
-    if (same(day, today.apply { add(Calendar.DAY_OF_YEAR, -1) })) return "Yesterday"
-    return DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(at))
 }
 
 private fun timeLabel(at: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(at))
