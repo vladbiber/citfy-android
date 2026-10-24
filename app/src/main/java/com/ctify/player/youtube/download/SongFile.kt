@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.documentfile.provider.DocumentFile
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.net.Traffic
@@ -137,11 +138,17 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
         if (bytes != null) File(covers, "$videoId.jpg").writeBytes(bytes)
     }
 
-    /** Saves into Music/Ctify/<Artist>/<Album>/ and returns the file's uri. */
+    /** Saves into <picked folder or Music/Ctify>/<Artist>/<Album>/ and returns the file's uri. */
     fun save(file: File, item: DownloadEntity): Uri {
         val artist = safe(item.albumArtist ?: item.artist)
         val album = safe(item.album ?: "Singles")
         val name = (item.trackNumber?.let { "%02d ".format(it) } ?: "") + safe(item.title) + ".m4a"
+        Downloads.folder.value?.let { tree ->
+            val root = runCatching { DocumentFile.fromTreeUri(context, tree) }.getOrNull()
+            if (root == null || !root.canWrite()) Downloads.folderLost()
+            else runCatching { return saveToTree(file, root, artist, album, name) }
+            // a failed write falls through to Music/Ctify so the song isn't lost
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             // no MediaStore paths before Android 10: keep it in the app's own music folder
             val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Ctify/$artist/$album").apply { mkdirs() }
@@ -166,6 +173,19 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
             throw e
         }
         return uri
+    }
+
+    private fun saveToTree(file: File, root: DocumentFile, artist: String, album: String, name: String): Uri {
+        fun DocumentFile.dir(n: String) = findFile(n)?.takeIf { it.isDirectory } ?: createDirectory(n) ?: throw IOException("Couldn't create $n")
+        // octet-stream keeps the name exactly as given; a typed mime may get a second extension
+        val doc = root.dir(artist).dir(album).createFile("application/octet-stream", name) ?: throw IOException("Couldn't create $name")
+        try {
+            context.contentResolver.openOutputStream(doc.uri, "w")?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: throw IOException("Couldn't write $name")
+        } catch (e: Exception) {
+            doc.delete()
+            throw e
+        }
+        return doc.uri
     }
 
     fun cleanup(videoId: String) {

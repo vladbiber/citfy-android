@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
@@ -83,7 +85,8 @@ class MusicRepository private constructor(private val appContext: Context, datab
         val imported = loadImportedTracks().map { ensureImportedCover(it) }
         val youtube = loadYoutubeTracks()
         val ytUris = youtube.mapTo(HashSet()) { it.uri }
-        val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()).filter { it.uri !in ytUris } else emptyList()
+        val ytDevIds = youtube.mapNotNullTo(HashSet()) { devIdOfDocument(it.uri) }
+        val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()).filter { it.uri !in ytUris && it.id !in ytDevIds } else emptyList()
         val all = youtube + loadStreamTracks() + imported + demo + device
         synchronized(byId) {
             val streamed = byId.values.filter { it.id.startsWith(STREAM_PREFIX) }
@@ -150,6 +153,17 @@ class MusicRepository private constructor(private val appContext: Context, datab
             }
         }
         return out
+    }
+
+    /**
+     * Songs saved into a picked folder have a document uri, so the device scan sees them again under
+     * their MediaStore id; this finds that id. shortcut: needs Android 10, older phones may list such songs twice.
+     */
+    private fun devIdOfDocument(uri: String): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !uri.startsWith("content://")) return null
+        val u = Uri.parse(uri)
+        if (!DocumentsContract.isDocumentUri(appContext, u)) return null
+        return runCatching { MediaStore.getMediaUri(appContext, u)?.let { "dev_" + ContentUris.parseId(it) } }.getOrNull()
     }
 
     // ---- imported files (Storage Access Framework) ----

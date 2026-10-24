@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.documentfile.provider.DocumentFile
 import com.ctify.player.CtifyApp
 import com.ctify.player.data.Backup
 import com.ctify.player.net.Feature
@@ -93,6 +94,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
     val radioOn = features[Feature.RADIO] != false
     val youtubeOn = features[Feature.YOUTUBE] != false
     val chargingOnly by Downloads.chargingOnly.collectAsState()
+    val folder by Downloads.folder.collectAsState()
 
     var message by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -107,6 +109,11 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 onFailure = { "Backup failed: ${it.message}" },
             )
         }
+    }
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) runCatching { Downloads.setFolder(uri) }.onFailure { message = "Couldn't use that folder: ${it.message}" }
     }
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -158,6 +165,30 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 { NetworkGate.setWifiOnlyDownloads(it); Downloads.kick(replace = true) }, enabled = !offline,
             )
             SwitchRow("Downloads only while charging", "Wait until the phone is plugged in", chargingOnly, Downloads::setChargingOnly, enabled = !offline && youtubeOn)
+            val folderName = remember(folder) { folder?.let { DocumentFile.fromTreeUri(ctx, it)?.name ?: it.lastPathSegment } }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 64.dp)
+                    .clickable(onClickLabel = "Choose download folder") { folderLauncher.launch(folder) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Download folder", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        folderName ?: "Default (Music/Ctify)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (folder != null) TextButton(onClick = { Downloads.setFolder(null) }) { Text("Use default") }
+            }
+            Text(
+                "New downloads go here. Songs already saved stay where they are.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             var bufferMin by remember { mutableIntStateOf(RadioPrefs.bufferMinutes(ctx)) }
             Text("Radio rewind buffer", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
             Text(
