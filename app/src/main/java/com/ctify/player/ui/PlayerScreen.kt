@@ -142,7 +142,6 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.Dp
 import com.ctify.player.data.Track
-import com.ctify.player.player.fx.Mood
 import com.ctify.player.player.sound.GenrePreset
 import com.ctify.player.player.sound.SoundSettings
 import com.ctify.player.ui.player.SkinPicker
@@ -413,7 +412,6 @@ private fun SoundStrip(accent: Color, onSkin: () -> Unit, onPanel: (ChipPanel) -
     val reversed by PlayerHub.reverseOn.collectAsState()
     val preparing by PlayerHub.reversePreparing.collectAsState()
     val genre by SoundSettings.genreKey.collectAsState()
-    val mood = activeMood()
     val space = spaceSummary(width, pan, muffle)
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 2.dp),
@@ -421,7 +419,6 @@ private fun SoundStrip(accent: Color, onSkin: () -> Unit, onPanel: (ChipPanel) -
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StripChip("Skin", Icons.Default.Palette, false, accent, description = "Player look", onClick = onSkin)
-        StripChip(mood?.takeIf { it != Mood.ORIGINAL }?.label ?: "Moods", null, mood != null && mood != Mood.ORIGINAL, accent) { onPanel(ChipPanel.MOODS) }
         StripChip(GenrePreset.labelOf(genre), null, genre != GenrePreset.BALANCED, accent, description = "Genre preset ${GenrePreset.labelOf(genre)}") {
             onPanel(ChipPanel.GENRE)
         }

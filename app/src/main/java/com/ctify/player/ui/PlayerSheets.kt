@@ -87,7 +87,7 @@ internal fun SoundSheet() {
 }
 
 /** What a player chip opens: only that control, in its own small sheet. */
-internal enum class ChipPanel { MOODS, GENRE, SPEED, REVERB, BASS, HZ, SPACE, MORE }
+internal enum class ChipPanel { GENRE, SPEED, REVERB, BASS, HZ, SPACE, MORE }
 
 @Composable
 internal fun ChipPanelSheet(panel: ChipPanel) {
@@ -100,7 +100,6 @@ internal fun ChipPanelSheet(panel: ChipPanel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         when (panel) {
-            ChipPanel.MOODS -> MoodsSection()
             ChipPanel.GENRE -> {
                 val context = LocalContext.current
                 remember { SoundEngine.init(context) }

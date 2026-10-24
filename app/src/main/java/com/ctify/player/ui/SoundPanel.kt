@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
@@ -39,7 +38,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.ctify.player.player.fx.Mood
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.fx.FxRange
 import com.ctify.player.player.fx.RETUNE_PRESETS
@@ -60,37 +58,6 @@ internal fun EffectRangeSection() {
                 "reverb ${(FxRange.reverb(range).endInclusive * 100).roundToInt()}%, bass +${FxRange.bass(range).endInclusive.roundToInt()} dB",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-/** The mood whose settings are all in place right now, if any. */
-@Composable
-internal fun activeMood(): Mood? {
-    val speed by PlayerHub.speed.collectAsState()
-    val reverb by PlayerHub.reverb.collectAsState()
-    val retune by PlayerHub.retuneIndex.collectAsState()
-    val bassGain by PlayerHub.bassGain.collectAsState()
-    val width by PlayerHub.width.collectAsState()
-    val pan8d by PlayerHub.pan8d.collectAsState()
-    val muffle by PlayerHub.muffle.collectAsState()
-    val vinyl by PlayerHub.vinyl.collectAsState()
-    return Mood.entries.firstOrNull { m ->
-        abs(speed - m.rate) < 0.005f && retune == 0 && abs(reverb - m.reverb) < 0.005f &&
-            abs(bassGain - m.bassDb) < 0.05f && abs(width - m.width) < 0.01f &&
-            abs(pan8d - m.pan8d) < 0.01f && abs(muffle - m.muffle) < 0.01f &&
-            vinyl.on == (m.vinyl != null)
-    }
-}
-
-@Composable
-internal fun MoodsSection() {
-    val active = activeMood()
-    Section(Icons.Default.AutoAwesome, "Moods", "one tap sets every effect") {
-        ChipRow {
-            Mood.entries.forEach { m ->
-                FilterChip(selected = m == active, onClick = { PlayerHub.applyMood(m) }, label = { Text(m.label) })
-            }
-        }
     }
 }
 

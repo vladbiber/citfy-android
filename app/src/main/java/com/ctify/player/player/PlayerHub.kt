@@ -7,7 +7,6 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import com.ctify.player.data.Track
 import com.ctify.player.player.fx.Fx
-import com.ctify.player.player.fx.Mood
 import com.ctify.player.player.fx.FxRange
 import com.ctify.player.player.fx.RETUNE_PRESETS
 import com.ctify.player.player.fx.RainPreset
@@ -180,16 +179,6 @@ object PlayerHub {
         this.width.value = width; this.pan8d.value = pan8d; this.muffle.value = muffle
         fx.width = width; fx.pan8d = pan8d; fx.muffle = muffle
         saveFx()
-    }
-
-    fun applyMood(mood: Mood) {
-        setRetune(0)
-        setSpeed(mood.rate)
-        setReverb(mood.reverb)
-        setBass(mood.bassDb, 120f)
-        setSpace(mood.width, mood.pan8d, mood.muffle)
-        val v = vinyl.value
-        setVinyl(mood.vinyl?.apply(on = true) ?: v.copy(on = false))
     }
 
     val rain = MutableStateFlow(RainPreset.OFF)

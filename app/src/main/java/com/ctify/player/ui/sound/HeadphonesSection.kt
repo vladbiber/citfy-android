@@ -108,7 +108,7 @@ fun HeadphonesSection() {
         }
         Text(
             "Get the file for your model from the AutoEQ project. Correction and crossfeed switch on " +
-                "by themselves whenever this device connects; presets and moods never change them.",
+                "by themselves whenever this device connects; presets never change them.",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
