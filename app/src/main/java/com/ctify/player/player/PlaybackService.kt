@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -19,22 +20,32 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.ctify.player.player.fx.FxProcessorChain
 import androidx.media3.session.CommandButton
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.ctify.player.CtifyApp
 import com.ctify.player.net.NetworkGate
 import com.google.common.util.concurrent.Futures
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
-/** ExoPlayer + MediaSession; media3 provides the notification and lock-screen controls. */
+/** ExoPlayer + MediaLibrarySession; media3 provides the notification and lock-screen controls, Android Auto browses [AutoLibrary]. */
 @OptIn(UnstableApi::class)
-class PlaybackService : MediaSessionService() {
+class PlaybackService : MediaLibraryService() {
 
-    private var mediaSession: MediaSession? = null
+    private var mediaSession: MediaLibrarySession? = null
     private var playback: PlaybackController? = null
+    private var library: AutoLibrary? = null
+    private val scope = MainScope()
 
     override fun onCreate() {
         super.onCreate()
@@ -98,7 +109,8 @@ class PlaybackService : MediaSessionService() {
 
         val app = application as CtifyApp
         playback = PlaybackController(this, player, app.repository, app.radio, ::showStationButtons)
-        mediaSession = MediaSession.Builder(this, player).setCallback(SessionCallback()).build()
+        library = AutoLibrary(app.repository, app.radio)
+        mediaSession = MediaLibrarySession.Builder(this, player, SessionCallback()).build()
     }
 
     /** Live radio has one item, so the system next/previous buttons switch stations instead. */
@@ -121,10 +133,10 @@ class PlaybackService : MediaSessionService() {
     }
 
     /** Only Ctify itself may send most custom commands; next/previous station are open to all. */
-    private inner class SessionCallback : MediaSession.Callback {
+    private inner class SessionCallback : MediaLibrarySession.Callback {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
             val allowed = if (controller.packageName == packageName) Cmd.ALL else Cmd.PUBLIC
-            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                 .apply { allowed.forEach { add(SessionCommand(it, Bundle.EMPTY)) } }
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
@@ -143,9 +155,59 @@ class PlaybackService : MediaSessionService() {
                 playback?.handle(action, args) == true
             return Futures.immediateFuture(SessionResult(if (ok) SessionResult.RESULT_SUCCESS else SessionError.ERROR_NOT_SUPPORTED))
         }
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<MediaItem>> = Futures.immediateFuture(
+            library?.let { LibraryResult.ofItem(it.root, params) } ?: LibraryResult.ofError(SessionError.ERROR_INVALID_STATE)
+        )
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String,
+        ): ListenableFuture<LibraryResult<MediaItem>> = libraryAsync {
+            item(mediaId)?.let { LibraryResult.ofItem(it, null) } ?: LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+        }
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = libraryAsync {
+            children(parentId)?.let { LibraryResult.ofItemList(AutoIds.page(it, page, pageSize), params) }
+                ?: LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+        }
+
+        /** A tapped Auto item goes through the app's own queue and radio commands, so radio mode and reverse stay consistent. */
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val id = mediaItems.singleOrNull()?.mediaId
+            if (id == null || AutoIds.parseLeaf(id) == null) return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
+            scope.launch { library?.playCommand(id)?.let { (action, args) -> playback?.handle(action, args) } }
+            // the controller loads the player itself; a failed future makes the session skip its own setMediaItems
+            return Futures.immediateFailedFuture(UnsupportedOperationException("played through PlaybackController"))
+        }
+
+        private fun <T : Any> libraryAsync(get: suspend AutoLibrary.() -> LibraryResult<T>): ListenableFuture<LibraryResult<T>> {
+            val future = SettableFuture.create<LibraryResult<T>>()
+            val lib = library ?: return Futures.immediateFuture(LibraryResult.ofError<T>(SessionError.ERROR_INVALID_STATE))
+            scope.launch { runCatching { lib.get() }.onSuccess { future.set(it) }.onFailure { future.setException(it) } }
+            return future
+        }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     override fun onTaskRemoved(rootIntent: android.content.Intent?) {
         val player = mediaSession?.player
@@ -162,6 +224,8 @@ class PlaybackService : MediaSessionService() {
             release()
         }
         mediaSession = null
+        library = null
+        scope.cancel()
         super.onDestroy()
     }
 }
