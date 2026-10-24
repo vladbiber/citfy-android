@@ -32,9 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.theme.Accent
@@ -58,11 +59,11 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SurfaceDark) {
         Text(
             "Add to playlist",
-            color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
+            color = TextPrimary, style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp).semantics { heading() },
         )
         if (track != null) {
-            Text("${track.title} • ${track.artist}", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp))
+            Text("${track.title} • ${track.artist}", color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp))
         }
         Spacer(Modifier.height(8.dp))
 
@@ -77,7 +78,7 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("Download", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                    Text("Plays online now; keep it on the phone", color = TextMuted, fontSize = 11.sp)
+                    Text("Plays online now; keep it on the phone", color = TextMuted, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -91,7 +92,7 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("Remove from library", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-                    Text("Also takes it out of your playlists and favorites", color = TextMuted, fontSize = 11.sp)
+                    Text("Also takes it out of your playlists and favorites", color = TextMuted, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -137,7 +138,7 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(pl.name, color = TextPrimary)
-                    if (already) Text("Tap to remove", color = TextMuted, fontSize = 11.sp)
+                    if (already) Text("Tap to remove", color = TextMuted, style = MaterialTheme.typography.labelSmall)
                 }
                 if (already) Icon(Icons.Filled.Check, "in playlist", tint = Accent)
             }

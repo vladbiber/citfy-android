@@ -25,10 +25,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.CtifyApp
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.sound.SoundEngine
@@ -41,7 +39,7 @@ internal fun QueueSheet() {
     val repository = (LocalContext.current.applicationContext as CtifyApp).repository
     val ui by PlayerHub.ui.collectAsState()
     Text(
-        "Up next", fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+        "Up next", style = MaterialTheme.typography.titleLarge,
         modifier = Modifier.padding(start = 16.dp, bottom = 8.dp).semantics { heading() },
     )
     LazyColumn(Modifier.heightIn(max = 520.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -68,13 +66,13 @@ internal fun SoundSheet() {
             .padding(horizontal = 16.dp)
             .padding(bottom = 28.dp)
     ) {
-        Text("Sound", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+        Text("Sound", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(12.dp))
         SoundTab()
         val uri = LocalUriHandler.current
         Text(
             "Player designs inspired by Spun by @yappologistic",
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .fillMaxWidth()

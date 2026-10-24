@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
@@ -27,6 +26,7 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,7 +49,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.data.Track
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
@@ -151,13 +150,13 @@ fun DownloadPicker(title: String, songs: List<PickSong>, onDismiss: () -> Unit) 
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SurfaceElevated) {
         Text(
-            title, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            title, color = TextPrimary, style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() },
         )
-        blocked?.let { Text(it, color = Accent, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+        blocked?.let { Text(it, color = Accent, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
         if (row.isNotEmpty()) {
             Text(
-                "Downloading", color = TextSecondary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                "Downloading", color = TextSecondary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 6.dp).semantics { heading() },
             )
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -171,7 +170,7 @@ fun DownloadPicker(title: String, songs: List<PickSong>, onDismiss: () -> Unit) 
             }
         }
         if (listed.isEmpty() && row.isEmpty()) {
-            Text("Everything here is already on the phone.", color = TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(16.dp))
+            Text("Everything here is already on the phone.", color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
         }
         LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
             items(listed, key = { it.key }) { s ->
@@ -221,7 +220,7 @@ private fun PickRow(s: PickSong, note: String?, enabled: Boolean, modifier: Modi
             Text(s.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 listOfNotNull(note, s.artist).joinToString(" · "),
-                color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
         Icon(if (enabled) Icons.Filled.Download else Icons.Filled.SearchOff, null, tint = TextSecondary)
@@ -249,7 +248,7 @@ private fun PendingCard(
     Column(
         modifier
             .width(128.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.small)
             .background(Accent.copy(alpha = 0.10f))
             .clickable(enabled = !done, role = Role.Button, onClickLabel = "cancel download", onClick = onCancel)
             .padding(10.dp),
@@ -264,7 +263,7 @@ private fun PendingCard(
                 else -> Icon(Icons.Filled.Schedule, null, tint = TextMuted)
             }
         }
-        Text(s.title, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(label, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(s.title, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

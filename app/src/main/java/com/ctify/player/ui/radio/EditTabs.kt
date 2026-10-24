@@ -52,13 +52,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.genre.Genre
 import com.ctify.player.radio.RadioTab
 import com.ctify.player.radio.StationSort
 import com.ctify.player.radio.TabKind
 import com.ctify.player.ui.ScreenTitle
+import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
@@ -96,18 +96,18 @@ internal fun EditTabsScreen(tabs: List<RadioTab>, onClose: () -> Unit) {
             }
             Text(
                 "For you, Favorites and Browse always stay. Keep your own tabs to about $TAB_HINT so they are easy to swipe through.",
-                color = TextSecondary, fontSize = 13.sp,
+                color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
             )
             if (tabs.size > TAB_HINT) {
-                Text("You have ${tabs.size} tabs.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                Text("You have ${tabs.size} tabs.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
             }
-            SectionTitle("Your tabs")
-            if (tabs.isEmpty()) Text("No tabs yet. Pin a genre below or star a tag in Browse.", color = TextMuted, fontSize = 14.sp)
+            SectionHeader("Your tabs", Modifier.padding(top = 20.dp, bottom = 6.dp))
+            if (tabs.isEmpty()) Text("No tabs yet. Pin a genre below or star a tag in Browse.", color = TextMuted, style = MaterialTheme.typography.bodyMedium)
             tabs.forEachIndexed { i, tab ->
                 Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(tab.title, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(if (tab.kind == TabKind.GENRE) "Genre" else "Tag: ${tab.key}", color = TextMuted, fontSize = 12.sp)
+                        Text(tab.title, color = TextPrimary, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (tab.kind == TabKind.GENRE) "Genre" else "Tag: ${tab.key}", color = TextMuted, style = MaterialTheme.typography.labelSmall)
                     }
                     IconButton(onClick = { move(i, -1) }, enabled = i > 0) {
                         Icon(Icons.Filled.KeyboardArrowUp, "Move ${tab.title} up")
@@ -120,14 +120,14 @@ internal fun EditTabsScreen(tabs: List<RadioTab>, onClose: () -> Unit) {
                 }
             }
             if (suggested.isNotEmpty()) {
-                SectionTitle("Suggested from your favorites")
+                SectionHeader("Suggested from your favorites", Modifier.padding(top = 20.dp, bottom = 6.dp))
                 GenreChips(suggested) { radio.pinTab(TabKind.GENRE, it.name, it.label) }
             }
-            SectionTitle("More genres")
+            SectionHeader("More genres", Modifier.padding(top = 20.dp, bottom = 6.dp))
             GenreChips(others) { radio.pinTab(TabKind.GENRE, it.name, it.label) }
             Text(
                 "For a single tag like \"80s\", star it in Browse, Genres.",
-                color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
+                color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
             )
         }
     }
@@ -151,14 +151,6 @@ internal fun EditTabsScreen(tabs: List<RadioTab>, onClose: () -> Unit) {
             dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } },
         )
     }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 20.dp, bottom = 6.dp).semantics { heading() },
-    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -192,16 +184,16 @@ internal fun TabSettingsSheet(tab: RadioTab, onDismiss: () -> Unit, onSave: (Rad
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 28.dp)) {
-            Text(draft.title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+            Text(draft.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
 
-            SectionTitle("Sort")
+            SectionHeader("Sort", Modifier.padding(top = 20.dp, bottom = 6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StationSort.entries.forEach { s ->
                     FilterChip(selected = draft.sort == s, onClick = { draft = draft.copy(sort = s) }, label = { Text(s.label) })
                 }
             }
 
-            SectionTitle("Country")
+            SectionHeader("Country", Modifier.padding(top = 20.dp, bottom = 6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = draft.countryCode == null, onClick = { draft = draft.copy(countryCode = null); otherCode = "" }, label = { Text("Any") })
                 if (own != null) {
@@ -229,7 +221,7 @@ internal fun TabSettingsSheet(tab: RadioTab, onDismiss: () -> Unit, onSave: (Rad
                 modifier = Modifier.padding(top = 4.dp),
             )
 
-            SectionTitle("Minimum bitrate")
+            SectionHeader("Minimum bitrate", Modifier.padding(top = 20.dp, bottom = 6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 BITRATES.forEach { b ->
                     FilterChip(
@@ -246,8 +238,8 @@ internal fun TabSettingsSheet(tab: RadioTab, onDismiss: () -> Unit, onSave: (Rad
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Hide broken stations", style = MaterialTheme.typography.titleMedium)
-                    Text("Skip stations the directory marks as offline", color = TextSecondary, fontSize = 13.sp)
+                    Text("Hide broken stations", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text("Skip stations the directory marks as offline", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                 }
                 Switch(checked = draft.hideBroken, onCheckedChange = null)
             }

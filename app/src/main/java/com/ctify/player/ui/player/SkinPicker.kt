@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,10 +28,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -54,7 +51,7 @@ fun SkinPicker(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(28.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         ) {
             Column(
@@ -63,7 +60,7 @@ fun SkinPicker(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "Player look", fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+                    "Player look", style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.semantics { heading() },
                 )
                 HorizontalPager(
@@ -93,7 +90,7 @@ fun SkinPicker(
                             // on top, so touches skip the skin's own play/scratch/seek gestures and reach the pager
                             Box(Modifier.matchParentSize().pointerInput(Unit) {})
                         }
-                        Text(s.label, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+                        Text(s.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
                 Button(onClick = { onSelect(Skin.entries[pager.currentPage]) }) { Text("Select") }

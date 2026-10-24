@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -20,6 +19,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -36,10 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.data.Track
 import com.ctify.player.net.Feature
@@ -92,7 +90,7 @@ internal fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: 
             }
         },
         singleLine = true,
-        shape = RoundedCornerShape(28.dp),
+        shape = MaterialTheme.shapes.extraLarge,
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = SurfaceElevated,
             unfocusedContainerColor = SurfaceElevated,
@@ -277,17 +275,17 @@ private fun YtSongMenu(song: YtSong, viewModel: PlayerViewModel, onAddToPlaylist
 
 @Composable
 private fun MenuLine(label: String, onClick: () -> Unit) {
-    Text(label, color = TextPrimary, fontSize = 16.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
+    Text(label, color = TextPrimary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
 }
 
 private const val LOADING = "\u0000loading"
 
 private fun LazyListScope.header(text: String) = item(key = "h_$text") {
-    Text(text, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
+    SectionHeader(text, Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
 }
 
 private fun LazyListScope.note(text: String) = item {
-    Text(text, color = TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+    Text(text, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 }
 
 private fun LazyListScope.status(state: String?, empty: Boolean, emptyText: String) {

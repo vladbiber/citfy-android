@@ -37,13 +37,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.CtifyApp
 import com.ctify.player.radio.HeardSong
 import com.ctify.player.radio.SongLinks
 import com.ctify.player.ui.EmptyHint
-import com.ctify.player.ui.GridHeader
+import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
@@ -70,7 +69,7 @@ internal fun HeardPage() {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { GridHeader("Heard on the radio") }
+                Box(Modifier.weight(1f)) { SectionHeader("Heard on the radio", Modifier.padding(top = 10.dp, start = 4.dp)) }
                 if (songs.isNotEmpty()) {
                     IconButton(onClick = { picking = true }) { Icon(Icons.Filled.Download, contentDescription = "Download heard songs", tint = TextSecondary) }
                     TextButton(onClick = { confirmClear = true }) { Text("Clear history") }
@@ -79,7 +78,7 @@ internal fun HeardPage() {
         }
         if (songs.isEmpty()) item { EmptyHint("Songs you hear on the radio show up here, so you can find them later.") }
         byDay.forEach { (day, list) ->
-            item(key = "h_$day") { GridHeader(day) }
+            item(key = "h_$day") { SectionHeader(day, Modifier.padding(top = 10.dp, start = 4.dp)) }
             items(list, key = { it.id }) { song -> HeardRow(song) }
         }
     }
@@ -129,10 +128,10 @@ internal fun HeardRow(song: HeardSong) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(song.title, color = TextPrimary, fontWeight = FontWeight.Medium, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.title, color = TextPrimary, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 listOfNotNull(song.artist, song.stationName, timeLabel(song.startedAt)).joinToString(" · "),
-                color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
         IconButton(onClick = { radio.setHeardLiked(song, !song.liked) }) {

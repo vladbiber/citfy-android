@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Favorite
@@ -42,9 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.radio.HomeStationRows
@@ -119,14 +116,14 @@ fun HomeScreen(
             }
             full { HomeStationRows() }
             if (playlists.isNotEmpty()) {
-                full { GridHeader("Playlists") }
+                full { SectionHeader("Playlists", Modifier.padding(top = 10.dp, start = 4.dp)) }
                 items(playlists, key = { it.name }) { pl ->
                     PlaylistCard(pl, pl.trackIds.firstNotNullOfOrNull { viewModel.repository.trackById(it) }) {
                         onOpenPlaylist(pl.name)
                     }
                 }
             }
-            full { GridHeader("All songs") }
+            full { SectionHeader("All songs", Modifier.padding(top = 10.dp, start = 4.dp)) }
             if (tracks.isEmpty()) full { EmptyHint("Import a folder from the Library tab to get started.") }
             tracks.forEach { track ->
                 full {
@@ -153,23 +150,20 @@ private fun HeroCard(title: String, subtitle: String, icon: ImageVector, colors:
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(MaterialTheme.shapes.large)
             .background(Brush.linearGradient(colors))
             .clickable(role = Role.Button, onClick = onClick)
             .padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(ink.copy(alpha = 0.12f)),
+            Modifier.size(52.dp).clip(MaterialTheme.shapes.small).background(ink.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, contentDescription = null, tint = ink) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = ink)
-            Text(subtitle, fontSize = 13.sp, color = ink.copy(alpha = 0.85f))
+            Text(title, style = MaterialTheme.typography.titleLarge, color = ink)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink.copy(alpha = 0.85f))
         }
     }
 }
-
-@Composable
-fun SectionHeader(title: String) = GridHeader(title)

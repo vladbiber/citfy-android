@@ -31,6 +31,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,11 +46,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.data.MusicRepository
 import com.ctify.player.ui.EmptyHint
@@ -150,7 +152,7 @@ fun WheelScreen(
     ) {
         Row(Modifier.padding(start = 4.dp, end = 16.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary) }
-            Text(title, color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(title, color = TextPrimary, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
         }
         val busy = motion.spinning
         ChipRow {
@@ -162,7 +164,7 @@ fun WheelScreen(
                     label = {
                         Column {
                             Text(s.label, maxLines = 1)
-                            s.unavailable?.let { Text(it, fontSize = 10.sp, color = TextMuted, maxLines = 1) }
+                            s.unavailable?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = TextMuted, maxLines = 1) }
                         }
                     },
                 )
@@ -187,7 +189,7 @@ fun WheelScreen(
             }
         }
         notice?.let {
-            Text(it, color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            Text(it, color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
 
         val w = wheel
@@ -201,7 +203,7 @@ fun WheelScreen(
                 )
                 Text(
                     odds(w, mode, source?.noun ?: "songs"),
-                    color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center,
+                    color = TextMuted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 )
             }
@@ -222,8 +224,8 @@ fun WheelScreen(
         val src = source
         if (item != null && src != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(item.title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-                if (item.subtitle.isNotBlank()) Text(item.subtitle, color = TextSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.title, color = TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                if (item.subtitle.isNotBlank()) Text(item.subtitle, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     IconButton(onClick = { src.toggleFavorite(item); hearted = !hearted }) {
@@ -246,7 +248,7 @@ fun WheelScreen(
                 SpinButton(if (busy) "Spinning…" else "Spin", enabled = !busy) { spin(w, 0f) }
             }
             Text(
-                "or fling the wheel", color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center,
+                "or fling the wheel", color = TextMuted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             )
         }
@@ -263,7 +265,7 @@ private fun SpinButton(text: String, enabled: Boolean, onClick: () -> Unit) {
     ) {
         Icon(Icons.Filled.Casino, null, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
-        Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
     }
 }
 

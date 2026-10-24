@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
@@ -29,6 +28,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -148,7 +149,7 @@ internal fun <T> LazyListScope.loadStatus(state: LoadState<T>, blocked: String?,
         blocked != null -> item(key = "blocked") { BlockedNote(blocked) }
         state.error != null && hasData -> item(key = "stale") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Couldn't refresh, showing the saved list", color = TextMuted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text("Couldn't refresh, showing the saved list", color = TextMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
                 TextButton(onClick = state::retry) { Text("Retry") }
             }
         }
@@ -177,7 +178,7 @@ internal fun BlockedNote(reason: String) {
     ) {
         Icon(Icons.Filled.CloudOff, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
-        Text(reason, color = TextSecondary, fontSize = 14.sp)
+        Text(reason, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -185,7 +186,7 @@ internal fun BlockedNote(reason: String) {
 private fun ErrorBlock(message: String, onRetry: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Couldn't load stations", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-        Text(message, color = TextMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(message, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(10.dp))
         FilledTonalButton(onClick = onRetry) { Text("Retry") }
     }
@@ -232,7 +233,7 @@ internal fun StationRow(
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .padding(horizontal = 8.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.small)
             .background(if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
             .clickable(onClickLabel = "play", onClick = onClick)
             .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
@@ -249,7 +250,7 @@ internal fun StationRow(
                 StationArt(station, 50.dp)
                 if (isCurrent) {
                     Box(
-                        Modifier.size(50.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.45f)),
+                        Modifier.size(50.dp).clip(MaterialTheme.shapes.small).background(Color.Black.copy(alpha = 0.45f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(if (isPlaying) Icons.Filled.GraphicEq else Icons.Filled.Pause, null, tint = Accent, modifier = Modifier.size(22.dp))
@@ -260,10 +261,10 @@ internal fun StationRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     station.name, color = if (isCurrent) Accent else TextPrimary, fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
-                Text(station.subtitle(), color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(station.subtitle(), color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         IconButton(onClick = onToggleFavorite) {
@@ -284,9 +285,9 @@ internal fun StationRow(
 
 /** The station logo, or a radio icon when there is none or it fails to load. */
 @Composable
-internal fun StationArt(station: Station, size: Dp, corner: Dp = 10.dp) {
+internal fun StationArt(station: Station, size: Dp, shape: Shape = MaterialTheme.shapes.small) {
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(corner)).background(SurfaceElevated),
+        Modifier.size(size).clip(shape).background(SurfaceElevated),
         contentAlignment = Alignment.Center,
     ) {
         val fallback = @Composable {
@@ -316,11 +317,11 @@ fun LiveBadge(color: Color = Accent, modifier: Modifier = Modifier) {
     Text(
         "LIVE",
         color = color,
-        fontSize = 11.sp,
+        style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
         letterSpacing = 1.sp,
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(MaterialTheme.shapes.extraSmall)
             .background(color.copy(alpha = 0.16f))
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )

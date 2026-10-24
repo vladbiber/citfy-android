@@ -17,7 +17,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.sound.RgMode
 import com.ctify.player.player.sound.SoundEngine
 import com.ctify.player.player.sound.SoundPreset
@@ -56,14 +55,14 @@ fun HifiSection() {
             }
         }
         if (h.rgMode != RgMode.OFF) {
-            rgStatus?.let { Text("This song: $it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            rgStatus?.let { Text("This song: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             FxSlider("Preamp", "%+.1f dB".format(h.rgPreampDb), h.rgPreampDb, -12f..12f, 0f) { v ->
                 SoundSettings.setHifi { it.copy(rgPreampDb = (v * 2).roundToInt() / 2f) }
             }
             Toggle("Prevent clipping", h.rgPreventClip) { on -> SoundSettings.setHifi { it.copy(rgPreventClip = on) } }
             Text(
                 "Songs without tags are measured once (EBU R128, -18 LUFS) and remembered.",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -71,7 +70,7 @@ fun HifiSection() {
         Toggle("Loudness compensation", h.loudness) { on -> SoundSettings.setHifi { it.copy(loudness = on) } }
         Text(
             "Adds bass and a little treble as the player volume goes down, none at full volume.",
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Sub("Colour")
@@ -106,13 +105,13 @@ fun HifiSection() {
 
 @Composable
 internal fun Sub(title: String) {
-    Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+    Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
 }
 
 @Composable
 internal fun Toggle(label: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Switch(
             checked = checked, enabled = enabled, onCheckedChange = onChange,
             modifier = Modifier.semantics { contentDescription = label },

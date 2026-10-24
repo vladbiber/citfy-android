@@ -32,7 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.ui.EmptyHint
-import com.ctify.player.ui.GridHeader
+import com.ctify.player.ui.SectionHeader
 import kotlinx.coroutines.launch
 
 /** Hearted stations and the user's own stream URLs; both work offline as lists. */
@@ -54,11 +54,11 @@ internal fun FavoritesPage() {
                 }
             }
         }
-        item(key = "favh") { Column(Modifier.padding(horizontal = 8.dp)) { GridHeader("Hearted") } }
+        item(key = "favh") { Column(Modifier.padding(horizontal = 8.dp)) { SectionHeader("Hearted", Modifier.padding(top = 10.dp, start = 4.dp)) } }
         if (favorites.isEmpty()) item(key = "favempty") { EmptyHint("Tap the heart on a station to keep it here.") }
         stationRows(favorites, ui, keyPrefix = "f")
         if (custom.isNotEmpty()) {
-            item(key = "customh") { Column(Modifier.padding(horizontal = 8.dp)) { GridHeader("Your stations") } }
+            item(key = "customh") { Column(Modifier.padding(horizontal = 8.dp)) { SectionHeader("Your stations", Modifier.padding(top = 10.dp, start = 4.dp)) } }
             stationRows(custom, ui, keyPrefix = "c", onDelete = { radio.deleteCustom(it) })
         }
         item(key = "end") { Spacer(Modifier.height(16.dp)) }
@@ -90,12 +90,12 @@ private fun AddStationDialog(onDismiss: () -> Unit) {
                 )
                 OutlinedTextField(tags, { tags = it }, label = { Text("Tags (optional, comma separated)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (error != null) {
-                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 8.dp))
                 }
                 if (busy) {
                     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Checking the stream…", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
+                        Text("Checking the stream…", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             }

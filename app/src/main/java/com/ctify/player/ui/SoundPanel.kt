@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -38,11 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.fx.Mood
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.fx.FxRange
@@ -62,7 +58,7 @@ internal fun EffectRangeSection() {
         Text(
             "Extreme: slow down to ${"%.2f".format(FxRange.slow(range).start)}×, speed up to ${"%.2f".format(FxRange.slow(range).endInclusive)}×, " +
                 "reverb ${(FxRange.reverb(range).endInclusive * 100).roundToInt()}%, bass +${FxRange.bass(range).endInclusive.roundToInt()} dB",
-            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -105,7 +101,7 @@ internal fun SpeedSection() {
     val range by PlayerHub.fxRange.collectAsState()
     Section(Icons.Default.Speed, "Speed & pitch", "${"%.2f".format(rate)}× · ${semitones(rate)} semitones") {
         FxSlider("Slow", "${"%.2f".format(rate)}×", rate, FxRange.slow(range), 1f) { PlayerHub.setRate(it) }
-        Text("Steps", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ChipRow {
             SLOW_STEPS.forEachIndexed { index, (stepRate, stepReverb) ->
                 FilterChip(
@@ -156,12 +152,12 @@ internal fun TuningSection() {
         }
         Text(
             "${preset.note} → ${preset.hz} Hz · ${"%.3f".format(preset.ratio)}× — ${preset.claim}",
-            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             "The nearest note is tuned onto that frequency. The claimed effects have no " +
                 "support in research; they just sound different.",
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -178,7 +174,7 @@ internal fun SpaceSection() {
         FxSlider("Another room", "${(muffle * 100).roundToInt()}%", muffle, FxRange.muffle(range), 0f) { PlayerHub.setSpace(muffle = it) }
         Text(
             "8D slowly circles the sound around your head; best on headphones.",
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -192,7 +188,7 @@ internal fun ReverseSection() {
             Text(
                 "Plays every track from its last second to its first. Each track is decoded " +
                     "once first, so it can take a few seconds to start.",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(12.dp))
             Switch(
@@ -212,7 +208,7 @@ internal fun RainSection() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Generated live, mixed on top of the music and never slowed down.",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(12.dp))
             Switch(
@@ -252,18 +248,15 @@ internal fun ResetFxButton() {
 internal fun Section(icon: ImageVector, title: String, summary: String, content: @Composable () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(
-                    title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                Text(summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SectionHeader(title, Modifier.weight(1f))
+                Text(summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             content()
         }
@@ -290,8 +283,8 @@ fun FxSlider(
 ) {
     Column {
         Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-            Text(label, fontSize = 13.sp, modifier = Modifier.weight(1f))
-            Text(valueText, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(valueText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         MarkedSlider(
             value = value, onValueChange = onChange, valueRange = range, default = default,

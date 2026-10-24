@@ -14,6 +14,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,10 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
@@ -54,7 +56,7 @@ fun DownloadsSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SurfaceElevated) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Downloads", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Downloads", color = TextPrimary, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
                 if (items.any { it.state == DownloadState.FAILED }) TextButton(onClick = { Downloads.retryFailed() }) { Text("Retry failed") }
                 if (items.any { it.state == DownloadState.DONE || it.state == DownloadState.SKIPPED }) {
                     TextButton(onClick = { Downloads.clearFinished() }) { Text("Clear done") }
@@ -62,14 +64,14 @@ fun DownloadsSheet(onDismiss: () -> Unit) {
             }
             if (pausedUntil > System.currentTimeMillis()) {
                 val at = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(pausedUntil))
-                Text("Paused until $at. ${pauseReason ?: ""}", color = Accent, fontSize = 13.sp, modifier = Modifier.padding(vertical = 6.dp))
+                Text("Paused until $at. ${pauseReason ?: ""}", color = Accent, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 6.dp))
             }
             albums.forEach { (_, songs) ->
                 val done = songs.count { it.state == DownloadState.DONE || it.state == DownloadState.SKIPPED }
                 val total = songs.first().trackTotal ?: songs.size
                 Text(
                     "${songs.first().groupTitle ?: "Album"}: $done/$total",
-                    color = TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp),
+                    color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp),
                 )
                 LinearProgressIndicator(progress = { done.toFloat() / total.coerceAtLeast(1) }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), color = Accent)
             }
@@ -93,7 +95,7 @@ private fun DownloadRow(d: DownloadEntity, handoff: String?, onHandoff: () -> Un
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(d.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(status(d), color = if (d.state == DownloadState.FAILED) Accent else TextMuted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(status(d), color = if (d.state == DownloadState.FAILED) Accent else TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (d.state == DownloadState.RUNNING && d.bytesTotal > 0) {
                 LinearProgressIndicator(
                     progress = { d.bytesDone.toFloat() / d.bytesTotal },

@@ -5,16 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.sound.SoundEngine
 import com.ctify.player.ui.BassSection
 import com.ctify.player.ui.EffectRangeSection
@@ -23,6 +18,7 @@ import com.ctify.player.ui.RainSection
 import com.ctify.player.ui.ResetFxButton
 import com.ctify.player.ui.ReverbSection
 import com.ctify.player.ui.ReverseSection
+import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.SpaceSection
 import com.ctify.player.ui.SpeedSection
 import com.ctify.player.ui.TuningSection
@@ -37,10 +33,7 @@ fun SoundTab(modifier: Modifier = Modifier) {
         SuggestionCard()
         MoodsSection()
         GenrePresetsRow()
-        Text(
-            "Effects", fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
-            modifier = Modifier.padding(top = 4.dp).semantics { heading() },
-        )
+        SectionHeader("Effects", Modifier.padding(top = 4.dp))
         SpeedSection()
         ReverbSection()
         BassSection()

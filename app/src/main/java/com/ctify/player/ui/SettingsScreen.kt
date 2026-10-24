@@ -54,8 +54,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ctify.player.CtifyApp
 import com.ctify.player.data.Backup
@@ -125,8 +125,8 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 ScreenTitle("Settings")
             }
 
-            Header("Colors")
-            Text("Theme", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+            SectionHeader("Colors", Modifier.padding(top = 24.dp, bottom = 4.dp))
+            Text("Theme", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
             // Below Android 12 there are no wallpaper colors and Wallpaper looks like Ctify Blue, so only Ctify Blue is offered.
             val sources = if (Appearance.dynamicSupported) ThemeSource.entries else ThemeSource.entries - ThemeSource.WALLPAPER
             val shownSource = if (source in sources) source else ThemeSource.CTIFY_BLUE
@@ -134,15 +134,15 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
             if (source == ThemeSource.DUO) {
                 SwatchRow("Color 1", "Play button, selected tab, sliders and switches", color1, Appearance::setColor1)
                 SwatchRow("Color 2", "Chips, badges and the gradient. Same as color 1 gives a darker shade.", color2, Appearance::setColor2)
-                Text("Gradient", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+                Text("Gradient", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
                 Choice(GradientStyle.entries, gradient, { it.label }, Appearance::setGradient)
             }
-            Text("Light or dark", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+            Text("Light or dark", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
             Choice(ThemeMode.entries, mode, { it.label }, Appearance::setMode)
             SwitchRow("Pure black", "Black background in dark theme, for OLED screens", pureBlack, Appearance::setPureBlack, enabled = dark)
             SwitchRow("Cover colors in Now Playing", "Tint the player with the album cover instead of the theme", coverColors, Appearance::setCoverColors)
 
-            Header("Network")
+            SectionHeader("Network", Modifier.padding(top = 24.dp, bottom = 4.dp))
             SwitchRow("Offline mode", "Block all internet use. Your music keeps working.", offline, { NetworkGate.setOffline(it); if (!it) Downloads.kick() })
             SwitchRow("Radio", "Station directory and live streams", radioOn, { NetworkGate.setEnabled(Feature.RADIO, it) }, enabled = !offline)
             SwitchRow(
@@ -159,7 +159,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
             )
             SwitchRow("Downloads only while charging", "Wait until the phone is plugged in", chargingOnly, Downloads::setChargingOnly, enabled = !offline && youtubeOn)
             var bufferMin by remember { mutableIntStateOf(RadioPrefs.bufferMinutes(ctx)) }
-            Text("Radio rewind buffer", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
+            Text("Radio rewind buffer", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
             Text(
                 if (bufferMin == 0) "Off: radio plays live, no pause or rewind"
                 else "Keeps the last $bufferMin min (about ${bufferMin} MB) so you can pause, rewind and scratch live radio",
@@ -175,7 +175,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 modifier = Modifier.semantics { contentDescription = "Radio rewind buffer, $bufferMin minutes" },
             )
 
-            Header("Backup")
+            SectionHeader("Backup", Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(
                 "Saves your favorites, playlists, imported songs, sound and look settings in one file. " +
                     "Imported songs and custom covers point to files on this phone, so after a reinstall you may need to import those again.",
@@ -233,16 +233,6 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun Header(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 24.dp, bottom = 4.dp).semantics { heading() },
-    )
-}
-
-@Composable
 private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
     Row(
         Modifier
@@ -253,7 +243,7 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChang
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
@@ -275,7 +265,7 @@ private fun <T> Choice(options: List<T>, selected: T, label: (T) -> String, onSe
 
 @Composable
 private fun SwatchRow(title: String, subtitle: String, selected: Swatch, onSelect: (Swatch) -> Unit) {
-    Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
+    Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
     Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     FlowRow(Modifier.fillMaxWidth().padding(vertical = 4.dp).selectableGroup()) {
         Swatch.entries.forEach { sw ->

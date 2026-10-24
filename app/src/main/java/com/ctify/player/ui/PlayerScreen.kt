@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -84,7 +83,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
@@ -122,7 +120,6 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.ctify.player.player.fx.RETUNE_PRESETS
@@ -334,7 +331,7 @@ private fun TopPill(onRadio: Boolean, onClose: () -> Unit, onSource: (radio: Boo
                     ) {
                         Text(
                             label,
-                            fontSize = 13.sp,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = if (on) Ink else InkDim,
                             fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
                             modifier = Modifier
@@ -419,7 +416,7 @@ private fun StripChip(
                 Icon(icon, contentDescription = null, tint = if (on) accent else Ink, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(5.dp))
             }
-            Text(label, fontSize = 12.sp, color = if (on) Ink else InkDim, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = if (on) Ink else InkDim, maxLines = 1)
         }
     }
 }
@@ -438,8 +435,8 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill:
             brush = fill,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatMs(live.positionMs.toInt()), fontSize = 11.sp, color = InkDim)
-            Text(formatMs(live.durationMs.toInt()), fontSize = 11.sp, color = InkDim)
+            Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
+            Text(formatMs(live.durationMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
         }
     }
 }
@@ -455,17 +452,16 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
     val stationFavs by app.radio.favoriteIds.collectAsState(initial = emptySet())
     val fav = if (station != null) station.uuid in stationFavs else track != null && track.id in favorites
 
-    Surface(color = Glass, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
+    Surface(color = Glass, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
         Column(Modifier.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        track?.title ?: "Nothing playing", color = Ink, fontSize = 17.sp,
-                        fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        track?.title ?: "Nothing playing", color = Ink, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         state?.radioStatus.takeIf { station != null } ?: track?.artist ?: "pick something in Library",
-                        color = InkDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = InkDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
                 IconButton(onClick = {
@@ -519,10 +515,10 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                     } else if (station != null) {
                         Row(Modifier.heightIn(min = 32.dp).padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             LiveBadge(accent)
-                            Text(station.name, fontSize = 11.sp, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+                            Text(station.name, style = MaterialTheme.typography.labelSmall, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
                         }
                     } else if (seekBar) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
-                        Text(formatMs(live.positionMs.toInt()), fontSize = 11.sp, color = InkDim)
+                        Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
                         PillSlider(
                             value = live.fraction,
                             onChange = { live.preview = (it * live.durationMs).toLong() },
@@ -534,7 +530,7 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                             marks = chapterMarks(live),
                             brush = fill,
                         )
-                        Text(formatMs(live.durationMs.toInt()), fontSize = 11.sp, color = InkDim)
+                        Text(formatMs(live.durationMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
                     }
                     if (station == null) ChapterRow(live, Ink)
                 }

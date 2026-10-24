@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.formatMs
 import com.ctify.player.ui.skins.LiveProgress
@@ -25,7 +24,7 @@ fun RewindRow(live: LiveProgress, start: Long, edge: Long, accent: Color) {
     val behind = (edge - live.positionMs).coerceAtLeast(0L)
     val atLive = behind < 6_000
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
-        Text(if (atLive) "" else "-${formatMs(behind.toInt())}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(min = 36.dp))
+        Text(if (atLive) "" else "-${formatMs(behind.toInt())}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(min = 36.dp))
         PillSlider(
             value = ((live.positionMs - start) / span).coerceIn(0f, 1f),
             onChange = { live.preview = start + (it * span).toLong() },
@@ -36,6 +35,6 @@ fun RewindRow(live: LiveProgress, start: Long, edge: Long, accent: Color) {
             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
         )
         if (atLive) LiveBadge(accent)
-        else TextButton(onClick = { PlayerHub.seek(edge.toInt()) }) { Text("GO LIVE", color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+        else TextButton(onClick = { PlayerHub.seek(edge.toInt()) }) { Text("GO LIVE", color = accent, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
     }
 }

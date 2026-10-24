@@ -35,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.radio.RadioRepository
 import com.ctify.player.radio.RadioTab
@@ -179,7 +178,7 @@ private fun ForYouPage() {
         item(key = "intro") {
             Text(
                 "The cliamp channels, then stations like the ones you play and heart.",
-                color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }
         loadStatus(state, blocked, List<Station>::isEmpty, "Nothing here yet. Try Browse.")
@@ -204,8 +203,7 @@ private fun PinnedTabPage(tab: RadioTab, onSettings: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    tabSummary(tab), color = TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
+                    tabSummary(tab), color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onSettings) {
                     Icon(Icons.Filled.Tune, contentDescription = "Settings for ${tab.title}", tint = TextSecondary)

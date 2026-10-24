@@ -30,7 +30,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
@@ -84,7 +83,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.data.Playlist
 import com.ctify.player.data.Track
@@ -110,28 +108,12 @@ import com.ctify.player.ui.youtube.ytStatus
 internal fun LazyGridScope.full(content: @Composable () -> Unit) =
     item(span = { GridItemSpan(maxLineSpan) }) { content() }
 
-@Composable
-internal fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text, color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold,
-        modifier = modifier.padding(vertical = 6.dp).semantics { heading() },
-    )
-}
-
-@Composable
-internal fun GridHeader(text: String) {
-    Text(
-        text, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 10.dp, start = 4.dp).semantics { heading() },
-    )
-}
-
 /** A playlist as a cover card in a grid. */
 @Composable
 internal fun PlaylistCard(playlist: Playlist, firstTrack: Track?, onClick: () -> Unit) {
     Column(
         Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClickLabel = "open", onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = "Playlist ${playlist.name}, ${playlist.trackIds.size} songs"
@@ -139,23 +121,23 @@ internal fun PlaylistCard(playlist: Playlist, firstTrack: Track?, onClick: () ->
             .padding(4.dp),
     ) {
         if (playlist.coverUri != null || firstTrack != null) {
-            PlaylistArt(playlist, firstTrack, 0.dp, corner = 14.dp, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+            PlaylistArt(playlist, firstTrack, 0.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
         } else {
             Box(
-                Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(SurfaceElevated),
+                Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.small).background(SurfaceElevated),
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Accent, modifier = Modifier.size(36.dp)) }
         }
         Spacer(Modifier.height(8.dp))
-        Text(playlist.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text("${playlist.trackIds.size} songs", color = TextSecondary, fontSize = 12.sp, maxLines = 1)
+        Text(playlist.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text("${playlist.trackIds.size} songs", color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
 
 @Composable
 internal fun EmptyHint(text: String) {
     Box(Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 8.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = TextSecondary, fontSize = 14.sp)
+        Text(text, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -347,7 +329,7 @@ private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             label,
             color = if (selected) MaterialTheme.colorScheme.onPrimary else TextPrimary,
-            fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clip(CircleShape)
                 .background(if (selected) Accent else SurfaceElevated)
@@ -432,13 +414,13 @@ private fun PlaylistDetail(
         }
         full {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                PlaylistArt(playlist, plTracks.firstOrNull(), 180.dp, corner = 18.dp)
+                PlaylistArt(playlist, plTracks.firstOrNull(), 180.dp, shape = MaterialTheme.shapes.large)
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    name, color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                    name, color = TextPrimary, style = MaterialTheme.typography.headlineMedium, maxLines = 2,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() },
                 )
-                Text("Playlist · ${plTracks.size} songs", color = TextSecondary, fontSize = 13.sp)
+                Text("Playlist · ${plTracks.size} songs", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = { viewModel.playQueue(plTracks, 0) }, enabled = plTracks.isNotEmpty()) {
@@ -565,10 +547,10 @@ private fun ReorderRow(track: Track, index: Int, size: Int, modifier: Modifier, 
         },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("${index + 1}", color = TextMuted, fontSize = 13.sp, modifier = Modifier.width(28.dp))
+        Text("${index + 1}", color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(28.dp))
         Column(Modifier.weight(1f)) {
             Text(track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Icon(
             Icons.Filled.DragHandle, "Drag to move ${track.title}", tint = TextSecondary,

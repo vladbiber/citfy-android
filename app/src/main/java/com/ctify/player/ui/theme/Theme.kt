@@ -1,8 +1,10 @@
 package com.ctify.player.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -16,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.materialkolor.material3.rememberDynamicColorScheme
 
@@ -82,13 +85,22 @@ private val CtifyLight = lightColorScheme(
     surfaceContainerHighest = Color(0xFFDDE3EE),
 )
 
+// Sizes and weights only: line height and letter spacing still come from bodyLarge, as with hand-typed sizes.
 private val CtifyType = Typography(
-    headlineLarge = TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 30.sp),
-    headlineMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp),
-    titleLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp),
-    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
-    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp),
-    labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp),
+    headlineMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 28.sp), // screen titles
+    titleLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp), // sheet titles, hero cards
+    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 18.sp), // section headers, card titles
+    // bodyLarge stays Material's 16sp: list titles and plain text.
+    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 13.sp), // secondary text, settings and sound body
+    labelSmall = TextStyle(fontWeight = FontWeight.Normal, fontSize = 12.sp), // captions, times, chip labels
+)
+
+private val CtifyShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp),
 )
 
 /** True when the app is drawn dark, after the user's System/Light/Dark choice. */
@@ -116,7 +128,7 @@ fun CtifyTheme(content: @Composable () -> Unit) {
         else -> CtifyLight
     }
     if (dark && pureBlack) scheme = scheme.pureBlack()
-    MaterialTheme(colorScheme = scheme, typography = CtifyType, content = content)
+    MaterialTheme(colorScheme = scheme, typography = CtifyType, shapes = CtifyShapes, content = content)
 }
 
 /** Color 1 drives primary, color 2 secondary + tertiary; MaterialKolor keeps the tones contrast-safe. */

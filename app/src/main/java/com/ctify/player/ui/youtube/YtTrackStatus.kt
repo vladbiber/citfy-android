@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -28,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.data.Playlist
 import com.ctify.player.data.Track
 import com.ctify.player.ui.theme.TextSecondary
@@ -99,7 +99,7 @@ fun PlaylistDownloadBar(playlist: Playlist, tracks: List<Track>, states: Map<Str
                 done == 0 -> "Plays online · not downloaded"
                 else -> "$done of ${yt.size} downloaded · the rest plays online"
             },
-            color = TextSecondary, fontSize = 13.sp,
+            color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
         )
         if (missing.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
             FilledTonalButton(onClick = {
