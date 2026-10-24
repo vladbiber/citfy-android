@@ -554,6 +554,15 @@ class MusicRepository private constructor(private val appContext: Context, datab
         }
     }
 
+    /** A streamed song and its downloaded copy share one history entry, see [playedTracks]. */
+    private fun historyIds(id: String) = listOf(id, id.replaceFirst(Regex("^yt_"), STREAM_PREFIX), id.replaceFirst(Regex("^$STREAM_PREFIX"), "yt_")).distinct()
+
+    suspend fun hasPlays(id: String): Boolean = dao.hasPlays(historyIds(id))
+
+    fun removeFromHistory(id: String) { writer.launch { dao.deletePlays(historyIds(id)) } }
+
+    fun clearHistory() { writer.launch { dao.clearPlays() } }
+
     /** Distinct tracks, newest play first. */
     fun recentlyPlayed(limit: Int): Flow<List<Track>> = dao.recentPlays(limit).combine(tracks) { rows, _ -> rows.playedTracks() }
 
