@@ -77,7 +77,10 @@ enum class Skin(val label: String) {
  * at the slowed rate, so the clock does too. A local seek shows up at once.
  */
 @Stable
-class LiveProgress {
+class LiveProgress(
+    /** a preview (the skin picker): drawn without the live spectrum so nothing moves */
+    val still: Boolean = false,
+) {
     var anchorMs by mutableLongStateOf(0L)
     var anchorAt by mutableLongStateOf(0L)
     var clock by mutableLongStateOf(0L)
