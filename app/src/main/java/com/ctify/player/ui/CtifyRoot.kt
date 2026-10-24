@@ -11,13 +11,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Explore
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Radio
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -55,17 +55,16 @@ import com.ctify.player.youtube.YtIntake
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
-    Search("Search", Icons.Filled.Search),
+    Discover("Discover", Icons.Filled.Explore),
     Library("Library", Icons.Filled.LibraryMusic),
     Radio("Radio", Icons.Filled.Radio),
-    Sound("Sound", Icons.Filled.GraphicEq),
+    Settings("Settings", Icons.Filled.Settings),
 }
 
 @Composable
 fun CtifyRoot(viewModel: PlayerViewModel) {
     var tab by remember { mutableIntStateOf(0) }
     var showNowPlaying by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
     var showWheel by remember { mutableStateOf(false) }
     var showYouTube by remember { mutableStateOf(false) }
     val sharedLink by YtIntake.pending.collectAsState()
@@ -87,9 +86,14 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     val folderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> if (uri != null) viewModel.importFolder(uri) }
-    val onImport: () -> Unit = { importLauncher.launch(arrayOf("audio/*")) }
-    val onImportFolder: () -> Unit = { folderLauncher.launch(null) }
     val onMore: (String) -> Unit = { moreTrackId = it }
+    val add = AddActions(
+        importFolder = { folderLauncher.launch(null) },
+        importFile = { importLauncher.launch(arrayOf("audio/*")) },
+        youTube = { showYouTube = true },
+        spotify = { YtIntake.spotify.value = "" },
+        downloads = { showDownloads = true },
+    )
 
     Scaffold(
         containerColor = BgBlack,
@@ -136,25 +140,20 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     onMore = onMore,
                     onOpenPlaylist = { name -> openedPlaylist = name; tab = 2 },
                     onOpenFavorites = { librarySection = 1; openedPlaylist = null; tab = 2 },
-                    onOpenSettings = { showSettings = true },
                     onSpinWheel = { showWheel = true },
                 )
-                1 -> SearchScreen(viewModel, onMore = onMore)
+                1 -> DiscoverScreen(viewModel, onMore = onMore, add = add)
                 2 -> LibraryScreen(
                     viewModel,
                     onMore = onMore,
-                    onImport = onImport,
-                    onImportFolder = onImportFolder,
+                    add = add,
                     openedPlaylist = openedPlaylist,
                     onOpenPlaylist = { openedPlaylist = it },
                     section = librarySection,
                     onSection = { librarySection = it },
-                    onYouTube = { showYouTube = true },
-                    onSpotify = { YtIntake.spotify.value = "" },
-                    onDownloads = { showDownloads = true },
                 )
                 3 -> RadioScreen()
-                else -> SoundScreen()
+                else -> SettingsScreen(onClose = { tab = 0 })
             }
         }
     }
@@ -199,15 +198,6 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
 
     moreTrackId?.let { id ->
         AddToPlaylistSheet(viewModel, trackId = id, onDismiss = { moreTrackId = null })
-    }
-
-    AnimatedVisibility(
-        visible = showSettings,
-        enter = slideInVertically(initialOffsetY = { it }),
-        exit = slideOutVertically(targetOffsetY = { it }),
-    ) {
-        BackHandler { showSettings = false }
-        SettingsScreen(onClose = { showSettings = false })
     }
 
     AnimatedVisibility(
