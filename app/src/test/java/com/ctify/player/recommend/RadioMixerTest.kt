@@ -67,4 +67,16 @@ class RadioMixerTest {
         )
         assertEquals(listOf("1", "4", "2", "3"), out.map { it.videoId })
     }
+
+    @Test
+    fun tidyTurnsVideoTitlesIntoSongTitles() {
+        val v = RadioMixer.tidy(YtSong("v", "Rick Astley - Never Gonna Give You Up (Official Music Video)", "RickAstleyVEVO", thumbnail = "https://i.ytimg.com/vi/v/hqdefault.jpg"))
+        assertEquals("Never Gonna Give You Up", v.title)
+        assertEquals("Rick Astley", v.artist)
+        assertEquals("https://i.ytimg.com/vi/v/mqdefault.jpg", v.thumbnail)
+        // a dash that isn't the artist stays in the title
+        assertEquals("Song - Remastered", RadioMixer.tidy(s("r", "Song - Remastered", "Band - Topic")).title)
+        assertEquals("Band", RadioMixer.tidy(s("r", "Song - Remastered", "Band - Topic")).artist)
+        assertEquals("Hello", RadioMixer.tidy(s("l", "Hello [Lyrics]", "Adele")).title)
+    }
 }

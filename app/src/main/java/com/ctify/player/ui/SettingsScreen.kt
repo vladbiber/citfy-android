@@ -88,6 +88,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
     val gradient by Appearance.gradient.collectAsState()
     val pureBlack by Appearance.pureBlack.collectAsState()
     val coverColors by Appearance.coverColors.collectAsState()
+    val reactToMusic by Appearance.reactToMusic.collectAsState()
     val dark = isAppInDarkTheme()
     val offline by NetworkGate.offline.collectAsState()
     val features by NetworkGate.enabled.collectAsState()
@@ -151,6 +152,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
             Choice(ThemeMode.entries, mode, { it.label }, Appearance::setMode)
             SwitchRow("Pure black", "Black background in dark theme, for OLED screens", pureBlack, Appearance::setPureBlack, enabled = dark)
             SwitchRow("Cover colors in Now Playing", "Tint the player with the album cover instead of the theme", coverColors, Appearance::setCoverColors)
+            SwitchRow("React to music", "Player background pulses with the bass. Off in battery saver.", reactToMusic, Appearance::setReactToMusic)
 
             SectionHeader("Network", Modifier.padding(top = 24.dp, bottom = 4.dp))
             SwitchRow("Offline mode", "Block all internet use. Your music keeps working.", offline, { NetworkGate.setOffline(it); if (!it) Downloads.kick() })
@@ -167,6 +169,8 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 "Downloads on Wi-Fi only", "Wait for Wi-Fi before downloading", wifiOnlyDownloads,
                 { NetworkGate.setWifiOnlyDownloads(it); Downloads.kick(replace = true) }, enabled = !offline,
             )
+            SwitchRow("Genres and creators (Last.fm)", "Genre and artist suggestions on Home", features[Feature.LASTFM] != false, { NetworkGate.setEnabled(Feature.LASTFM, it) }, enabled = !offline)
+            SwitchRow("Lyrics (LRCLIB)", "Synced lyrics in the player", features[Feature.LYRICS] != false, { NetworkGate.setEnabled(Feature.LYRICS, it) }, enabled = !offline)
             SwitchRow("Downloads only while charging", "Wait until the phone is plugged in", chargingOnly, Downloads::setChargingOnly, enabled = !offline && youtubeOn)
             val folderName = remember(folder) { folder?.let { DocumentFile.fromTreeUri(ctx, it)?.name ?: it.lastPathSegment } }
             Row(

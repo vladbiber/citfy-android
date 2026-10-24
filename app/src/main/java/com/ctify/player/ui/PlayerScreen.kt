@@ -1,5 +1,9 @@
 package com.ctify.player.ui
 
+import com.ctify.player.ui.skins.radio.RadioSkin
+import com.ctify.player.ui.skins.radio.RadioSkinView
+import com.ctify.player.ui.skins.radio.aspectRatio
+import androidx.compose.foundation.layout.aspectRatio
 import android.os.Build
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -197,6 +201,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     var skin by remember { mutableStateOf(Skin.load(ctx)) }
     // a visualizer, when chosen, takes the stage instead of the skin
     var visualizer by remember { mutableStateOf(Visualizer.load(ctx)) }
+    var radioSkin by remember { mutableStateOf(RadioSkin.load(ctx)) }
     var sheet by remember { mutableStateOf(false) }
     var sleep by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
@@ -300,12 +305,18 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                         val stageWidth by animateDpAsState(if (lyricsOn) stageMax * 0.42f else stageMax, label = "stage")
                         Box(Modifier.width(stageWidth), contentAlignment = Alignment.Center) {
                             AnimatedContent(
-                                targetState = visualizer ?: skin,
+                                targetState = visualizer ?: if (state?.station != null) radioSkin else skin,
                                 transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
                                 label = "skin",
                             ) { s ->
                                 if (s is Visualizer) VisualizerView(s, art, accent, live.playing, still = false, side = minOf(stageWidth, stageHeight))
                                 else if (s is Skin) SkinView(s, live, art, accent, track, skinSide(s, stageWidth, stageHeight), seek = state?.station == null, fill = fill)
+                                else if (s is RadioSkin) state?.station?.let { st ->
+                                    RadioSkinView(
+                                        s, st.name, track?.title?.takeIf { it != st.name }, art, accent, live.playing, still = false,
+                                        onTogglePlay = { PlayerHub.togglePlay() }, modifier = radioSkinSize(s, stageWidth, stageHeight),
+                                    )
+                                }
                             }
                         }
                     }
@@ -360,15 +371,24 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     if (picker) {
         val still = remember { LiveProgress(still = true) }
         SkinPicker<Enum<*>>(
-            tabs = listOf("Skins" to Skin.entries, "Visualizers" to Visualizer.entries),
-            current = visualizer ?: skin,
-            label = { (it as? Skin)?.label ?: (it as Visualizer).label },
+            // the radio side picks from the radio skins; songs keep theirs
+            tabs = listOf((if (state?.station != null) "Skins" to RadioSkin.entries else "Skins" to Skin.entries), "Visualizers" to Visualizer.entries),
+            current = visualizer ?: if (state?.station != null) radioSkin else skin,
+            label = { (it as? Skin)?.label ?: (it as? RadioSkin)?.label ?: (it as Visualizer).label },
             preview = { item, space ->
                 if (item is Skin) SkinView(item, still, art, accent, track, skinSide(item, space.width, space.height), seek = false)
                 else if (item is Visualizer) VisualizerView(item, art, accent, playing = false, still = true, side = minOf(space.width, space.height))
+                else if (item is RadioSkin) RadioSkinView(
+                    item, state?.station?.name ?: "ctify radio", null, art, accent, playing = false, still = true,
+                    onTogglePlay = {}, modifier = radioSkinSize(item, space.width, space.height),
+                )
             },
             onSelect = {
-                if (it is Skin) { skin = it; Skin.save(ctx, it); visualizer = null } else visualizer = it as Visualizer
+                when (it) {
+                    is Skin -> { skin = it; Skin.save(ctx, it); visualizer = null }
+                    is RadioSkin -> { radioSkin = it; RadioSkin.save(ctx, it); visualizer = null }
+                    else -> visualizer = it as Visualizer
+                }
                 Visualizer.save(ctx, visualizer)
                 picker = false
             },
@@ -792,4 +812,11 @@ private fun Toggle(icon: ImageVector, label: String, on: Boolean, accent: Color,
             Icon(icon, contentDescription = null, tint = if (on) accent else Ink, modifier = Modifier.size(20.dp))
         }
     }
+}
+
+/** Fits a radio skin into the stage at its own width/height ratio. */
+private fun radioSkinSize(s: RadioSkin, maxW: Dp, maxH: Dp): Modifier {
+    val r = s.aspectRatio()
+    val w = minOf(maxW, maxH * r)
+    return Modifier.width(w).aspectRatio(r)
 }

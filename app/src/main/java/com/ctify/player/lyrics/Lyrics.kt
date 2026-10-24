@@ -72,8 +72,7 @@ object LyricsRepository {
 
     /** null on 404; other failures throw. */
     private suspend fun fetch(url: HttpUrl): String? = withContext(Dispatchers.IO) {
-        // shortcut: lyrics ride on the MusicBrainz lookup switch, give them their own Feature when Settings lists one
-        val req = NetworkGate.request(url.toString(), Feature.MUSICBRAINZ).header("User-Agent", UA).build()
+        val req = NetworkGate.request(url.toString(), Feature.LYRICS).header("User-Agent", UA).build()
         NetworkGate.client.newCall(req).execute().use { r ->
             when {
                 r.code == 404 -> null

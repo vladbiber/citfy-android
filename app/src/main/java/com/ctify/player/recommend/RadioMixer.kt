@@ -51,8 +51,33 @@ object RadioMixer {
             kept += s
         }
         val (fresh, heard) = kept.partition { it.videoId !in played }
-        return spread(fresh + heard)
+        return spread(fresh + heard).map(::tidy)
     }
+
+    private val VIDEO_TAG = Regex(
+        "\\s*[(\\[](official[^)\\]]*|music video|lyrics?( video)?|audio|video|visuali[sz]er|hd|4k|mv)[)\\]]",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Mix items are music videos: "Artist - Song (Official Video)" by "ArtistVEVO" becomes "Song" by "Artist",
+     * and the 16:9 medium thumbnail replaces the letterboxed 4:3 one so square covers have no black bars.
+     */
+    fun tidy(s: YtSong): YtSong {
+        val artist = s.artist.removeSuffix(" - Topic").replace(Regex("(?i)vevo$"), "").trim().ifEmpty { s.artist }
+        val parts = s.title.split(" - ", limit = 2)
+        // only split when the left side really is the artist, so "Song - Remastered" stays whole;
+        // spaces are ignored because channel names drop them ("RickAstleyVEVO")
+        val split = parts.size == 2 && squash(artistKey(parts[0])) == squash(artistKey(artist))
+        val title = if (split) parts[1] else s.title
+        return s.copy(
+            title = title.replace(VIDEO_TAG, "").trim().ifEmpty { s.title },
+            artist = if (split) parts[0].trim() else artist,
+            thumbnail = s.thumbnail?.replace("/hqdefault.jpg", "/mqdefault.jpg"),
+        )
+    }
+
+    private fun squash(s: String) = s.filter { it.isLetterOrDigit() }
 
     /** Takes one song from each list in turn, then cleans the result. */
     fun mix(lists: List<List<YtSong>>, played: Set<String>): List<YtSong> {
