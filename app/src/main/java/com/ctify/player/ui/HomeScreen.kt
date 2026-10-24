@@ -55,7 +55,12 @@ import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.player.PlayerViewModel
+import com.ctify.player.recommend.Recommendations
+import com.ctify.player.recommend.Shelf
+import com.ctify.player.ui.home.ForYouPager
 import com.ctify.player.ui.radio.HeardSection
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import com.ctify.player.ui.radio.HomeStationRows
 
 @Composable
@@ -77,6 +82,11 @@ fun HomeScreen(
     var query by rememberSaveable { mutableStateOf("") }
     // saved YouTube songs load in addedAt order
     val downloaded = remember(tracks) { tracks.filter { it.id.startsWith("yt_") }.asReversed() }
+    val ctx = LocalContext.current
+    val shelves by Recommendations.shelves.collectAsStateWithLifecycle()
+    val shelf = remember(shelves) { shelves.mapValues { (_, songs) -> songs.map { it.toTrack() } } }
+    // waits for the library so liked and downloaded seeds exist
+    LaunchedEffect(tracks.isNotEmpty()) { if (tracks.isNotEmpty()) Recommendations.refresh(ctx, viewModel.repository) }
 
     Box(Modifier.fillMaxSize()) {
     // Two colors: the liquid wash sits behind the header and fades out downward
@@ -106,6 +116,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder or add songs from YouTube.") }
+            shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
             if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             if (most.isNotEmpty()) full { TrackCarousel("Most played", most, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             full {
@@ -130,6 +141,10 @@ fun HomeScreen(
                     onClick = onSpinWheel,
                 )
             }
+            listOf(Shelf.PLAYED, Shelf.LIKED, Shelf.DOWNLOADS).forEach { s ->
+                shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+            }
+            if (downloaded.isNotEmpty()) full { TrackCarousel("Downloaded", downloaded, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             full { HomeStationRows() }
             if (playlists.isNotEmpty()) {
                 full { SectionHeader("Playlists", Modifier.padding(top = 10.dp, start = 4.dp)) }
@@ -139,7 +154,6 @@ fun HomeScreen(
                     }
                 }
             }
-            if (downloaded.isNotEmpty()) full { TrackCarousel("Downloaded", downloaded, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             full { HeardSection() }
         }
     }
