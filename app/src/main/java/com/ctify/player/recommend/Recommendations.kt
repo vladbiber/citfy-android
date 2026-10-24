@@ -7,7 +7,6 @@ import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.ui.youtube.toYtSong
 import com.ctify.player.ui.youtube.ytVideoId
-import com.ctify.player.youtube.SongMatcher
 import com.ctify.player.youtube.YouTubeSource
 import com.ctify.player.youtube.YtSong
 import kotlinx.coroutines.CancellationException
@@ -23,7 +22,6 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 enum class Shelf(val title: String) {
     FOR_YOU("For you"),
@@ -49,8 +47,6 @@ object Recommendations {
     private var triedAt = 0L
     private var loaded = false
     private var job: Job? = null
-    // local files matched to a video once per session; "" = no match
-    private val matched = ConcurrentHashMap<String, String>()
 
     /** Shows the cached shelves and refreshes them in the background once they are stale. */
     fun refresh(context: Context, repo: MusicRepository) {
@@ -104,14 +100,7 @@ object Recommendations {
         return RadioMixer.clean(known.map { it.toYtSong() }, RadioMixer.mix(mixes, played), played).take(PER_SHELF)
     }
 
-    private suspend fun videoId(t: Track): String? {
-        t.ytVideoId()?.let { return it }
-        matched[t.id]?.let { return it.ifEmpty { null } }
-        val v = runCatching { SongMatcher.candidates(t.artist, t.title, t.durationMs).firstOrNull()?.takeIf { it.score >= SongMatcher.ACCEPT }?.song?.videoId }
-            .getOrElse { if (it is CancellationException) throw it else return null }
-        matched[t.id] = v.orEmpty()
-        return v
-    }
+    private suspend fun videoId(t: Track): String? = t.ytVideoId() ?: SongRadio.find(t.artist, t.title, t.durationMs)?.videoId
 
     private fun read(file: File) {
         if (!file.exists()) return
