@@ -110,6 +110,16 @@ import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.radio.Station
+import com.ctify.player.lyrics.Lyrics
+import com.ctify.player.lyrics.LyricsRepository
+import com.ctify.player.ui.player.LyricsView
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.runtime.produceState
 import com.ctify.player.ui.radio.RadioUi
 import com.ctify.player.ui.radio.rememberRadioUi
 import com.ctify.player.ui.radio.stationRows
@@ -166,6 +176,12 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     var queue by remember { mutableStateOf(false) }
     var sleep by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
+    // null while looking; fetched for the Now Playing side only, so the button can grey out early
+    val lyrics by produceState<Lyrics?>(null, track?.id, state?.station == null) {
+        value = track?.let(LyricsRepository::cached)
+        if (value == null && track != null && state?.station == null) value = LyricsRepository.get(track)
+    }
     var panel by remember { mutableStateOf<ChipPanel?>(null) }
     val radio = (ctx.applicationContext as CtifyApp).radio
     val recents by radio.recents.collectAsState(initial = emptyList())
@@ -210,6 +226,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             val compact = maxHeight < 560.dp
             val screenHeight = maxHeight
             val main: @Composable ColumnScope.() -> Unit = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                 TopPill(
                     onRadio, onClose,
                     onSource = { toRadio ->
@@ -224,6 +241,11 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     },
                     onSound = { sheet = true },
                 )
+                if (!onRadio && track != null) {
+                    Spacer(Modifier.width(8.dp))
+                    LyricsButton(lyrics, showLyrics, accent) { showLyrics = it }
+                }
+                }
                 BoxWithConstraints(
                     Modifier
                         .fillMaxWidth()
@@ -241,12 +263,26 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     contentAlignment = Alignment.Center,
                 ) {
                     if (pickStation) FilledTonalButton(onClick = onOpenRadio) { Text("Pick a station") }
-                    else AnimatedContent(
-                        targetState = skin,
-                        transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
-                        label = "skin",
-                    ) { s ->
-                        SkinView(s, live, art, accent, track, skinSide(s, maxWidth, maxHeight), seek = state?.station == null, fill = fill)
+                    else {
+                    val stageMax = maxWidth
+                    val stageHeight = maxHeight
+                    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                        // lyrics on the left, the skin shrinks to the right
+                        val lyricsOn = showLyrics && !onRadio && lyrics?.found == true
+                        AnimatedVisibility(lyricsOn, Modifier.weight(1f), enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+                            lyrics?.let { LyricsView(it, live, Ink, InkDim, Modifier.fillMaxSize().padding(end = 8.dp)) }
+                        }
+                        val stageWidth by animateDpAsState(if (lyricsOn) stageMax * 0.42f else stageMax, label = "stage")
+                        Box(Modifier.width(stageWidth), contentAlignment = Alignment.Center) {
+                            AnimatedContent(
+                                targetState = skin,
+                                transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
+                                label = "skin",
+                            ) { s ->
+                                SkinView(s, live, art, accent, track, skinSide(s, stageWidth, stageHeight), seek = state?.station == null, fill = fill)
+                            }
+                        }
+                    }
                     }
                 }
                 ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true }, onSleep = { sleep = true })
@@ -394,6 +430,25 @@ private fun Backdrop(art: String?, accent: Color) {
             )
         )
     )
+}
+
+/** Round lyrics switch beside the top pill; greyed out when the song has none. */
+@Composable
+private fun LyricsButton(lyrics: Lyrics?, on: Boolean, accent: Color, onToggle: (Boolean) -> Unit) {
+    val found = lyrics?.found == true
+    Surface(color = if (on) accent.copy(alpha = 0.3f) else Glass, shape = CircleShape, modifier = Modifier.size(48.dp)) {
+        IconToggleButton(checked = on, onCheckedChange = onToggle, enabled = found) {
+            Icon(
+                Icons.Default.Lyrics,
+                contentDescription = when {
+                    lyrics == null -> "Lyrics, looking for them"
+                    !found -> "Lyrics, none found for this song"
+                    else -> "Lyrics"
+                },
+                tint = if (found) Ink else InkDim.copy(alpha = 0.45f),
+            )
+        }
+    }
 }
 
 @Composable
