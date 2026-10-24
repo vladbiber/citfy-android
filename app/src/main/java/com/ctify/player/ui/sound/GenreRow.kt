@@ -2,7 +2,10 @@ package com.ctify.player.ui.sound
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.ctify.player.ui.pressFeedback
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -143,14 +146,17 @@ fun GenrePresetsRow() {
 @Composable
 private fun PresetChip(label: String, selected: Boolean, edited: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = MaterialTheme.colorScheme
+    val press = remember { MutableInteractionSource() }
     Surface(
         shape = MaterialTheme.shapes.extraSmall,
         color = if (selected) c.secondaryContainer else Color.Transparent,
         border = if (selected) null else BorderStroke(1.dp, c.outline),
         modifier = Modifier
+            .pressFeedback(press)
             .minimumInteractiveComponentSize()
             .semantics { stateDescription = if (selected) "selected" else "not selected" }
             .combinedClickable(
+                interactionSource = press, indication = LocalIndication.current,
                 role = Role.Button, onClick = onClick, onLongClick = onLongClick,
                 onLongClickLabel = "edit preset",
             ),

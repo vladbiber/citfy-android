@@ -1,6 +1,7 @@
 package com.ctify.player.ui.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -24,9 +25,20 @@ import com.ctify.player.data.Track
 import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.AlbumArt
 import com.ctify.player.ui.SectionHeader
+import com.ctify.player.ui.shimmer
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
+
+/** "For you" while its first mix is fetched: the big cover as a shimmer. */
+@Composable
+internal fun ForYouPlaceholder() {
+    Column(Modifier.semantics(mergeDescendants = true) { contentDescription = "For you, loading" }) {
+        SectionHeader("For you", Modifier.padding(top = 10.dp, start = 4.dp))
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.padding(horizontal = 48.dp).fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.large).shimmer())
+    }
+}
 
 /** "For you": one big swipeable cover per song; a tap plays the shelf from there. */
 @Composable

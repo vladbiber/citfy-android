@@ -5,7 +5,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.size
@@ -131,123 +133,135 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.enterStagger(0), verticalAlignment = Alignment.CenterVertically) {
                 if (onClose != null) IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 ScreenTitle("Settings")
             }
 
-            SectionHeader("Colors", Modifier.padding(top = 24.dp, bottom = 4.dp))
-            Text("Theme", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-            // Below Android 12 there are no wallpaper colors and Wallpaper looks like Ctify Blue, so only Ctify Blue is offered.
-            val sources = if (Appearance.dynamicSupported) ThemeSource.entries else ThemeSource.entries - ThemeSource.WALLPAPER
-            val shownSource = if (source in sources) source else ThemeSource.CTIFY_BLUE
-            Choice(sources, shownSource, { it.label }, Appearance::setSource)
-            if (source == ThemeSource.DUO) {
-                SwatchRow("Color 1", "Play button, selected tab, sliders and switches", color1, Appearance::setColor1)
-                SwatchRow("Color 2", "Chips, badges and the gradient. Same as color 1 gives a darker shade.", color2, Appearance::setColor2)
-                Text("Gradient", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-                Choice(GradientStyle.entries, gradient, { it.label }, Appearance::setGradient)
-            }
-            Text("Light or dark", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-            Choice(ThemeMode.entries, mode, { it.label }, Appearance::setMode)
-            SwitchRow("Pure black", "Black background in dark theme, for OLED screens", pureBlack, Appearance::setPureBlack, enabled = dark)
-            SwitchRow("Cover colors in Now Playing", "Tint the player with the album cover instead of the theme", coverColors, Appearance::setCoverColors)
-            SwitchRow("React to music", "Player background pulses with the bass. Off in battery saver.", reactToMusic, Appearance::setReactToMusic)
-
-            SectionHeader("Network", Modifier.padding(top = 24.dp, bottom = 4.dp))
-            SwitchRow("Offline mode", "Block all internet use. Your music keeps working.", offline, { NetworkGate.setOffline(it); if (!it) Downloads.kick() })
-            SwitchRow("Radio", "Station directory and live streams", radioOn, { NetworkGate.setEnabled(Feature.RADIO, it) }, enabled = !offline)
-            SwitchRow(
-                "Radio on mobile data", "Off means radio only plays on Wi-Fi",
-                !wifiOnlyStreaming, { NetworkGate.setWifiOnlyStreaming(!it) }, enabled = !offline && radioOn,
-            )
-            SwitchRow(
-                "YouTube", "Search, stream and download songs and albums",
-                youtubeOn, { NetworkGate.setEnabled(Feature.YOUTUBE, it); if (it) Downloads.kick() }, enabled = !offline,
-            )
-            SwitchRow(
-                "Downloads on Wi-Fi only", "Wait for Wi-Fi before downloading", wifiOnlyDownloads,
-                { NetworkGate.setWifiOnlyDownloads(it); Downloads.kick(replace = true) }, enabled = !offline,
-            )
-            SwitchRow("Genres and creators (Last.fm)", "Genre and artist suggestions on Home", features[Feature.LASTFM] != false, { NetworkGate.setEnabled(Feature.LASTFM, it) }, enabled = !offline)
-            SwitchRow("Lyrics (LRCLIB)", "Synced lyrics in the player", features[Feature.LYRICS] != false, { NetworkGate.setEnabled(Feature.LYRICS, it) }, enabled = !offline)
-            SwitchRow("Downloads only while charging", "Wait until the phone is plugged in", chargingOnly, Downloads::setChargingOnly, enabled = !offline && youtubeOn)
-            val folderName = remember(folder) { folder?.let { DocumentFile.fromTreeUri(ctx, it)?.name ?: it.lastPathSegment } }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 64.dp)
-                    .clickable(onClickLabel = "Choose download folder") { folderLauncher.launch(folder) }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Download folder", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        folderName ?: "Default (Music/Ctify)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            Column(Modifier.enterStagger(1)) {
+                SectionHeader("Colors", Modifier.padding(top = 24.dp, bottom = 4.dp))
+                Text("Theme", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
+                // Below Android 12 there are no wallpaper colors and Wallpaper looks like Ctify Blue, so only Ctify Blue is offered.
+                val sources = if (Appearance.dynamicSupported) ThemeSource.entries else ThemeSource.entries - ThemeSource.WALLPAPER
+                val shownSource = if (source in sources) source else ThemeSource.CTIFY_BLUE
+                Choice(sources, shownSource, { it.label }, Appearance::setSource)
+                if (source == ThemeSource.DUO) {
+                    SwatchRow("Color 1", "Play button, selected tab, sliders and switches", color1, Appearance::setColor1)
+                    SwatchRow("Color 2", "Chips, badges and the gradient. Same as color 1 gives a darker shade.", color2, Appearance::setColor2)
+                    Text("Gradient", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
+                    Choice(GradientStyle.entries, gradient, { it.label }, Appearance::setGradient)
                 }
-                if (folder != null) TextButton(onClick = { Downloads.setFolder(null) }) { Text("Use default") }
-            }
-            Text(
-                "New downloads go here. Songs already saved stay where they are.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            var bufferMin by remember { mutableIntStateOf(RadioPrefs.bufferMinutes(ctx)) }
-            Text("Radio rewind buffer", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
-            Text(
-                if (bufferMin == 0) "Off: radio plays live, no pause or rewind"
-                else "Keeps the last $bufferMin min (about ${bufferMin} MB) so you can pause, rewind and scratch live radio",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Slider(
-                value = bufferMin.toFloat(),
-                onValueChange = { bufferMin = it.toInt() },
-                onValueChangeFinished = { RadioPrefs.setBufferMinutes(ctx, bufferMin) },
-                valueRange = 0f..15f,
-                steps = 14,
-                modifier = Modifier.semantics { contentDescription = "Radio rewind buffer, $bufferMin minutes" },
-            )
-
-            SectionHeader("History", Modifier.padding(top = 24.dp, bottom = 4.dp))
-            Text(
-                "Songs you played, used for Recently played and Most played.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            FilledTonalButton(onClick = { confirmClearHistory = true }) { Text("Clear listening history") }
-
-            SectionHeader("Backup", Modifier.padding(top = 24.dp, bottom = 4.dp))
-            Text(
-                "Saves your favorites, playlists, imported songs, sound and look settings in one file. " +
-                    "Imported songs and custom covers point to files on this phone, so after a reinstall you may need to import those again.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(onClick = { exportLauncher.launch("ctify-backup-${LocalDate.now()}.zip") }) { Text("Save backup") }
-                FilledTonalButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }) { Text("Restore") }
+                Text("Light or dark", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
+                Choice(ThemeMode.entries, mode, { it.label }, Appearance::setMode)
+                SwitchRow("Pure black", "Black background in dark theme, for OLED screens", pureBlack, Appearance::setPureBlack, enabled = dark)
+                SwitchRow("Cover colors in Now Playing", "Tint the player with the album cover instead of the theme", coverColors, Appearance::setCoverColors)
+                SwitchRow("React to music", "Player background pulses with the bass. Off in battery saver.", reactToMusic, Appearance::setReactToMusic)
             }
 
-            SectionHeader("About", Modifier.padding(top = 24.dp, bottom = 4.dp))
-            val uriHandler = LocalUriHandler.current
-            Text(
-                "Data from Last.fm",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-                textDecoration = TextDecoration.Underline,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .clickable(role = Role.Button, onClickLabel = "Open last.fm") { runCatching { uriHandler.openUri("https://www.last.fm") } }
-                    .padding(vertical = 12.dp),
-            )
+            Column(Modifier.enterStagger(2)) {
+                SectionHeader("Network", Modifier.padding(top = 24.dp, bottom = 4.dp))
+                SwitchRow("Offline mode", "Block all internet use. Your music keeps working.", offline, { NetworkGate.setOffline(it); if (!it) Downloads.kick() })
+                SwitchRow("Radio", "Station directory and live streams", radioOn, { NetworkGate.setEnabled(Feature.RADIO, it) }, enabled = !offline)
+                SwitchRow(
+                    "Radio on mobile data", "Off means radio only plays on Wi-Fi",
+                    !wifiOnlyStreaming, { NetworkGate.setWifiOnlyStreaming(!it) }, enabled = !offline && radioOn,
+                )
+                SwitchRow(
+                    "YouTube", "Search, stream and download songs and albums",
+                    youtubeOn, { NetworkGate.setEnabled(Feature.YOUTUBE, it); if (it) Downloads.kick() }, enabled = !offline,
+                )
+                SwitchRow(
+                    "Downloads on Wi-Fi only", "Wait for Wi-Fi before downloading", wifiOnlyDownloads,
+                    { NetworkGate.setWifiOnlyDownloads(it); Downloads.kick(replace = true) }, enabled = !offline,
+                )
+                SwitchRow("Genres and creators (Last.fm)", "Genre and artist suggestions on Home", features[Feature.LASTFM] != false, { NetworkGate.setEnabled(Feature.LASTFM, it) }, enabled = !offline)
+                SwitchRow("Lyrics (LRCLIB)", "Synced lyrics in the player", features[Feature.LYRICS] != false, { NetworkGate.setEnabled(Feature.LYRICS, it) }, enabled = !offline)
+                SwitchRow("Downloads only while charging", "Wait until the phone is plugged in", chargingOnly, Downloads::setChargingOnly, enabled = !offline && youtubeOn)
+                val folderName = remember(folder) { folder?.let { DocumentFile.fromTreeUri(ctx, it)?.name ?: it.lastPathSegment } }
+                val folderPress = remember { MutableInteractionSource() }
+                Row(
+                    Modifier
+                        .pressFeedback(folderPress)
+                        .fillMaxWidth()
+                        .heightIn(min = 64.dp)
+                        .clickable(folderPress, LocalIndication.current, onClickLabel = "Choose download folder") { folderLauncher.launch(folder) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Download folder", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            folderName ?: "Default (Music/Ctify)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (folder != null) TextButton(onClick = { Downloads.setFolder(null) }) { Text("Use default") }
+                }
+                Text(
+                    "New downloads go here. Songs already saved stay where they are.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                var bufferMin by remember { mutableIntStateOf(RadioPrefs.bufferMinutes(ctx)) }
+                Text("Radio rewind buffer", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
+                Text(
+                    if (bufferMin == 0) "Off: radio plays live, no pause or rewind"
+                    else "Keeps the last $bufferMin min (about ${bufferMin} MB) so you can pause, rewind and scratch live radio",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Slider(
+                    value = bufferMin.toFloat(),
+                    onValueChange = { bufferMin = it.toInt() },
+                    onValueChangeFinished = { RadioPrefs.setBufferMinutes(ctx, bufferMin) },
+                    valueRange = 0f..15f,
+                    steps = 14,
+                    modifier = Modifier.semantics { contentDescription = "Radio rewind buffer, $bufferMin minutes" },
+                )
+            }
+
+            Column(Modifier.enterStagger(3)) {
+                SectionHeader("History", Modifier.padding(top = 24.dp, bottom = 4.dp))
+                Text(
+                    "Songs you played, used for Recently played and Most played.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                FilledTonalButton(onClick = { confirmClearHistory = true }) { Text("Clear listening history") }
+            }
+
+            Column(Modifier.enterStagger(4)) {
+                SectionHeader("Backup", Modifier.padding(top = 24.dp, bottom = 4.dp))
+                Text(
+                    "Saves your favorites, playlists, imported songs, sound and look settings in one file. " +
+                        "Imported songs and custom covers point to files on this phone, so after a reinstall you may need to import those again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilledTonalButton(onClick = { exportLauncher.launch("ctify-backup-${LocalDate.now()}.zip") }) { Text("Save backup") }
+                    FilledTonalButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }) { Text("Restore") }
+                }
+            }
+
+            Column(Modifier.enterStagger(5)) {
+                SectionHeader("About", Modifier.padding(top = 24.dp, bottom = 4.dp))
+                val uriHandler = LocalUriHandler.current
+                Text(
+                    "Data from Last.fm",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clickable(role = Role.Button, onClickLabel = "Open last.fm") { runCatching { uriHandler.openUri("https://www.last.fm") } }
+                        .padding(vertical = 12.dp),
+                )
+            }
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -306,11 +320,13 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
 
 @Composable
 private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
+    val press = remember { MutableInteractionSource() }
     Row(
         Modifier
+            .pressFeedback(press)
             .fillMaxWidth()
             .heightIn(min = 64.dp)
-            .clickable(enabled = enabled, role = Role.Switch) { onChange(!checked) }
+            .clickable(press, LocalIndication.current, enabled = enabled, role = Role.Switch) { onChange(!checked) }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
