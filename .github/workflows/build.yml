@@ -23,6 +23,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
 
       - name: Build and test
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
         run: ./gradlew assembleDebug testDebugUnitTest
 
       - uses: actions/upload-artifact@v7

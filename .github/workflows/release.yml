@@ -43,6 +43,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
 
       - name: Build signed APK
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
         run: ./gradlew assembleRelease
 
       - name: Publish to the release
