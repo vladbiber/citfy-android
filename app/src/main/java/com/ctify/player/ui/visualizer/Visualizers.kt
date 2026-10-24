@@ -1,5 +1,6 @@
 package com.ctify.player.ui.visualizer
 
+import com.ctify.player.ui.theme.isAppInDarkTheme
 import android.content.Context
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -63,10 +64,12 @@ private val IDLE = FloatArray(SpectrumAnalyzer.BAR_COUNT) { 0.12f + 0.28f * sin(
  * spectrum, and it reads it in the draw phase, so new audio frames redraw without recomposing.
  */
 @Composable
-fun VisualizerView(v: Visualizer, art: Painter, accent: Color, playing: Boolean, still: Boolean, side: Dp) {
+fun VisualizerView(v: Visualizer, art: Painter, playing: Boolean, still: Boolean, side: Dp) {
     val spectrum: State<FloatArray> =
         if (playing && !still) PlayerHub.spectrum.collectAsState() else remember { mutableStateOf(IDLE) }
-    val glow = remember(accent) { turnedHue(accent) }
+    // drawn in white over the dark player; light theme gets near-black so they stay visible
+    val ink = if (isAppInDarkTheme()) Color.White else Color(0xFF111111)
+    val glow = ink.copy(alpha = 0.55f)
     Box(Modifier.size(side).semantics { contentDescription = "${v.label} visualizer" }, contentAlignment = Alignment.Center) {
         if (v == Visualizer.RING) {
             Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.size(side * 0.56f).clip(CircleShape))
@@ -74,22 +77,13 @@ fun VisualizerView(v: Visualizer, art: Painter, accent: Color, playing: Boolean,
         Canvas(Modifier.fillMaxSize()) {
             val s = spectrum.value
             when (v) {
-                Visualizer.BARS -> bars(s, accent, glow)
-                Visualizer.WAVE -> wave(s, accent, glow)
-                Visualizer.RING -> ring(s, accent, glow)
-                Visualizer.PULSE -> pulse(s, accent, glow)
+                Visualizer.BARS -> bars(s, ink, glow)
+                Visualizer.WAVE -> wave(s, ink, glow)
+                Visualizer.RING -> ring(s, ink, glow)
+                Visualizer.PULSE -> pulse(s, ink, glow)
             }
         }
     }
-}
-
-/** A second color for gradients: the accent's hue turned a little. */
-private fun turnedHue(c: Color): Color {
-    val hsv = FloatArray(3)
-    android.graphics.Color.colorToHSV(c.toArgb(), hsv)
-    hsv[0] = (hsv[0] + 50f) % 360f
-    hsv[1] = (hsv[1] * 1.2f).coerceAtMost(1f)
-    return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
 private fun FloatArray.avg(from: Int, to: Int): Float {

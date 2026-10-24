@@ -154,7 +154,6 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     onOpenNowPlaying = { showNowPlaying = true },
                     onMore = onMore,
                     onOpenPlaylist = { name -> openedPlaylist = name; tab = Tab.Library.ordinal },
-                    onOpenFavorites = { librarySection = 1; openedPlaylist = null; tab = Tab.Library.ordinal },
                     onSpinWheel = { showWheel = true },
                     add = add,
                 )

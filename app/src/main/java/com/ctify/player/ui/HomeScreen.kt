@@ -24,8 +24,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -81,12 +79,10 @@ fun HomeScreen(
     onOpenNowPlaying: () -> Unit,
     onMore: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
-    onOpenFavorites: () -> Unit = {},
     onSpinWheel: () -> Unit = {},
     add: AddActions,
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
-    val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val playlists by viewModel.repository.playlists.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val recent by remember { viewModel.repository.recentlyPlayed(20) }.collectAsStateWithLifecycle(emptyList())
@@ -144,23 +140,6 @@ fun HomeScreen(
         ) {
             if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder or add songs from YouTube.") }
             shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
-            if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, ui.currentTrackId, viewModel, onOpenNowPlaying) }
-            if (most.isNotEmpty()) full { TrackCarousel("Most played", most, ui.currentTrackId, viewModel, onOpenNowPlaying) }
-            full {
-                HeroCard(
-                    "Shuffle everything", "${tracks.size} songs on this phone", Icons.Filled.Shuffle,
-                    listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer),
-                ) {
-                    if (tracks.isNotEmpty()) { viewModel.playQueue(tracks.shuffled(), 0); onOpenNowPlaying() }
-                }
-            }
-            full {
-                HeroCard(
-                    "Favorites", if (favorites.isEmpty()) "Tap a heart to save songs" else "${favorites.size} songs",
-                    Icons.Filled.Favorite, listOf(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer),
-                    onClick = onOpenFavorites,
-                )
-            }
             full {
                 HeroCard(
                     "Spin the wheel", if (tracks.isEmpty()) "Let chance pick a song" else "1 in ${"%,d".format(tracks.size)} songs",
@@ -168,6 +147,8 @@ fun HomeScreen(
                     onClick = onSpinWheel,
                 )
             }
+            if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+            if (most.isNotEmpty()) full { TrackCarousel("Most played", most, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             listOf(Shelf.PLAYED, Shelf.LIKED, Shelf.DOWNLOADS).forEach { s ->
                 shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
             }

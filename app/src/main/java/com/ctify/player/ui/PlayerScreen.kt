@@ -234,6 +234,15 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     val closeAt = with(LocalDensity.current) { 120.dp.toPx() }
 
     // not inside a Surface, so set the text color here or bare Text turns black
+    // lyrics read best on plain black: drop the cover backdrop and draw the player in light-on-black colors
+    val lyricsMode = showLyrics && state?.station == null && lyrics?.found == true
+    val base = MaterialTheme.colorScheme
+    val playerScheme = if (!lyricsMode) base else base.copy(
+        background = Color.Black, onBackground = Color.White, onSurface = Color.White,
+        onSurfaceVariant = Color.White.copy(alpha = 0.7f),
+        surfaceContainerHigh = if (dark) base.surfaceContainerHigh else Color(0xFF1E1E1E),
+    )
+    MaterialTheme(colorScheme = playerScheme) {
     CompositionLocalProvider(LocalContentColor provides Ink) {
     Box(
         Modifier
@@ -249,8 +258,12 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             .background(MaterialTheme.colorScheme.background),
     ) {
         val pulse = rememberMusicPulse(live.playing)
-        Backdrop(track?.coverUri, accent, pulse)
-        if (!coverColors) LiquidBackground(Modifier.fillMaxSize(), pulse)
+        AnimatedVisibility(!lyricsMode, enter = fadeIn(), exit = fadeOut()) {
+            Box(Modifier.fillMaxSize()) {
+                Backdrop(track?.coverUri, accent, pulse)
+                if (!coverColors) LiquidBackground(Modifier.fillMaxSize(), pulse)
+            }
+        }
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
             // very short screens (or huge fonts) scroll; otherwise the stage takes what is left
             val compact = maxHeight < 560.dp
@@ -309,7 +322,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                                 transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
                                 label = "skin",
                             ) { s ->
-                                if (s is Visualizer) VisualizerView(s, art, accent, live.playing, still = false, side = minOf(stageWidth, stageHeight))
+                                if (s is Visualizer) VisualizerView(s, art, live.playing, still = false, side = minOf(stageWidth, stageHeight))
                                 else if (s is Skin) SkinView(s, live, art, accent, track, skinSide(s, stageWidth, stageHeight), seek = state?.station == null, fill = fill)
                                 else if (s is RadioSkin) state?.station?.let { st ->
                                     RadioSkinView(
@@ -349,6 +362,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
         }
     }
     }
+    }
 
     if (sheet) {
         ModalBottomSheet(
@@ -377,7 +391,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             label = { (it as? Skin)?.label ?: (it as? RadioSkin)?.label ?: (it as Visualizer).label },
             preview = { item, space ->
                 if (item is Skin) SkinView(item, still, art, accent, track, skinSide(item, space.width, space.height), seek = false)
-                else if (item is Visualizer) VisualizerView(item, art, accent, playing = false, still = true, side = minOf(space.width, space.height))
+                else if (item is Visualizer) VisualizerView(item, art, playing = false, still = true, side = minOf(space.width, space.height))
                 else if (item is RadioSkin) RadioSkinView(
                     item, state?.station?.name ?: "ctify radio", null, art, accent, playing = false, still = true,
                     onTogglePlay = {}, modifier = radioSkinSize(item, space.width, space.height),
