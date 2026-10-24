@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CTIFY_KEYSTORE_BASE64: ${{ secrets.CTIFY_KEYSTORE_BASE64 }}
+      CTIFY_KEYSTORE_PASSWORD: ${{ secrets.CTIFY_KEYSTORE_PASSWORD }}
+      CTIFY_KEY_ALIAS: ${{ secrets.CTIFY_KEY_ALIAS }}
+      CTIFY_KEY_PASSWORD: ${{ secrets.CTIFY_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode keystore
+        run: |
+          missing=""
+          for v in CTIFY_KEYSTORE_BASE64 CTIFY_KEYSTORE_PASSWORD CTIFY_KEY_ALIAS CTIFY_KEY_PASSWORD; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (see README, Releases and signing)"
+            exit 1
+          fi
+          echo "$CTIFY_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/ctify.jks"
+          echo "CTIFY_KEYSTORE_FILE=$RUNNER_TEMP/ctify.jks" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build signed APK
+        run: ./gradlew assembleRelease
+
+      - name: Publish to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # an unsigned build would be named app-release-unsigned.apk
+          apk=app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$apk" ]; then
+            echo "::error::Signed APK not found at $apk"
+            exit 1
+          fi
+          cp "$apk" ctify.apk
+          gh release create "$GITHUB_REF_NAME" ctify.apk --title "$GITHUB_REF_NAME" --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" ctify.apk --clobber
+

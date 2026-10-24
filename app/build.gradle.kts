@@ -17,8 +17,21 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    signingConfigs {
+        // one stable key from the environment (CI); without it release builds stay unsigned
+        System.getenv("CTIFY_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let { path ->
+            create("release") {
+                storeFile = file(path)
+                storePassword = System.getenv("CTIFY_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("CTIFY_KEY_ALIAS")
+                keyPassword = System.getenv("CTIFY_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -121,12 +121,14 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
     fun cover(item: DownloadEntity): ByteArray? {
         val shared = item.groupId?.let { File(covers, "album_$it.jpg") }
         shared?.takeIf { it.exists() }?.let { return it.readBytes() }
-        val url = item.thumbnail?.let(::bigThumbnail) ?: "https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg"
-        val bytes = runCatching {
-            NetworkGate.client.newCall(NetworkGate.request(url, Feature.YOUTUBE, Traffic.DOWNLOAD).build()).execute().use { r ->
-                if (r.isSuccessful) r.body.bytes() else null
-            }
-        }.getOrNull()?.takeIf { it.size in 1..(4 * 1024 * 1024) } ?: return null
+        val url = item.thumbnail ?: "https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg"
+        val bytes = bigThumbnails(url).firstNotNullOfOrNull { u ->
+            runCatching {
+                NetworkGate.client.newCall(NetworkGate.request(u, Feature.YOUTUBE, Traffic.DOWNLOAD).build()).execute().use { r ->
+                    if (r.isSuccessful) r.body.bytes() else null
+                }
+            }.getOrNull()?.takeIf { it.size in 1..(4 * 1024 * 1024) }
+        } ?: return null
         shared?.writeBytes(bytes)
         return bytes
     }
@@ -175,9 +177,18 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
     companion object {
         private const val CHUNK = 2L * 1024 * 1024
 
-        /** YouTube Music thumbnails come small; ask for a 544 px square. */
-        fun bigThumbnail(url: String): String =
-            if (url.contains("googleusercontent.com")) url.replace(Regex("=w\\d+-h\\d+.*$"), "=w544-h544-l90-rj") else url
+        private val ytStill = Regex("^(https?://i\\d?\\.ytimg\\.com/vi/[^/]+/)[^/]*$")
+
+        /**
+         * Cover URLs to try in order, sharpest first. YouTube Music art comes small, so ask for a
+         * 1080 px square; video stills top out at maxresdefault (1280x720), which 404s on some
+         * videos, so sddefault and the original follow.
+         */
+        fun bigThumbnails(url: String): List<String> {
+            if (url.contains("googleusercontent.com")) return listOf(url.replace(Regex("=w\\d+-h\\d+.*$"), "=w1080-h1080-l90-rj"))
+            val dir = ytStill.find(url)?.groupValues?.get(1) ?: return listOf(url)
+            return listOf("${dir}maxresdefault.jpg", "${dir}sddefault.jpg", url).distinct()
+        }
     }
 }
 

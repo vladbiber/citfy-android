@@ -51,7 +51,9 @@ import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import coil.size.Scale
 import com.ctify.player.player.PlayerHub
+import com.ctify.player.youtube.download.SongFile
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.exp
@@ -196,8 +198,11 @@ fun rememberArtPainter(url: String?): Painter {
     var painter by remember { mutableStateOf<Painter>(ColorPainter(Color.Transparent)) }
     LaunchedEffect(url) {
         if (url == null) { painter = ColorPainter(Color.Transparent); return@LaunchedEffect }
-        val req = ImageRequest.Builder(ctx).data(url).size(640).allowHardware(false).build()
-        val bmp = (ctx.imageLoader.execute(req) as? SuccessResult)?.drawable?.toBitmap()
+        // big player art only: up to 1080 px, FIT so 16:9 stills aren't blown up to fill a square
+        val bmp = SongFile.bigThumbnails(url).firstNotNullOfOrNull { u ->
+            val req = ImageRequest.Builder(ctx).data(u).size(1080).scale(Scale.FIT).allowHardware(false).build()
+            (ctx.imageLoader.execute(req) as? SuccessResult)?.drawable?.toBitmap()
+        }
         if (bmp != null) painter = BitmapPainter(bmp.asImageBitmap())
     }
     return painter
