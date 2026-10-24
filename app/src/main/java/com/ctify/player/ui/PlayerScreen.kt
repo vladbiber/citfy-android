@@ -55,7 +55,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Favorite
+import com.ctify.player.ui.player.SleepSheet
+import com.ctify.player.ui.player.sleepLeft
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.LocalContentColor
@@ -65,6 +68,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -146,6 +160,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     var skin by remember { mutableStateOf(Skin.load(ctx)) }
     var sheet by remember { mutableStateOf(false) }
     var queue by remember { mutableStateOf(false) }
+    var sleep by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
     var panel by remember { mutableStateOf<ChipPanel?>(null) }
     val radio = (ctx.applicationContext as CtifyApp).radio
@@ -165,9 +180,25 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     // two-color fade on the small spots; cover colors win when they are on
     val fill: Brush? = if (source == ThemeSource.DUO && !coverColors) accentBrush() else null
 
+    val scope = rememberCoroutineScope()
+    val drop = remember { Animatable(0f) }
+    val closeAt = with(LocalDensity.current) { 120.dp.toPx() }
+
     // not inside a Surface, so set the text color here or bare Text turns black
     CompositionLocalProvider(LocalContentColor provides Ink) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            // drag down where no skin, slider or scroll claims the touch: follows the finger, then the usual slide-out
+            // shortcut: the compact (scrolling) layout's scroll takes vertical drags, so there only the arrow and Back close
+            .draggable(
+                rememberDraggableState { d -> scope.launch { drop.snapTo((drop.value + d).coerceAtLeast(0f)) } },
+                Orientation.Vertical,
+                onDragStopped = { v -> if (drop.value > closeAt || v > 2_000f) onClose() else drop.animateTo(0f) },
+            )
+            .graphicsLayer { translationY = drop.value }
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         Backdrop(track?.coverUri, accent)
         if (!coverColors) LiquidBackground(Modifier.fillMaxSize())
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -198,7 +229,16 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     Modifier
                         .fillMaxWidth()
                         .then(if (compact) Modifier.height(340.dp) else Modifier.weight(1f))
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 6.dp)
+                        // the stage belongs to the skins (scratch, shuttle, tap to play), so drags here never close the player
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                do {
+                                    val e = awaitPointerEvent()
+                                    e.changes.forEach { if (it.positionChange() != Offset.Zero) it.consume() }
+                                } while (e.changes.any { it.pressed })
+                            }
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     if (pickStation) FilledTonalButton(onClick = onOpenRadio) { Text("Pick a station") }
@@ -210,7 +250,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                         SkinView(s, live, art, accent, track, skinSide(s, maxWidth, maxHeight), seek = state?.station == null, fill = fill)
                     }
                 }
-                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true })
+                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true }, onSleep = { sleep = true })
                 SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
         }
@@ -243,6 +283,15 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             onSelect = { skin = it; Skin.save(ctx, it); picker = false },
             onDismiss = { picker = false },
         )
+    }
+    if (sleep) {
+        ModalBottomSheet(
+            onDismissRequest = { sleep = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            SleepSheet(live = state?.station != null, onDone = { sleep = false })
+        }
     }
     if (queue) {
         ModalBottomSheet(
@@ -442,7 +491,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill:
 }
 
 @Composable
-private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onQueue: () -> Unit) {
+private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onQueue: () -> Unit, onSleep: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     val station = state?.station
@@ -472,6 +521,14 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                         if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
                         tint = if (fav) accent else Ink,
+                    )
+                }
+                val sleepLeft = sleepLeft()
+                IconButton(onClick = onSleep) {
+                    Icon(
+                        Icons.Default.Bedtime,
+                        contentDescription = sleepLeft?.let { "Sleep timer, pausing $it" } ?: "Sleep timer",
+                        tint = if (sleepLeft != null) accent else Ink,
                     )
                 }
                 if (station == null) IconButton(onClick = onQueue) {

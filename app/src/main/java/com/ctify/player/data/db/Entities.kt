@@ -57,6 +57,23 @@ data class PlaylistItemEntity(
     val trackId: String,
 )
 
+/**
+ * One listen of a song (never radio). Title and the rest are kept so a streamed YouTube
+ * song that isn't in the library can still be shown and replayed.
+ */
+@Entity(tableName = "plays", indices = [Index("trackId")])
+data class PlayEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val trackId: String,
+    val playedAt: Long,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val uri: String,
+    val coverUri: String?,
+    val durationMs: Long,
+)
+
 /** Single row (id 0): where playback was when the app last ran. */
 @Entity(tableName = "playback_snapshot")
 data class PlaybackSnapshotEntity(

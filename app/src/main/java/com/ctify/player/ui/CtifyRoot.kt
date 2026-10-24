@@ -116,6 +116,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                         onClick = { showNowPlaying = true },
                         onTogglePlay = viewModel::togglePlay,
                         onNext = viewModel::next,
+                        onPrevious = PlayerHub::previous,
                         isLive = station != null,
                         status = now?.radioStatus.takeIf { station != null },
                     )
