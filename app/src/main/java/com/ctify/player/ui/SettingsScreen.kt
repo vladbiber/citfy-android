@@ -52,10 +52,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import com.ctify.player.CtifyApp
@@ -228,6 +230,20 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 FilledTonalButton(onClick = { exportLauncher.launch("ctify-backup-${LocalDate.now()}.zip") }) { Text("Save backup") }
                 FilledTonalButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }) { Text("Restore") }
             }
+
+            SectionHeader("About", Modifier.padding(top = 24.dp, bottom = 4.dp))
+            val uriHandler = LocalUriHandler.current
+            Text(
+                "Data from Last.fm",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(role = Role.Button, onClickLabel = "Open last.fm") { runCatching { uriHandler.openUri("https://www.last.fm") } }
+                    .padding(vertical = 12.dp),
+            )
             Spacer(Modifier.height(32.dp))
         }
     }
