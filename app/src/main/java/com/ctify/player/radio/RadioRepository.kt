@@ -7,7 +7,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -84,6 +86,22 @@ class RadioRepository(private val dao: RadioDao, private val heardDao: HeardSong
             it.search(StationQuery(name = station.name, limit = 10, sort = StationSort.VOTES))
         }.getOrDefault(emptyList())
             .filter { it.uuid != station.uuid && it.name.equals(station.name, ignoreCase = true) && it.streamUrl != station.streamUrl }
+    }
+
+    // ---- off air ----
+
+    /** uuid -> when the station gave up; kept in memory only */
+    private val offAirSince = MutableStateFlow<Map<String, Long>>(emptyMap())
+    /** Stations that went off air in the last hour: next/previous skip them, lists grey them out. */
+    // shortcut: an entry only drops out of this set on the next mark/clear, add a ticker if rows must ungrey on the hour
+    val offAir: Flow<Set<String>> = offAirSince.map { it.keys }
+
+    fun isOffAir(uuid: String): Boolean = offAirSince.value[uuid]?.let { System.currentTimeMillis() - it < OFF_AIR_MS } == true
+
+    fun setOffAir(uuid: String, off: Boolean) = offAirSince.update { m ->
+        val now = System.currentTimeMillis()
+        val fresh = m.filterValues { now - it < OFF_AIR_MS }
+        if (off) fresh + (uuid to now) else fresh - uuid
     }
 
     // ---- user state ----
@@ -182,5 +200,6 @@ class RadioRepository(private val dao: RadioDao, private val heardDao: HeardSong
     companion object {
         const val CLIAMP_KEY = "cliamp"
         const val FOR_YOU_KEY = "for_you"
+        const val OFF_AIR_MS = 60 * 60_000L
     }
 }

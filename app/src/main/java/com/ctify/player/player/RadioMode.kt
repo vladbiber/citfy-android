@@ -22,8 +22,11 @@ import com.ctify.player.radio.ExternalNowPlaying
 import com.ctify.player.radio.LiveTitle
 import com.ctify.player.radio.RadioPrefs
 import com.ctify.player.radio.RadioRepository
+import com.ctify.player.radio.RadioUrlPolicy
 import com.ctify.player.radio.RewindRecorder
 import com.ctify.player.radio.Station
+import com.ctify.player.radio.StreamError
+import com.ctify.player.radio.StreamErrors
 import com.ctify.player.radio.StreamResolver
 import com.ctify.player.radio.StreamTitles
 import kotlinx.coroutines.CancellationException
@@ -35,8 +38,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Live radio inside [PlaybackController]: starting a station, its title, and staying on air.
- * A dropped stream reconnects with backoff instead of skipping; after a few failures the
- * same station's other directory URLs are tried.
+ * An http station is tried over https first. A dropped stream reconnects with backoff instead
+ * of skipping; after a few failures the same station's other directory URLs are tried. Errors
+ * that will repeat, or too many drops, leave the station "Off air" until the user taps play.
  */
 class RadioMode(
     private val context: Context,
@@ -58,6 +62,10 @@ class RadioMode(
     private var index = 0
     private var attempts = 0
     private var triedSiblings = false
+    /** index into [RadioUrlPolicy.streamCandidates] of the station's URL */
+    private var variant = 0
+    private var dnsFailed = false
+    private var offAir = false
     private var startJob: Job? = null
     private var reconnectJob: Job? = null
     private var pollJob: Job? = null
@@ -66,6 +74,15 @@ class RadioMode(
     private var recorder: RewindRecorder? = null
 
     val active: Boolean get() = station != null
+
+    init {
+        player.addListener(object : Player.Listener {
+            // while off air the play button is the retry
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (playWhenReady && offAir) retry()
+            }
+        })
+    }
 
     fun play(stations: List<Station>, startIndex: Int) {
         if (stations.isEmpty()) return
@@ -80,7 +97,8 @@ class RadioMode(
 
     private fun step(dir: Int) {
         if (list.isEmpty()) return
-        index = (index + dir).mod(list.size)
+        val order = (1..list.size).map { (index + dir * it).mod(list.size) }
+        index = order.firstOrNull { !radio.isOffAir(list[it].uuid) } ?: order.first()
         attempts = 0
         start(list[index], fresh = true)
     }
@@ -97,15 +115,16 @@ class RadioMode(
         cancelJobs()
         closeRecorder()
         radio.endHeard()
-        station = null; title = LiveTitle.NONE; status = null
+        station = null; title = LiveTitle.NONE; status = null; offAir = false
         onActiveChanged(false)
     }
 
     private fun start(s: Station, fresh: Boolean, autoplay: Boolean = true) {
         val wasActive = active
         startJob?.cancel(); reconnectJob?.cancel()
-        if (fresh) { setTitle(LiveTitle.NONE); triedSiblings = false }
+        if (fresh) { setTitle(LiveTitle.NONE); triedSiblings = false; variant = 0; dnsFailed = false }
         station = s
+        offAir = false
         if (!wasActive) onActiveChanged(true)
         NetworkGate.blockReason(Feature.RADIO, Traffic.STREAM)?.let { reason ->
             status = reason
@@ -116,12 +135,13 @@ class RadioMode(
         status = if (fresh) "Connecting…" else status
         onChanged()
         startJob = scope.launch {
+            val candidates = RadioUrlPolicy.streamCandidates(s.streamUrl)
             val url = try {
-                StreamResolver.resolve(s.streamUrl)
+                StreamResolver.resolve(candidates[variant.coerceAtMost(candidates.lastIndex)])
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                failed(e, null)
+                failed(e, (e as? HttpStatusException)?.status)
                 return@launch
             }
             val hls = s.hls || url.contains(".m3u8", true)
@@ -159,6 +179,7 @@ class RadioMode(
     fun onIsPlayingChanged(isPlaying: Boolean) {
         if (!active || !isPlaying) return
         attempts = 0
+        station?.let { radio.setOffAir(it.uuid, false) }
         if (status != null) { status = null; onChanged() }
     }
 
@@ -179,12 +200,13 @@ class RadioMode(
         val root = error.rootCause()
         val status = (error.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
             ?: (root as? HttpStatusException)?.status
-        failed(root, status)
+        failed(root, status, error.errorCode)
         return true
     }
 
-    private fun failed(cause: Throwable, httpStatus: Int?) {
+    private fun failed(cause: Throwable, httpStatus: Int?, errorCode: Int = PlaybackException.ERROR_CODE_UNSPECIFIED) {
         val s = station ?: return
+        if (offAir) return
         if (cause is NetworkBlockedException) {
             status = cause.message
             onChanged()
@@ -204,18 +226,54 @@ class RadioMode(
                 )
             )
         }
-        if (attempts >= SIBLINGS_AFTER && !triedSiblings) {
+        // the https try failed for any reason: the URL as filed comes next, right away
+        if (variant < RadioUrlPolicy.streamCandidates(s.streamUrl).lastIndex) {
+            variant++
+            start(s, fresh = false)
+            return
+        }
+        val kind = StreamErrors.classify(cause, httpStatus, errorCode)
+        // a name that didn't resolve gets one more go before it counts as gone
+        val permanent = kind == StreamError.PERMANENT || (kind == StreamError.DNS && dnsFailed)
+        if (kind == StreamError.DNS) dnsFailed = true
+        val giveUp = permanent || attempts >= MAX_ATTEMPTS
+        if ((permanent || attempts >= SIBLINGS_AFTER) && !triedSiblings) {
             triedSiblings = true
             scope.launch {
                 val other = radio.siblings(s).firstOrNull()
-                if (other != null && station?.uuid == s.uuid) {
+                if (station?.uuid != s.uuid) return@launch
+                if (other != null) {
                     status = "Trying another stream for ${s.name}"
+                    variant = 0
                     start(other.copy(uuid = s.uuid, name = s.name, favicon = s.favicon ?: other.favicon), fresh = false)
-                } else scheduleReconnect(s)
+                } else if (giveUp) goOffAir(s) else scheduleReconnect(s)
             }
             return
         }
-        scheduleReconnect(s)
+        if (giveUp) goOffAir(s) else scheduleReconnect(s)
+    }
+
+    private fun goOffAir(s: Station) {
+        offAir = true
+        reconnectJob?.cancel()
+        closeRecorder()
+        player.stop()
+        // paused, so the next tap on play reaches [retry]
+        player.playWhenReady = false
+        radio.setOffAir(s.uuid, true)
+        status = OFF_AIR
+        onChanged()
+    }
+
+    /** One more round after a tap on play: each URL variant once, no backoff, no new sibling lookup. */
+    private fun retry() {
+        val s = station ?: return
+        player.stop()
+        attempts = MAX_ATTEMPTS - 1
+        triedSiblings = true
+        variant = 0
+        status = "Reconnecting…"
+        start(s, fresh = false)
     }
 
     private fun scheduleReconnect(s: Station) {
@@ -324,6 +382,8 @@ class RadioMode(
     private companion object {
         val BACKOFF_S = intArrayOf(1, 2, 4, 8, 15, 30)
         const val SIBLINGS_AFTER = 3
+        const val MAX_ATTEMPTS = 5
+        const val OFF_AIR = "Off air · tap play to retry"
         const val STALL_MS = 20_000L
         const val EDGE_MS = 2_000L
     }
