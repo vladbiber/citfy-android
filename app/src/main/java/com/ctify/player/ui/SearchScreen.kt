@@ -69,9 +69,8 @@ import kotlinx.coroutines.launch
 internal enum class Scope(val label: String) { ALL("All"), LIBRARY("Library"), HEARD("Heard"), YOUTUBE("YouTube"), RADIO("Radio") }
 private enum class Kind(val label: String) { SONGS("Songs"), ALBUMS("Albums"), VIDEOS("All videos") }
 
-/** Home searches everything; Discover swaps your library for songs heard on the radio. */
-internal val HOME_SCOPES = listOf(Scope.ALL, Scope.LIBRARY, Scope.YOUTUBE, Scope.RADIO)
-internal val DISCOVER_SCOPES = listOf(Scope.ALL, Scope.HEARD, Scope.YOUTUBE, Scope.RADIO)
+/** Home searches everything: your library, songs heard on the radio, YouTube and stations. */
+internal val HOME_SCOPES = Scope.entries.toList()
 
 internal fun Track.matches(q: String) = title.contains(q, true) || artist.contains(q, true) || album.contains(q, true)
 

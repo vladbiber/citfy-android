@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 import com.ctify.player.player.sound.SoundEngine
 import com.ctify.player.ui.BassSection
 import com.ctify.player.ui.EffectRangeSection
-import com.ctify.player.ui.MoodsSection
 import com.ctify.player.ui.RainSection
 import com.ctify.player.ui.ResetFxButton
 import com.ctify.player.ui.ReverbSection
@@ -24,14 +23,13 @@ import com.ctify.player.ui.SpeedSection
 import com.ctify.player.ui.TuningSection
 import com.ctify.player.ui.VinylSection
 
-/** Every sound setting, top to bottom: suggestion, moods, genre presets, effects, then headphones, hi-fi, EQ. */
+/** Every sound setting, top to bottom: suggestion, genre presets, effects, then headphones, hi-fi, EQ. */
 @Composable
 fun SoundTab(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     remember { SoundEngine.init(context) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SuggestionCard()
-        MoodsSection()
         GenrePresetsRow()
         SectionHeader("Effects", Modifier.padding(top = 4.dp))
         SpeedSection()

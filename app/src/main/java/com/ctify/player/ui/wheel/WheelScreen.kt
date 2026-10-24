@@ -32,6 +32,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -96,6 +98,7 @@ fun WheelScreen(
     var landed by remember { mutableStateOf<WheelItem?>(null) }
     var hearted by remember { mutableStateOf(false) }
     var pendingSpin by remember { mutableStateOf<Float?>(null) }
+    var lucky by remember { mutableStateOf(false) }
 
     fun spin(w: Wheel, v0: Float) {
         val src = source ?: return
@@ -153,6 +156,16 @@ fun WheelScreen(
         Row(Modifier.padding(start = 4.dp, end = 16.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = TextSecondary) }
             Text(title, color = TextPrimary, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+        }
+        if (library != null) {
+            PrimaryTabRow(selectedTabIndex = if (lucky) 1 else 0, containerColor = BgBlack) {
+                Tab(selected = !lucky, onClick = { lucky = false }, enabled = !motion.spinning, text = { Text("My songs") })
+                Tab(selected = lucky, onClick = { lucky = true }, enabled = !motion.spinning, text = { Text("I'm feeling lucky") })
+            }
+            if (lucky) {
+                LuckyWheel(library)
+                return@Column
+            }
         }
         val busy = motion.spinning
         ChipRow {

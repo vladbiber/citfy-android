@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -34,15 +36,17 @@ import com.ctify.player.ui.sound.GenrePresetsRow
 import com.ctify.player.ui.sound.SoundTab
 import com.ctify.player.ui.sound.SuggestionCard
 
+/** The play queue, opened from the arrow under the player's progress bar; starts at the current song. */
 @Composable
-internal fun QueueSheet() {
+internal fun QueueSheet(maxHeight: Dp = 520.dp) {
     val repository = (LocalContext.current.applicationContext as CtifyApp).repository
     val ui by PlayerHub.ui.collectAsState()
     Text(
-        "Up next", style = MaterialTheme.typography.titleLarge,
-        modifier = Modifier.padding(start = 16.dp, bottom = 8.dp).semantics { heading() },
+        "Up next", style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(start = 16.dp, bottom = 4.dp).semantics { heading() },
     )
-    LazyColumn(Modifier.heightIn(max = 520.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+    val list = rememberLazyListState(initialFirstVisibleItemIndex = ui.currentIndex.coerceAtLeast(0))
+    LazyColumn(Modifier.heightIn(max = maxHeight), state = list, contentPadding = PaddingValues(bottom = 8.dp)) {
         itemsIndexed(ui.queueIds) { index, id ->
             val t = repository.trackById(id) ?: return@itemsIndexed
             TrackRow(
@@ -87,7 +91,7 @@ internal fun SoundSheet() {
 }
 
 /** What a player chip opens: only that control, in its own small sheet. */
-internal enum class ChipPanel { MOODS, GENRE, SPEED, REVERB, BASS, HZ, SPACE, MORE }
+internal enum class ChipPanel { GENRE, SPEED, REVERB, BASS, HZ, SPACE, MORE }
 
 @Composable
 internal fun ChipPanelSheet(panel: ChipPanel) {
@@ -100,7 +104,6 @@ internal fun ChipPanelSheet(panel: ChipPanel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         when (panel) {
-            ChipPanel.MOODS -> MoodsSection()
             ChipPanel.GENRE -> {
                 val context = LocalContext.current
                 remember { SoundEngine.init(context) }

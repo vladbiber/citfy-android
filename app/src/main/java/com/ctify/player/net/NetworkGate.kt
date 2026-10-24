@@ -4,13 +4,16 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.ctify.player.BuildConfig
+import com.ctify.player.radio.RadioUrlPolicy
 import kotlinx.coroutines.flow.MutableStateFlow
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.net.ProtocolException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Everything that may touch the network. Each request carries one as its tag. */
 enum class Feature(val label: String, val key: String) {
@@ -19,6 +22,8 @@ enum class Feature(val label: String, val key: String) {
     MUSICBRAINZ("Genre lookup (MusicBrainz)", "musicbrainz"),
     VERSION_CHECK("Version check", "version_check"),
     SPOTIFY_IMPORT("Spotify playlist import", "spotify_import"),
+    LASTFM("Genres and creators (Last.fm)", "lastfm"),
+    LYRICS("Lyrics (LRCLIB)", "lyrics"),
 }
 
 /** What a request is for; downloads and streams obey "Wi-Fi only", small lookups don't. */
@@ -46,6 +51,7 @@ object NetworkGate {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(GateInterceptor)
+            .addNetworkInterceptor(RadioRedirectGuard)
             .build()
     }
 
@@ -110,8 +116,31 @@ object NetworkGate {
                 ?: throw IOException("Request to ${req.url.host} has no feature tag")
             val traffic = req.tag(Traffic::class.java) ?: Traffic.LOOKUP
             blockReason(feature, traffic)?.let { throw NetworkBlockedException(feature, it) }
-            val out = if (req.header("User-Agent") == null) req.newBuilder().header("User-Agent", userAgent).build() else req
+            val out = req.newBuilder().apply {
+                if (req.header("User-Agent") == null) header("User-Agent", userAgent)
+                // redirect count for [RadioRedirectGuard]; OkHttp copies tags onto each follow-up request
+                if (feature == Feature.RADIO) tag(AtomicInteger::class.java, AtomicInteger())
+            }.build()
             return chain.proceed(out)
+        }
+    }
+
+    /**
+     * Radio addresses come from strangers, so every redirect hop must pass the same check as
+     * the first URL (no local or private hosts, http(s) only) and chains stay short.
+     */
+    private object RadioRedirectGuard : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val req = chain.request()
+            val resp = chain.proceed(req)
+            val hops = req.tag(AtomicInteger::class.java)
+            if (hops == null || !resp.isRedirect) return resp
+            val target = resp.header("Location")?.let { req.url.resolve(it) } ?: return resp
+            if (hops.incrementAndGet() > MAX_RADIO_REDIRECTS || !RadioUrlPolicy.isAllowed(target.toString())) {
+                resp.close()
+                throw ProtocolException("Stream redirect to ${target.host} refused")
+            }
+            return resp
         }
     }
 
@@ -127,4 +156,5 @@ object NetworkGate {
 
     const val PREFS = "ctify-net"
     const val FEATURE_HEADER = "X-Ctify-Feature"
+    private const val MAX_RADIO_REDIRECTS = 6
 }

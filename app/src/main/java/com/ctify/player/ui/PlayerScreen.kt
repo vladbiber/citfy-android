@@ -1,5 +1,9 @@
 package com.ctify.player.ui
 
+import com.ctify.player.ui.skins.radio.RadioSkin
+import com.ctify.player.ui.skins.radio.RadioSkinView
+import com.ctify.player.ui.skins.radio.aspectRatio
+import androidx.compose.foundation.layout.aspectRatio
 import android.os.Build
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -54,8 +58,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Favorite
+import com.ctify.player.ui.player.SleepSheet
+import com.ctify.player.ui.player.sleepLeft
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.LocalContentColor
@@ -65,6 +71,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,7 +112,46 @@ import com.ctify.player.ui.theme.accentBrush
 import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
-import com.ctify.player.ui.radio.RewindRow
+import com.ctify.player.radio.Station
+import com.ctify.player.ui.theme.boosted
+import com.ctify.player.ui.theme.rememberMusicPulse
+import androidx.compose.runtime.State
+import androidx.compose.ui.draw.drawBehind
+import com.ctify.player.ui.visualizer.Visualizer
+import com.ctify.player.ui.visualizer.VisualizerView
+import com.ctify.player.net.Feature
+import com.ctify.player.net.NetworkGate
+import com.ctify.player.net.Traffic
+import com.ctify.player.ui.youtube.isStreamed
+import com.ctify.player.ui.youtube.toYtSong
+import com.ctify.player.ui.youtube.ytVideoId
+import com.ctify.player.youtube.download.DownloadState
+import com.ctify.player.youtube.download.Downloads
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.delay
+import com.ctify.player.lyrics.Lyrics
+import com.ctify.player.lyrics.LyricsRepository
+import com.ctify.player.ui.player.LyricsView
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.runtime.produceState
+import com.ctify.player.ui.radio.RadioUi
+import com.ctify.player.ui.radio.rememberRadioUi
+import com.ctify.player.ui.radio.stationRows
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.lazy.LazyListScope
 import com.ctify.player.ui.skins.CdSkin
 import com.ctify.player.ui.skins.CoverSkin
 import com.ctify.player.ui.skins.LiveProgress
@@ -128,7 +184,6 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.Dp
 import com.ctify.player.data.Track
-import com.ctify.player.player.fx.Mood
 import com.ctify.player.player.sound.GenrePreset
 import com.ctify.player.player.sound.SoundSettings
 import com.ctify.player.ui.player.SkinPicker
@@ -144,9 +199,18 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     var skin by remember { mutableStateOf(Skin.load(ctx)) }
+    // a visualizer, when chosen, takes the stage instead of the skin
+    var visualizer by remember { mutableStateOf(Visualizer.load(ctx)) }
+    var radioSkin by remember { mutableStateOf(RadioSkin.load(ctx)) }
     var sheet by remember { mutableStateOf(false) }
-    var queue by remember { mutableStateOf(false) }
+    var sleep by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
+    // null while looking; fetched for the Now Playing side only, so the button can grey out early
+    val lyrics by produceState<Lyrics?>(null, track?.id, state?.station == null) {
+        value = track?.let(LyricsRepository::cached)
+        if (value == null && track != null && state?.station == null) value = LyricsRepository.get(track)
+    }
     var panel by remember { mutableStateOf<ChipPanel?>(null) }
     val radio = (ctx.applicationContext as CtifyApp).radio
     val recents by radio.recents.collectAsState(initial = emptyList())
@@ -165,21 +229,34 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     // two-color fade on the small spots; cover colors win when they are on
     val fill: Brush? = if (source == ThemeSource.DUO && !coverColors) accentBrush() else null
 
+    val scope = rememberCoroutineScope()
+    val drop = remember { Animatable(0f) }
+    val closeAt = with(LocalDensity.current) { 120.dp.toPx() }
+
     // not inside a Surface, so set the text color here or bare Text turns black
     CompositionLocalProvider(LocalContentColor provides Ink) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Backdrop(track?.coverUri, accent)
-        if (!coverColors) LiquidBackground(Modifier.fillMaxSize())
+    Box(
+        Modifier
+            .fillMaxSize()
+            // drag down where no skin, slider or scroll claims the touch: follows the finger, then the usual slide-out
+            // shortcut: the compact layout's and the radio side's scroll take vertical drags, so there only the arrow and Back close
+            .draggable(
+                rememberDraggableState { d -> scope.launch { drop.snapTo((drop.value + d).coerceAtLeast(0f)) } },
+                Orientation.Vertical,
+                onDragStopped = { v -> if (drop.value > closeAt || v > 2_000f) onClose() else drop.animateTo(0f) },
+            )
+            .graphicsLayer { translationY = drop.value }
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        val pulse = rememberMusicPulse(live.playing)
+        Backdrop(track?.coverUri, accent, pulse)
+        if (!coverColors) LiquidBackground(Modifier.fillMaxSize(), pulse)
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
             // very short screens (or huge fonts) scroll; otherwise the stage takes what is left
             val compact = maxHeight < 560.dp
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .then(if (compact) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
+            val screenHeight = maxHeight
+            val main: @Composable ColumnScope.() -> Unit = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                 TopPill(
                     onRadio, onClose,
                     onSource = { toRadio ->
@@ -194,25 +271,81 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     },
                     onSound = { sheet = true },
                 )
+                if (!onRadio && track != null) {
+                    Spacer(Modifier.width(8.dp))
+                    LyricsButton(lyrics, showLyrics, accent) { showLyrics = it }
+                }
+                }
                 BoxWithConstraints(
                     Modifier
                         .fillMaxWidth()
                         .then(if (compact) Modifier.height(340.dp) else Modifier.weight(1f))
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 6.dp)
+                        // the stage belongs to the skins (scratch, shuttle, tap to play), so drags here never close the player
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                do {
+                                    val e = awaitPointerEvent()
+                                    e.changes.forEach { if (it.positionChange() != Offset.Zero) it.consume() }
+                                } while (e.changes.any { it.pressed })
+                            }
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     if (pickStation) FilledTonalButton(onClick = onOpenRadio) { Text("Pick a station") }
-                    else AnimatedContent(
-                        targetState = skin,
-                        transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
-                        label = "skin",
-                    ) { s ->
-                        SkinView(s, live, art, accent, track, skinSide(s, maxWidth, maxHeight), seek = state?.station == null, fill = fill)
+                    else {
+                    val stageMax = maxWidth
+                    val stageHeight = maxHeight
+                    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                        // lyrics on the left, the skin shrinks to the right
+                        val lyricsOn = showLyrics && !onRadio && lyrics?.found == true
+                        AnimatedVisibility(lyricsOn, Modifier.weight(1f), enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+                            lyrics?.let { LyricsView(it, live, Ink, InkDim, Modifier.fillMaxSize().padding(end = 8.dp)) }
+                        }
+                        val stageWidth by animateDpAsState(if (lyricsOn) stageMax * 0.42f else stageMax, label = "stage")
+                        Box(Modifier.width(stageWidth), contentAlignment = Alignment.Center) {
+                            AnimatedContent(
+                                targetState = visualizer ?: if (state?.station != null) radioSkin else skin,
+                                transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
+                                label = "skin",
+                            ) { s ->
+                                if (s is Visualizer) VisualizerView(s, art, accent, live.playing, still = false, side = minOf(stageWidth, stageHeight))
+                                else if (s is Skin) SkinView(s, live, art, accent, track, skinSide(s, stageWidth, stageHeight), seek = state?.station == null, fill = fill)
+                                else if (s is RadioSkin) state?.station?.let { st ->
+                                    RadioSkinView(
+                                        s, st.name, track?.title?.takeIf { it != st.name }, art, accent, live.playing, still = false,
+                                        onTogglePlay = { PlayerHub.togglePlay() }, modifier = radioSkinSize(s, stageWidth, stageHeight),
+                                    )
+                                }
+                            }
+                        }
+                    }
                     }
                 }
-                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true })
+                ControlCard(live, accent, seekBar = visualizer != null || skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onSleep = { sleep = true })
                 SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
+            val pad = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            if (state?.station != null) {
+                // radio: the player fills the first screen, the stations to switch to scroll up below it
+                val ui = rememberRadioUi()
+                LazyColumn(Modifier.fillMaxSize()) {
+                    item(key = "player") {
+                        Column(
+                            Modifier.fillMaxWidth().then(if (compact) Modifier else Modifier.height(screenHeight)).then(pad),
+                            horizontalAlignment = Alignment.CenterHorizontally, content = main,
+                        )
+                    }
+                    playerStations(favStations, recents, ui)
+                }
+            } else Column(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (compact) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .then(pad),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                content = main,
+            )
         }
     }
     }
@@ -237,22 +370,54 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     }
     if (picker) {
         val still = remember { LiveProgress(still = true) }
-        SkinPicker(
-            current = skin,
-            preview = { s, side -> SkinView(s, still, art, accent, track, side, seek = false) },
-            onSelect = { skin = it; Skin.save(ctx, it); picker = false },
+        SkinPicker<Enum<*>>(
+            // the radio side picks from the radio skins; songs keep theirs
+            tabs = listOf((if (state?.station != null) "Skins" to RadioSkin.entries else "Skins" to Skin.entries), "Visualizers" to Visualizer.entries),
+            current = visualizer ?: if (state?.station != null) radioSkin else skin,
+            label = { (it as? Skin)?.label ?: (it as? RadioSkin)?.label ?: (it as Visualizer).label },
+            preview = { item, space ->
+                if (item is Skin) SkinView(item, still, art, accent, track, skinSide(item, space.width, space.height), seek = false)
+                else if (item is Visualizer) VisualizerView(item, art, accent, playing = false, still = true, side = minOf(space.width, space.height))
+                else if (item is RadioSkin) RadioSkinView(
+                    item, state?.station?.name ?: "ctify radio", null, art, accent, playing = false, still = true,
+                    onTogglePlay = {}, modifier = radioSkinSize(item, space.width, space.height),
+                )
+            },
+            onSelect = {
+                when (it) {
+                    is Skin -> { skin = it; Skin.save(ctx, it); visualizer = null }
+                    is RadioSkin -> { radioSkin = it; RadioSkin.save(ctx, it); visualizer = null }
+                    else -> visualizer = it as Visualizer
+                }
+                Visualizer.save(ctx, visualizer)
+                picker = false
+            },
             onDismiss = { picker = false },
         )
     }
-    if (queue) {
+    if (sleep) {
         ModalBottomSheet(
-            onDismissRequest = { queue = false },
+            onDismissRequest = { sleep = false },
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
-            QueueSheet()
+            SleepSheet(live = state?.station != null, onDone = { sleep = false })
         }
     }
+}
+
+/** Favorite stations, then recent ones not already listed; a tap switches straight to it. */
+private fun LazyListScope.playerStations(favorites: List<Station>, recents: List<Station>, ui: RadioUi) {
+    val rest = recents.filter { r -> favorites.none { it.uuid == r.uuid } }
+    if (favorites.isNotEmpty()) {
+        item(key = "fav-title") { SectionHeader("Favorite stations", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }
+        stationRows(favorites, ui, keyPrefix = "pf")
+    }
+    if (rest.isNotEmpty()) {
+        item(key = "recent-title") { SectionHeader("Recent stations", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }
+        stationRows(rest, ui, keyPrefix = "pr")
+    }
+    item(key = "end") { Spacer(Modifier.height(24.dp)) }
 }
 
 /** Pastel cover accents are too light on a light background; keep the hue, lower the lightness. */
@@ -290,27 +455,55 @@ internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, 
     }
 }
 
+/** Blurred cover under a scrim; with a [pulse] the colors are boosted and swell with the bass. */
 @Composable
-private fun Backdrop(art: String?, accent: Color) {
+private fun Backdrop(art: String?, accent: Color, pulse: State<Float>? = null) {
     val scrim = MaterialTheme.colorScheme.background
     val blurry = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val glow = if (pulse != null) accent.boosted() else accent
+    val artAlpha = if (blurry) 0.7f else 0.28f
     AsyncImage(
         model = art,
         contentDescription = null,
         contentScale = ContentScale.Crop,
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { scaleX = 1.25f; scaleY = 1.25f }
+            // pulse is read in the layer and draw blocks only, so beats never recompose the player
+            .graphicsLayer { val e = pulse?.value ?: 0f; scaleX = 1.25f + 0.08f * e; scaleY = scaleX }
             .then(if (blurry) Modifier.blur(70.dp) else Modifier)
-            .alpha(if (blurry) 0.7f else 0.28f),
+            .graphicsLayer { alpha = if (pulse == null) artAlpha else (artAlpha * 1.25f + 0.15f * pulse.value).coerceAtMost(1f) },
     )
     Box(
-        Modifier.fillMaxSize().background(
-            Brush.verticalGradient(
-                listOf(accent.copy(alpha = 0.10f), scrim.copy(alpha = 0.25f), scrim.copy(alpha = 0.7f))
+        Modifier.fillMaxSize().drawBehind {
+            val e = pulse?.value ?: 0f
+            // the lower stops stay as they were, so the controls and text keep their contrast
+            val top = if (pulse == null) 0.10f else 0.22f + 0.18f * e
+            drawRect(Brush.verticalGradient(listOf(glow.copy(alpha = top), scrim.copy(alpha = 0.25f), scrim.copy(alpha = 0.7f))))
+            if (e > 0f) drawCircle(
+                Brush.radialGradient(listOf(glow.copy(alpha = 0.35f * e), Color.Transparent), Offset(size.width / 2, size.height * 0.35f), size.maxDimension * 0.6f),
+                size.maxDimension * 0.6f, Offset(size.width / 2, size.height * 0.35f),
             )
-        )
+        }
     )
+}
+
+/** Round lyrics switch beside the top pill; greyed out when the song has none. */
+@Composable
+private fun LyricsButton(lyrics: Lyrics?, on: Boolean, accent: Color, onToggle: (Boolean) -> Unit) {
+    val found = lyrics?.found == true
+    Surface(color = if (on) accent.copy(alpha = 0.3f) else Glass, shape = CircleShape, modifier = Modifier.size(48.dp)) {
+        IconToggleButton(checked = on, onCheckedChange = onToggle, enabled = found) {
+            Icon(
+                Icons.Default.Lyrics,
+                contentDescription = when {
+                    lyrics == null -> "Lyrics, looking for them"
+                    !found -> "Lyrics, none found for this song"
+                    else -> "Lyrics"
+                },
+                tint = if (found) Ink else InkDim.copy(alpha = 0.45f),
+            )
+        }
+    }
 }
 
 @Composable
@@ -364,7 +557,6 @@ private fun SoundStrip(accent: Color, onSkin: () -> Unit, onPanel: (ChipPanel) -
     val reversed by PlayerHub.reverseOn.collectAsState()
     val preparing by PlayerHub.reversePreparing.collectAsState()
     val genre by SoundSettings.genreKey.collectAsState()
-    val mood = activeMood()
     val space = spaceSummary(width, pan, muffle)
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 2.dp),
@@ -372,7 +564,6 @@ private fun SoundStrip(accent: Color, onSkin: () -> Unit, onPanel: (ChipPanel) -
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StripChip("Skin", Icons.Default.Palette, false, accent, description = "Player look", onClick = onSkin)
-        StripChip(mood?.takeIf { it != Mood.ORIGINAL }?.label ?: "Moods", null, mood != null && mood != Mood.ORIGINAL, accent) { onPanel(ChipPanel.MOODS) }
         StripChip(GenrePreset.labelOf(genre), null, genre != GenrePreset.BALANCED, accent, description = "Genre preset ${GenrePreset.labelOf(genre)}") {
             onPanel(ChipPanel.GENRE)
         }
@@ -442,7 +633,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill:
 }
 
 @Composable
-private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onQueue: () -> Unit) {
+private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onSleep: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     val station = state?.station
@@ -474,8 +665,14 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                         tint = if (fav) accent else Ink,
                     )
                 }
-                if (station == null) IconButton(onClick = onQueue) {
-                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Up next", tint = Ink)
+                if (station == null && track?.isStreamed() == true) DownloadButton(track, accent)
+                val sleepLeft = sleepLeft()
+                IconButton(onClick = onSleep) {
+                    Icon(
+                        Icons.Default.Bedtime,
+                        contentDescription = sleepLeft?.let { "Sleep timer, pausing $it" } ?: "Sleep timer",
+                        tint = if (sleepLeft != null) accent else Ink,
+                    )
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -483,8 +680,8 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (station == null) Toggle(Icons.Default.Shuffle, "Shuffle", state?.shuffle == true, accent) { PlayerHub.toggleShuffle() }
-                        IconButton(onClick = { PlayerHub.previous() }) {
-                            Icon(Icons.Default.SkipPrevious, contentDescription = if (station != null) "Previous station" else "Previous track", tint = Ink)
+                        if (station == null) IconButton(onClick = { PlayerHub.previous() }) {
+                            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous track", tint = Ink)
                         }
                         Box(
                             Modifier
@@ -499,25 +696,21 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                                 contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = if (fill != null) MaterialTheme.colorScheme.onPrimary else if (accent.luminance() > 0.4f) Color(0xFF1A1719) else Color.White,
                             )
                         }
-                        IconButton(onClick = { PlayerHub.next() }) {
-                            Icon(Icons.Default.SkipNext, contentDescription = if (station != null) "Next station" else "Next track", tint = Ink)
+                        if (station == null) IconButton(onClick = { PlayerHub.next() }) {
+                            Icon(Icons.Default.SkipNext, contentDescription = "Next track", tint = Ink)
                         }
                         val repeat = state?.repeat ?: "off"
                         if (station == null) Toggle(
                             if (repeat == "track") Icons.Default.RepeatOne else Icons.Default.Repeat,
                             if (repeat == "track") "Repeat one" else "Repeat", repeat != "off", accent,
                         ) { PlayerHub.cycleRepeat() }
-                    }
-                    val bufferStart = state?.bufferStartMs
-                    val edge = state?.durationMs ?: 0L
-                    if (station != null && bufferStart != null && edge > bufferStart + 5_000) {
-                        RewindRow(live, bufferStart, edge, accent)
-                    } else if (station != null) {
-                        Row(Modifier.heightIn(min = 32.dp).padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            LiveBadge(accent)
-                            Text(station.name, style = MaterialTheme.typography.labelSmall, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+                        if (station != null) {
+                            LiveBadge(accent, Modifier.padding(start = 12.dp))
+                            Text(station.name, style = MaterialTheme.typography.labelSmall, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp))
                         }
-                    } else if (seekBar) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
+                    }
+                    if (station != null) Spacer(Modifier.height(8.dp))
+                    else if (seekBar) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
                         Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
                         PillSlider(
                             value = live.fraction,
@@ -533,8 +726,72 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                         Text(formatMs(live.durationMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
                     }
                     if (station == null) ChapterRow(live, Ink)
+                    if (station == null) {
+                        var upNext by rememberSaveable { mutableStateOf(false) }
+                        IconButton(onClick = { upNext = !upNext }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                            Icon(
+                                if (upNext) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (upNext) "Hide up next" else "Show up next", tint = InkDim,
+                            )
+                        }
+                        AnimatedVisibility(upNext, enter = expandVertically(), exit = shrinkVertically()) {
+                            Column(Modifier.padding(end = 10.dp)) { QueueSheet(maxHeight = 260.dp) }
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+/** Saves the streamed song: progress while it runs, a check when it is on the phone; a tap while pending cancels. */
+@Composable
+private fun DownloadButton(track: Track, accent: Color) {
+    val vid = track.ytVideoId() ?: return
+    val scope = rememberCoroutineScope()
+    val flow = remember { Downloads.all() }
+    val all by flow.collectAsState(initial = emptyList())
+    val d = all.firstOrNull { it.videoId == vid }
+    // isMetered() can't be observed, so look again every few seconds while a download waits
+    val blocked by produceState<String?>(null, d?.state) {
+        while (d?.state == DownloadState.QUEUED) {
+            value = NetworkGate.blockReason(Feature.YOUTUBE, Traffic.DOWNLOAD)
+            delay(2_000)
+        }
+    }
+    val pending = d?.state == DownloadState.QUEUED || d?.state == DownloadState.RUNNING
+    val done = d?.state == DownloadState.DONE || d?.state == DownloadState.SKIPPED
+    val label = when {
+        done -> "Downloaded"
+        d?.state == DownloadState.RUNNING && d.bytesTotal > 0 -> "Downloading, ${d.bytesDone * 100 / d.bytesTotal}%, tap to cancel"
+        d?.state == DownloadState.RUNNING -> "Downloading, tap to cancel"
+        pending && blocked != null && NetworkGate.blockReason(Feature.YOUTUBE) == null -> "Waiting for Wi-Fi, tap to cancel"
+        pending -> "Waiting to download, tap to cancel"
+        d?.state == DownloadState.FAILED -> "Download failed, tap to retry"
+        else -> "Download"
+    }
+    IconButton(
+        enabled = !done,
+        onClick = { if (pending) Downloads.cancel(vid) else scope.launch { Downloads.enqueue(listOf(track.toYtSong())) } },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            when {
+                d?.state == DownloadState.RUNNING && d.bytesTotal > 0 -> CircularProgressIndicator(
+                    progress = { d.bytesDone.toFloat() / d.bytesTotal }, modifier = Modifier.size(26.dp), color = accent, strokeWidth = 2.dp,
+                )
+                d?.state == DownloadState.RUNNING -> CircularProgressIndicator(Modifier.size(26.dp), color = accent, strokeWidth = 2.dp)
+            }
+            Icon(
+                when {
+                    done -> Icons.Default.DownloadDone
+                    d?.state == DownloadState.QUEUED -> Icons.Default.Schedule
+                    d?.state == DownloadState.FAILED -> Icons.Default.ErrorOutline
+                    else -> Icons.Default.Download
+                },
+                contentDescription = label,
+                tint = if (done || pending) accent else Ink,
+                modifier = Modifier.size(if (d?.state == DownloadState.RUNNING) 16.dp else 24.dp),
+            )
         }
     }
 }
@@ -555,4 +812,11 @@ private fun Toggle(icon: ImageVector, label: String, on: Boolean, accent: Color,
             Icon(icon, contentDescription = null, tint = if (on) accent else Ink, modifier = Modifier.size(20.dp))
         }
     }
+}
+
+/** Fits a radio skin into the stage at its own width/height ratio. */
+private fun radioSkinSize(s: RadioSkin, maxW: Dp, maxH: Dp): Modifier {
+    val r = s.aspectRatio()
+    val w = minOf(maxW, maxH * r)
+    return Modifier.width(w).aspectRatio(r)
 }

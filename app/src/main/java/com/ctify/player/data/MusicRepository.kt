@@ -5,11 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
 import com.ctify.player.data.db.CtifyDatabase
 import com.ctify.player.data.db.FavoriteEntity
+import com.ctify.player.data.db.PlayEntity
 import com.ctify.player.data.db.PlaybackSnapshotEntity
 import com.ctify.player.data.db.TrackEntity
 import com.ctify.player.data.db.TrackSource
@@ -17,7 +20,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -80,7 +85,8 @@ class MusicRepository private constructor(private val appContext: Context, datab
         val imported = loadImportedTracks().map { ensureImportedCover(it) }
         val youtube = loadYoutubeTracks()
         val ytUris = youtube.mapTo(HashSet()) { it.uri }
-        val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()).filter { it.uri !in ytUris } else emptyList()
+        val ytDevIds = youtube.mapNotNullTo(HashSet()) { devIdOfDocument(it.uri) }
+        val device = if (includeDevice) runCatching { scanDevice() }.getOrDefault(emptyList()).filter { it.uri !in ytUris && it.id !in ytDevIds } else emptyList()
         val all = youtube + loadStreamTracks() + imported + demo + device
         synchronized(byId) {
             val streamed = byId.values.filter { it.id.startsWith(STREAM_PREFIX) }
@@ -147,6 +153,17 @@ class MusicRepository private constructor(private val appContext: Context, datab
             }
         }
         return out
+    }
+
+    /**
+     * Songs saved into a picked folder have a document uri, so the device scan sees them again under
+     * their MediaStore id; this finds that id. shortcut: needs Android 10, older phones may list such songs twice.
+     */
+    private fun devIdOfDocument(uri: String): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !uri.startsWith("content://")) return null
+        val u = Uri.parse(uri)
+        if (!DocumentsContract.isDocumentUri(appContext, u)) return null
+        return runCatching { MediaStore.getMediaUri(appContext, u)?.let { "dev_" + ContentUris.parseId(it) } }.getOrNull()
     }
 
     // ---- imported files (Storage Access Framework) ----
@@ -527,8 +544,40 @@ class MusicRepository private constructor(private val appContext: Context, datab
         PlaybackState(s.trackId, s.positionMs, s.shuffle, s.repeatMode, s.volume)
     }
 
+    // ---- listening history ----
+
+    fun recordPlay(t: Track) {
+        val now = System.currentTimeMillis()
+        writer.launch {
+            dao.insertPlay(PlayEntity(trackId = t.id, playedAt = now, title = t.title, artist = t.artist, album = t.album, uri = t.uri, coverUri = t.coverUri, durationMs = t.durationMs))
+            dao.prunePlays(MAX_PLAYS)
+        }
+    }
+
+    /** A streamed song and its downloaded copy share one history entry, see [playedTracks]. */
+    private fun historyIds(id: String) = listOf(id, id.replaceFirst(Regex("^yt_"), STREAM_PREFIX), id.replaceFirst(Regex("^$STREAM_PREFIX"), "yt_")).distinct()
+
+    suspend fun hasPlays(id: String): Boolean = dao.hasPlays(historyIds(id))
+
+    fun removeFromHistory(id: String) { writer.launch { dao.deletePlays(historyIds(id)) } }
+
+    fun clearHistory() { writer.launch { dao.clearPlays() } }
+
+    /** Distinct tracks, newest play first. */
+    fun recentlyPlayed(limit: Int): Flow<List<Track>> = dao.recentPlays(limit).combine(tracks) { rows, _ -> rows.playedTracks() }
+
+    /** Tracks played more than once, most plays first. */
+    fun mostPlayed(limit: Int): Flow<List<Track>> = dao.mostPlays(limit).combine(tracks) { rows, _ -> rows.playedTracks() }
+
+    /** Prefers the downloaded copy of a streamed song; streams not in the library replay from the stored row; gone local files drop out. */
+    private fun List<PlayEntity>.playedTracks(): List<Track> = mapNotNull { p ->
+        trackById(p.trackId.replaceFirst(STREAM_PREFIX, "yt_").takeIf { p.trackId.startsWith(STREAM_PREFIX) }) ?: trackById(p.trackId)
+            ?: if (p.trackId.startsWith(STREAM_PREFIX)) Track(p.trackId, p.title, p.artist, p.album, p.uri, p.coverUri, p.durationMs, isDemo = false) else null
+    }.distinctBy { it.id }
+
     companion object {
         private const val STREAM_PREFIX = "yts_"
+        private const val MAX_PLAYS = 5000
         private fun ytCover(videoId: String) = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
         @Volatile private var instance: MusicRepository? = null
         fun get(context: Context, database: CtifyDatabase): MusicRepository =

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -15,10 +17,28 @@ android {
         versionCode = 22
         versionName = "2.1.2"
         vectorDrawables { useSupportLibrary = true }
+        // Last.fm key for genres and creators: local.properties, else the environment; blank hides those parts
+        val lastFmKey = rootProject.file("local.properties").takeIf { it.exists() }
+            ?.let { f -> Properties().apply { f.inputStream().use(::load) }.getProperty("LASTFM_API_KEY") }
+            ?: System.getenv("LASTFM_API_KEY").orEmpty()
+        buildConfigField("String", "LASTFM_API_KEY", "\"${lastFmKey.trim().filter(Char::isLetterOrDigit)}\"")
+    }
+
+    signingConfigs {
+        // one stable key from the environment (CI); without it release builds stay unsigned
+        System.getenv("CTIFY_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let { path ->
+            create("release") {
+                storeFile = file(path)
+                storePassword = System.getenv("CTIFY_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("CTIFY_KEY_ALIAS")
+                keyPassword = System.getenv("CTIFY_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

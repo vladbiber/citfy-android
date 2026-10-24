@@ -45,6 +45,8 @@ object Appearance {
     val gradient = MutableStateFlow(GradientStyle.LIQUID)
     val pureBlack = MutableStateFlow(false)
     val coverColors = MutableStateFlow(false)
+    /** Player background swells with the bass; battery saver turns it off whatever this says. */
+    val reactToMusic = MutableStateFlow(true)
 
     val dynamicSupported get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -59,6 +61,7 @@ object Appearance {
         gradient.value = runCatching { GradientStyle.valueOf(p.getString("gradient", null)!!) }.getOrDefault(GradientStyle.LIQUID)
         pureBlack.value = p.getBoolean("pure_black", false)
         coverColors.value = p.getBoolean("cover_colors", false)
+        reactToMusic.value = p.getBoolean("react_to_music", true)
     }
 
     fun setMode(v: ThemeMode) { mode.value = v; save() }
@@ -68,6 +71,7 @@ object Appearance {
     fun setGradient(v: GradientStyle) { gradient.value = v; save() }
     fun setPureBlack(v: Boolean) { pureBlack.value = v; save() }
     fun setCoverColors(v: Boolean) { coverColors.value = v; save() }
+    fun setReactToMusic(v: Boolean) { reactToMusic.value = v; save() }
 
     private fun save() {
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -78,6 +82,7 @@ object Appearance {
             .putString("gradient", gradient.value.name)
             .putBoolean("pure_black", pureBlack.value)
             .putBoolean("cover_colors", coverColors.value)
+            .putBoolean("react_to_music", reactToMusic.value)
             .apply()
     }
 

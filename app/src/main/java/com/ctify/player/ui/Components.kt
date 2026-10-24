@@ -1,6 +1,20 @@
 package com.ctify.player.ui
 
 import androidx.compose.foundation.progressSemantics
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Shape
@@ -253,13 +267,38 @@ fun MiniPlayer(
     onClick: () -> Unit,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit = {},
+    onPrevious: () -> Unit = {},
     isLive: Boolean = false,
     status: String? = null,
 ) {
+    val scope = rememberCoroutineScope()
+    val dx = remember { Animatable(0f) }
+    val next by rememberUpdatedState(onNext)
+    val previous by rememberUpdatedState(onPrevious)
+    val swipeAt = with(LocalDensity.current) { 72.dp.toPx() }
+    val nextLabel = if (isLive) "Next station" else "Next track"
+    val previousLabel = if (isLive) "Previous station" else "Previous track"
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp)
+            // swipe left = next, right = previous; taps still open the player
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (dx.value <= -swipeAt) next() else if (dx.value >= swipeAt) previous()
+                        scope.launch { dx.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy)) }
+                    },
+                    onDragCancel = { scope.launch { dx.animateTo(0f) } },
+                ) { change, amount ->
+                    change.consume()
+                    scope.launch { dx.snapTo(dx.value + amount) }
+                }
+            }
+            .graphicsLayer {
+                translationX = dx.value
+                alpha = 1f - (abs(dx.value) / size.width).coerceAtMost(0.4f)
+            }
             .clip(MaterialTheme.shapes.medium)
             .background(SurfaceElevated),
     ) {
@@ -267,6 +306,12 @@ fun MiniPlayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClickLabel = "open player", onClick = onClick)
+                .semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction(nextLabel) { next(); true },
+                        CustomAccessibilityAction(previousLabel) { previous(); true },
+                    )
+                }
                 .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -284,7 +329,7 @@ fun MiniPlayer(
                 )
             }
             IconButton(onClick = onNext) {
-                Icon(Icons.Filled.SkipNext, if (isLive) "Next station" else "Next track", tint = TextPrimary)
+                Icon(Icons.Filled.SkipNext, nextLabel, tint = TextPrimary)
             }
         }
         if (isLive) Spacer(Modifier.height(2.dp))

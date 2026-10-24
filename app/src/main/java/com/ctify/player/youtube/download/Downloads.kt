@@ -1,6 +1,11 @@
 package com.ctify.player.youtube.download
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -31,6 +36,8 @@ object Downloads {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val chargingOnly = MutableStateFlow(false)
+    /** folder tree picked by the user; null saves into Music/Ctify */
+    val folder = MutableStateFlow<Uri?>(null)
     /** when the pause after a 403/429/bot check ends; 0 when not paused */
     val pausedUntil = MutableStateFlow(0L)
     val pauseReason = MutableStateFlow<String?>(null)
@@ -43,6 +50,7 @@ object Downloads {
         this.dao = dao
         val p = prefs()
         chargingOnly.value = p.getBoolean("charging_only", false)
+        folder.value = p.getString("folder", null)?.let(Uri::parse)
         pausedUntil.value = p.getLong("paused_until", 0L)
         pauseReason.value = p.getString("pause_reason", null)
         scope.launch { if (dao.pending() > 0) kick() }
@@ -54,6 +62,24 @@ object Downloads {
         chargingOnly.value = v
         prefs().edit().putBoolean("charging_only", v).apply()
         kick(replace = true)
+    }
+
+    /** [tree] from the system folder picker, or null for Music/Ctify. Earlier grants are kept so songs saved there still play. */
+    fun setFolder(tree: Uri?) {
+        if (tree != null) {
+            app.contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        folder.value = tree
+        prefs().edit().putString("folder", tree?.toString()).apply()
+    }
+
+    /** The picked folder can't be written any more: go back to Music/Ctify and say so once. */
+    internal fun folderLost() {
+        if (folder.value == null) return
+        setFolder(null)
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(app, "Download folder isn't available. Saving to Music/Ctify instead.", Toast.LENGTH_LONG).show()
+        }
     }
 
     /** Queues songs the user picked. Songs already saved or queued are left out; returns how many were added. */

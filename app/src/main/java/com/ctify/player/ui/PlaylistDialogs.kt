@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Queue
 import androidx.compose.material.icons.filled.QueueMusic
@@ -26,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -94,6 +96,19 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
                     Text("Remove from library", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                     Text("Also takes it out of your playlists and favorites", color = TextMuted, style = MaterialTheme.typography.labelSmall)
                 }
+            }
+        }
+
+        val played by produceState(false, trackId) { value = viewModel.repository.hasPlays(trackId) }
+        if (played) Row(
+            Modifier.fillMaxWidth().clickable { viewModel.repository.removeFromHistory(trackId); onDismiss() }.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.History, null, tint = Accent)
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("Remove from history", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Takes it out of Recently and Most played", color = TextMuted, style = MaterialTheme.typography.labelSmall)
             }
         }
 

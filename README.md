@@ -68,6 +68,36 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Or just open the folder in Android Studio and press Run.
 
+## Releases and signing
+
+Every push builds a debug APK (Actions artifact). Pushing a tag like `v2.1.3`
+builds a release APK signed with one fixed key and attaches it to that tag's
+GitHub Release as `ctify.apk`. Local release builds without the key stay
+unsigned.
+
+One-time setup for the maintainer:
+
+```sh
+keytool -genkeypair -v -keystore ctify-release.jks -alias ctify \
+  -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 ctify-release.jks   # paste the output into CTIFY_KEYSTORE_BASE64
+```
+
+Add these repository secrets (Settings → Secrets and variables → Actions):
+
+- `CTIFY_KEYSTORE_BASE64` — the base64 of the `.jks` file
+- `CTIFY_KEYSTORE_PASSWORD` — the keystore password
+- `CTIFY_KEY_ALIAS` — `ctify` (the `-alias` above)
+- `CTIFY_KEY_PASSWORD` — the key password (same as the keystore password if
+  keytool didn't ask for a separate one)
+
+Back up `ctify-release.jks` and its passwords somewhere safe and never commit
+them. If the key is lost, no future build can update installed copies.
+
+Older APKs were signed with whichever machine built them, so moving to the
+signed releases needs one uninstall: first use Settings → Save backup, then
+uninstall, install the new `ctify.apk` and use Settings → Restore.
+
 ## Credits
 
 The player looks (vinyl, CD, cassette and TP-7 style) are inspired by

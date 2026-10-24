@@ -1,0 +1,33 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # third_party/LevyraExtractor is in the tree, so a plain checkout has it
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build and test
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+        run: ./gradlew assembleDebug testDebugUnitTest
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ctify-debug
+          path: app/build/outputs/apk/debug/*.apk

@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.documentfile.provider.DocumentFile
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.net.Traffic
@@ -121,12 +122,14 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
     fun cover(item: DownloadEntity): ByteArray? {
         val shared = item.groupId?.let { File(covers, "album_$it.jpg") }
         shared?.takeIf { it.exists() }?.let { return it.readBytes() }
-        val url = item.thumbnail?.let(::bigThumbnail) ?: "https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg"
-        val bytes = runCatching {
-            NetworkGate.client.newCall(NetworkGate.request(url, Feature.YOUTUBE, Traffic.DOWNLOAD).build()).execute().use { r ->
-                if (r.isSuccessful) r.body.bytes() else null
-            }
-        }.getOrNull()?.takeIf { it.size in 1..(4 * 1024 * 1024) } ?: return null
+        val url = item.thumbnail ?: "https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg"
+        val bytes = bigThumbnails(url).firstNotNullOfOrNull { u ->
+            runCatching {
+                NetworkGate.client.newCall(NetworkGate.request(u, Feature.YOUTUBE, Traffic.DOWNLOAD).build()).execute().use { r ->
+                    if (r.isSuccessful) r.body.bytes() else null
+                }
+            }.getOrNull()?.takeIf { it.size in 1..(4 * 1024 * 1024) }
+        } ?: return null
         shared?.writeBytes(bytes)
         return bytes
     }
@@ -135,11 +138,17 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
         if (bytes != null) File(covers, "$videoId.jpg").writeBytes(bytes)
     }
 
-    /** Saves into Music/Ctify/<Artist>/<Album>/ and returns the file's uri. */
+    /** Saves into <picked folder or Music/Ctify>/<Artist>/<Album>/ and returns the file's uri. */
     fun save(file: File, item: DownloadEntity): Uri {
         val artist = safe(item.albumArtist ?: item.artist)
         val album = safe(item.album ?: "Singles")
         val name = (item.trackNumber?.let { "%02d ".format(it) } ?: "") + safe(item.title) + ".m4a"
+        Downloads.folder.value?.let { tree ->
+            val root = runCatching { DocumentFile.fromTreeUri(context, tree) }.getOrNull()
+            if (root == null || !root.canWrite()) Downloads.folderLost()
+            else runCatching { return saveToTree(file, root, artist, album, name) }
+            // a failed write falls through to Music/Ctify so the song isn't lost
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             // no MediaStore paths before Android 10: keep it in the app's own music folder
             val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Ctify/$artist/$album").apply { mkdirs() }
@@ -166,6 +175,19 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
         return uri
     }
 
+    private fun saveToTree(file: File, root: DocumentFile, artist: String, album: String, name: String): Uri {
+        fun DocumentFile.dir(n: String) = findFile(n)?.takeIf { it.isDirectory } ?: createDirectory(n) ?: throw IOException("Couldn't create $n")
+        // octet-stream keeps the name exactly as given; a typed mime may get a second extension
+        val doc = root.dir(artist).dir(album).createFile("application/octet-stream", name) ?: throw IOException("Couldn't create $name")
+        try {
+            context.contentResolver.openOutputStream(doc.uri, "w")?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: throw IOException("Couldn't write $name")
+        } catch (e: Exception) {
+            doc.delete()
+            throw e
+        }
+        return doc.uri
+    }
+
     fun cleanup(videoId: String) {
         work.listFiles()?.filter { it.name.startsWith(videoId) }?.forEach { it.delete() }
     }
@@ -175,9 +197,18 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
     companion object {
         private const val CHUNK = 2L * 1024 * 1024
 
-        /** YouTube Music thumbnails come small; ask for a 544 px square. */
-        fun bigThumbnail(url: String): String =
-            if (url.contains("googleusercontent.com")) url.replace(Regex("=w\\d+-h\\d+.*$"), "=w544-h544-l90-rj") else url
+        private val ytStill = Regex("^(https?://i\\d?\\.ytimg\\.com/vi/[^/]+/)[^/]*$")
+
+        /**
+         * Cover URLs to try in order, sharpest first. YouTube Music art comes small, so ask for a
+         * 1080 px square; video stills top out at maxresdefault (1280x720), which 404s on some
+         * videos, so sddefault and the original follow.
+         */
+        fun bigThumbnails(url: String): List<String> {
+            if (url.contains("googleusercontent.com")) return listOf(url.replace(Regex("=w\\d+-h\\d+.*$"), "=w1080-h1080-l90-rj"))
+            val dir = ytStill.find(url)?.groupValues?.get(1) ?: return listOf(url)
+            return listOf("${dir}maxresdefault.jpg", "${dir}sddefault.jpg", url).distinct()
+        }
     }
 }
 

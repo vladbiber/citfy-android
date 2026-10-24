@@ -85,11 +85,12 @@ internal fun rememberRadioBlock(): String? {
     return remember(offline, enabled) { NetworkGate.blockReason(Feature.RADIO) }
 }
 
-/** What every station row needs to know: hearts and the station on air. */
+/** What every station row needs to know: hearts, the station on air and the ones off air. */
 internal class RadioUi(
     val favoriteIds: Set<String>,
     val currentUuid: String?,
     val isPlaying: Boolean,
+    val offAirIds: Set<String>,
     val toggleFavorite: (Station) -> Unit,
 )
 
@@ -97,8 +98,9 @@ internal class RadioUi(
 internal fun rememberRadioUi(): RadioUi {
     val radio = radioRepo()
     val favs by radio.favoriteIds.collectAsStateWithLifecycle(initialValue = emptySet())
+    val offAir by radio.offAir.collectAsStateWithLifecycle(initialValue = emptySet())
     val now by PlayerHub.playback.collectAsState()
-    return RadioUi(favs, now?.station?.uuid, now?.isPlaying == true) { s -> radio.toggleFavorite(s, s.uuid in favs) }
+    return RadioUi(favs, now?.station?.uuid, now?.isPlaying == true, offAir) { s -> radio.toggleFavorite(s, s.uuid in favs) }
 }
 
 /** A list that loads from the network, shows the saved copy first and keeps it on failure. */
@@ -200,11 +202,15 @@ internal fun LazyListScope.stationRows(
     onDelete: ((Station) -> Unit)? = null,
 ) {
     itemsIndexed(list, key = { _, s -> keyPrefix + s.uuid }) { i, s ->
+        // lazy rows exist only while on screen, so only those are checked; scrolling away cancels the check
+        val radio = radioRepo()
+        LaunchedEffect(s.uuid) { if (s.uuid != PlayerHub.playback.value?.station?.uuid) radio.probe(s) }
         StationRow(
             station = s,
             isCurrent = s.uuid == ui.currentUuid,
             isPlaying = ui.isPlaying && s.uuid == ui.currentUuid,
             isFavorite = s.uuid in ui.favoriteIds,
+            isOffAir = s.uuid in ui.offAirIds,
             onClick = { PlayerHub.playStations(list, i) },
             onToggleFavorite = { ui.toggleFavorite(s) },
             onDelete = onDelete?.let { { it(s) } },
@@ -227,6 +233,7 @@ internal fun StationRow(
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onDelete: (() -> Unit)? = null,
+    isOffAir: Boolean = false,
 ) {
     Row(
         Modifier
@@ -240,9 +247,10 @@ internal fun StationRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            Modifier.weight(1f).semantics(mergeDescendants = true) {
+            Modifier.weight(1f).alpha(if (isOffAir) 0.5f else 1f).semantics(mergeDescendants = true) {
                 contentDescription = "${station.name}, ${station.subtitle()}"
-                if (isCurrent) stateDescription = if (isPlaying) "now playing" else "paused"
+                if (isOffAir) stateDescription = "off air"
+                else if (isCurrent) stateDescription = if (isPlaying) "now playing" else "paused"
             },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -264,7 +272,7 @@ internal fun StationRow(
                     style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
-                Text(station.subtitle(), color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (isOffAir) "Off air" else station.subtitle(), color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         IconButton(onClick = onToggleFavorite) {
