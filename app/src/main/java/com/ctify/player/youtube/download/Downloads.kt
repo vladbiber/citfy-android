@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /** The download queue: what to save, the user's conditions, and the pause after YouTube says stop. */
@@ -33,6 +34,8 @@ object Downloads {
     /** when the pause after a 403/429/bot check ends; 0 when not paused */
     val pausedUntil = MutableStateFlow(0L)
     val pauseReason = MutableStateFlow<String?>(null)
+    /** songs cancelled while the worker may have them; it drops them at the next chunk */
+    internal val cancelled: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     fun init(context: Context, dao: DownloadDao) {
         if (::app.isInitialized) return
@@ -79,6 +82,7 @@ object Downloads {
             )
         }
         if (fresh.isEmpty()) return 0
+        cancelled.removeAll(fresh.map { it.videoId }.toSet())
         dao.upsert(fresh)
         kick()
         return fresh.size
@@ -86,6 +90,8 @@ object Downloads {
 
     fun retryFailed() = scope.launch { dao.retryFailed(); kick() }
     fun remove(videoId: String) = scope.launch { dao.remove(videoId) }
+    /** Takes a song off the queue even while it is downloading; saved songs stay saved. */
+    fun cancel(videoId: String) = scope.launch { cancelled += videoId; dao.cancel(videoId) }
     fun clearFinished() = scope.launch { dao.clearFinished() }
 
     /** Starts the worker if it isn't already running or waiting; [replace] applies changed conditions. */

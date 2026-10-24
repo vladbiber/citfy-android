@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Queue
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -49,7 +50,7 @@ import kotlinx.coroutines.launch
 /** Bottom sheet to add a single track to an existing playlist, or to a brand-new one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: () -> Unit) {
+fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: () -> Unit, onMoveToTop: (() -> Unit)? = null) {
     val playlists by viewModel.repository.playlists.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }
     val track = viewModel.repository.trackById(trackId)
@@ -102,6 +103,15 @@ fun AddToPlaylistSheet(viewModel: PlayerViewModel, trackId: String, onDismiss: (
             Icon(Icons.Filled.Queue, null, tint = Accent)
             Spacer(Modifier.width(12.dp))
             Text("Add to queue", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+        }
+
+        if (onMoveToTop != null) Row(
+            Modifier.fillMaxWidth().clickable { onMoveToTop(); onDismiss() }.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.VerticalAlignTop, null, tint = Accent)
+            Spacer(Modifier.width(12.dp))
+            Text("Move to top", color = TextPrimary, fontWeight = FontWeight.SemiBold)
         }
 
         Row(

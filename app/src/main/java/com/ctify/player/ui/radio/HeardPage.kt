@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ctify.player.CtifyApp
 import com.ctify.player.radio.HeardSong
 import com.ctify.player.radio.SongLinks
 import com.ctify.player.ui.EmptyHint
@@ -46,7 +48,12 @@ import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.youtube.HeardAction
+import com.ctify.player.ui.youtube.DownloadPicker
 import com.ctify.player.ui.youtube.HeardYouTube
+import com.ctify.player.ui.youtube.PickSong
+import com.ctify.player.youtube.SongMatcher
+import com.ctify.player.youtube.YtSong
+import com.ctify.player.youtube.download.Downloads
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
@@ -57,13 +64,17 @@ internal fun HeardPage() {
     val radio = radioRepo()
     val songs by radio.heard.collectAsStateWithLifecycle(initialValue = emptyList())
     var confirmClear by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
     val byDay = remember(songs) { songs.groupBy { dayLabel(it.startedAt) } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { GridHeader("Heard on the radio") }
-                if (songs.isNotEmpty()) TextButton(onClick = { confirmClear = true }) { Text("Clear history") }
+                if (songs.isNotEmpty()) {
+                    IconButton(onClick = { picking = true }) { Icon(Icons.Filled.Download, contentDescription = "Download heard songs", tint = TextSecondary) }
+                    TextButton(onClick = { confirmClear = true }) { Text("Clear history") }
+                }
             }
         }
         if (songs.isEmpty()) item { EmptyHint("Songs you hear on the radio show up here, so you can find them later.") }
@@ -71,6 +82,26 @@ internal fun HeardPage() {
             item(key = "h_$day") { GridHeader(day) }
             items(list, key = { it.id }) { song -> HeardRow(song) }
         }
+    }
+
+    if (picking) {
+        val app = LocalContext.current.applicationContext as CtifyApp
+        val pick = remember(songs) {
+            songs.filter { it.downloadedTrackId == null }.distinctBy { it.query.lowercase() }.map { h ->
+                val artist = h.artist ?: "Unknown artist"
+                PickSong(
+                    "h${h.id}", h.title, artist, h.youtubeVideoId,
+                    // unsure matches count as not found here; the song's own Download menu still offers the top 3
+                    find = {
+                        h.youtubeVideoId?.let { YtSong(it, h.title, artist) }
+                            ?: SongMatcher.candidates(h.artist, h.title).firstOrNull()?.takeIf { it.score >= SongMatcher.ACCEPT }?.song
+                                ?.also { app.database.heardSongs().setVideoId(h.id, it.videoId) }
+                    },
+                    enqueue = { Downloads.enqueue(listOf(it), genre = h.genre, heardSongId = h.id) },
+                )
+            }
+        }
+        DownloadPicker("Download heard songs", pick, onDismiss = { picking = false })
     }
 
     if (confirmClear) {

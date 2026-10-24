@@ -74,6 +74,9 @@ interface DownloadDao {
     @Query("DELETE FROM downloads WHERE videoId = :videoId AND state != 'RUNNING'")
     suspend fun remove(videoId: String)
 
+    @Query("DELETE FROM downloads WHERE videoId = :videoId AND state IN ('QUEUED', 'RUNNING', 'FAILED')")
+    suspend fun cancel(videoId: String)
+
     @Query("DELETE FROM downloads WHERE state IN ('DONE', 'SKIPPED')")
     suspend fun clearFinished()
 
