@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -16,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
 import com.ctify.player.ui.skins.ChapterMark
 import com.ctify.player.ui.skins.LiveProgress
 import com.ctify.player.youtube.Chapters
@@ -45,7 +45,7 @@ fun ChapterRow(live: LiveProgress, ink: Color) {
         }) { Icon(Icons.Filled.FastRewind, contentDescription = "Previous chapter", tint = ink) }
         Text(
             chapters.getOrNull(i)?.title?.ifBlank { null } ?: "Chapter ${i + 1}",
-            color = ChapterMark, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = ChapterMark, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center, modifier = Modifier.weight(1f),
         )
         IconButton(onClick = { chapters.getOrNull(i + 1)?.let { live.seekTo(it.startMs) } }, enabled = i + 1 < chapters.size) {

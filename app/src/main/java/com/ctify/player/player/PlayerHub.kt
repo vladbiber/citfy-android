@@ -86,6 +86,8 @@ object PlayerHub {
     fun playStations(stations: List<com.ctify.player.radio.Station>, index: Int) = send(Cmd.PLAY_STATIONS) {
         putString(Cmd.ARG_STATIONS, com.ctify.player.radio.Station.toJson(stations)); putInt(Cmd.ARG_INDEX, index)
     }
+    /** Back from radio to the track queue it interrupted, resumed where it was. */
+    fun resumeTracks() = send(Cmd.RESUME_TRACKS)
     fun playQueueIndex(index: Int) = send(Cmd.PLAY_INDEX) { putInt(Cmd.ARG_INDEX, index) }
 
     private fun send(action: String, args: Bundle.() -> Unit = {}) {

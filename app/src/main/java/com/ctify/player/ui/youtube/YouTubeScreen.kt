@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -51,11 +50,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
@@ -163,7 +163,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                 IconButton(onClick = { if (album != null) album = null else onClose() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TextPrimary)
                 }
-                Text("Add from YouTube", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Add from YouTube", color = TextPrimary, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
                 IconButton(onClick = onOpenDownloads) {
                     BadgedBox(badge = { if (pending > 0) Badge { Text("$pending") } }) {
                         Icon(Icons.Filled.Download, "Downloads", tint = TextPrimary)
@@ -270,12 +270,12 @@ private fun AlbumDetail(album: YtAlbum, currentId: String?, playing: Boolean, on
     LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(album.thumbnail, null, Modifier.size(120.dp).clip(RoundedCornerShape(10.dp)))
+                AsyncImage(album.thumbnail, null, Modifier.size(120.dp).clip(MaterialTheme.shapes.small))
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(album.title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(album.artist, color = TextSecondary, fontSize = 14.sp)
-                    Text("${album.songs.size} songs", color = TextMuted, fontSize = 12.sp)
+                    Text(album.title, color = TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(album.artist, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
+                    Text("${album.songs.size} songs", color = TextMuted, style = MaterialTheme.typography.labelSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                         FilledTonalButton(onClick = { onPlay(0) }, enabled = album.songs.isNotEmpty()) { Text("Play") }
                         FilledTonalButton(onClick = onSave, enabled = album.songs.isNotEmpty()) { Text("Save") }
@@ -302,11 +302,11 @@ internal fun CardRow(image: String?, title: String, subtitle: String, onClick: (
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AsyncImage(image, null, Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
+        AsyncImage(image, null, Modifier.size(56.dp).clip(MaterialTheme.shapes.extraSmall))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle.isNotBlank()) Text(subtitle, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle.isNotBlank()) Text(subtitle, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -318,7 +318,7 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun MenuItem(label: String, onClick: () -> Unit) {
-    Text(label, color = TextPrimary, fontSize = 16.sp, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
+    Text(label, color = TextPrimary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
 }
 
 @Composable

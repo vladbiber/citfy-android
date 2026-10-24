@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import com.ctify.player.data.MusicRepository
@@ -38,7 +39,9 @@ object Cmd {
     const val SEEK = "ctify.SEEK"
     const val TOGGLE_REVERSE = "ctify.TOGGLE_REVERSE"
     const val PLAY_STATIONS = "ctify.PLAY_STATIONS"
-    val ALL = listOf(PLAY_QUEUE, ADD_TO_QUEUE, PLAY_INDEX, NEXT, PREVIOUS, SEEK, TOGGLE_REVERSE, PLAY_STATIONS)
+    /** leave radio and put back the track queue it replaced */
+    const val RESUME_TRACKS = "ctify.RESUME_TRACKS"
+    val ALL = listOf(PLAY_QUEUE, ADD_TO_QUEUE, PLAY_INDEX, NEXT, PREVIOUS, SEEK, TOGGLE_REVERSE, PLAY_STATIONS, RESUME_TRACKS)
     /** safe for any controller, e.g. the system media controls and Bluetooth */
     val PUBLIC = listOf(NEXT, PREVIOUS)
 
@@ -64,6 +67,9 @@ class PlaybackController(
     /** the forward queue that reverse mode walks through, track by track */
     private var reverseQueue: List<Track> = emptyList()
     private var reverseIndex = 0
+    /** the track queue radio replaced, so the player's Now Playing switch can resume it */
+    private var parked: Parked? = null
+    private class Parked(val items: List<MediaItem>, val index: Int, val positionMs: Long)
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = sync()
@@ -113,12 +119,34 @@ class PlaybackController(
             Cmd.PLAY_STATIONS -> {
                 val stations = Station.fromJson(args.getString(Cmd.ARG_STATIONS) ?: return false)
                 if (stations.isEmpty()) return false
+                if (!radio.active) parked = parkQueue()
                 PlayerHub.reverseOn.value = false
                 radio.play(stations, args.getInt(Cmd.ARG_INDEX))
+            }
+            Cmd.RESUME_TRACKS -> {
+                if (!radio.active) return false
+                radio.stop()
+                val p = parked
+                parked = null
+                if (p == null) { player.stop(); player.clearMediaItems(); return true }
+                player.setMediaItems(p.items, p.index.coerceIn(0, p.items.lastIndex), p.positionMs)
+                player.prepare()
+                player.play()
             }
             else -> return false
         }
         return true
+    }
+
+    /** What is loaded now, forward order even in reverse mode; null when nothing is. */
+    private fun parkQueue(): Parked? = when {
+        PlayerHub.reverseOn.value ->
+            if (reverseQueue.isEmpty()) null else Parked(reverseQueue.map { it.toMediaItem() }, reverseIndex, shownPosition())
+        player.mediaItemCount == 0 -> null
+        else -> Parked(
+            (0 until player.mediaItemCount).map(player::getMediaItemAt),
+            player.currentMediaItemIndex, player.currentPosition.coerceAtLeast(0L),
+        )
     }
 
     private suspend fun restoreSnapshot() {

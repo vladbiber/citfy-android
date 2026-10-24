@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.fx.CrossfeedPreset
 import com.ctify.player.player.sound.AutoEq
 import com.ctify.player.player.sound.AutoEqProfile
@@ -71,12 +70,12 @@ fun HeadphonesSection() {
     Section(Icons.Default.Headphones, "Headphones", summary) {
         Text(
             "Now playing on: $name${dev?.let { if (it.name != it.kind) " (${it.kind})" else "" } ?: ""}",
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodyMedium,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (preset.bands.isEmpty()) "AutoEQ: none imported" else "AutoEQ: ${preset.eqName ?: "imported"}, ${preset.bands.size} filters",
-                fontSize = 13.sp, modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
             )
             Switch(
                 checked = preset.eqOn && preset.bands.isNotEmpty(), enabled = preset.bands.isNotEmpty(),
@@ -95,8 +94,8 @@ fun HeadphonesSection() {
                 }
             }
         }
-        message?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
-        Text("Crossfeed", fontSize = 13.sp)
+        message?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+        Text("Crossfeed", style = MaterialTheme.typography.bodyMedium)
         ChipRow {
             FilterChip(selected = preset.crossfeed == null, onClick = { SoundSettings.setDevice { it.copy(crossfeed = null) } }, label = { Text("Off") })
             CrossfeedPreset.entries.forEach { c ->
@@ -110,7 +109,7 @@ fun HeadphonesSection() {
         Text(
             "Get the file for your model from the AutoEQ project. Correction and crossfeed switch on " +
                 "by themselves whenever this device connects; presets and moods never change them.",
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

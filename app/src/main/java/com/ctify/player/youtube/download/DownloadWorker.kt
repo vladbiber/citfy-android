@@ -47,6 +47,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 dao.setState(item.videoId, DownloadState.QUEUED)
                 throw e
             } catch (e: Throwable) {
+                if (Downloads.cancelled.remove(item.videoId)) { files.cleanup(item.videoId); continue }
                 if (isStopped) { dao.setState(item.videoId, DownloadState.QUEUED); break }
                 if (e is NetworkBlockedException || YtFailures.isNetwork(e)) {
                     // switched off, offline or no network: try again when conditions allow
@@ -76,7 +77,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
     }
 
     private suspend fun save(item: DownloadEntity) {
-        val part = files.fetch(item) { isStopped }
+        val part = files.fetch(item) { isStopped || item.videoId in Downloads.cancelled }
         val cover = files.cover(item)
         val genre = item.genre?.let { Genre.of(it)?.label ?: it }
         val tagged = files.tag(

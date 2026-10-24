@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -38,11 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.fx.Mood
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.fx.FxRange
@@ -53,146 +49,198 @@ import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.roundToInt
 
-/**
- * Every sound setting in one scrollable column of cards. Used by the player's
- * Sound sheet and by the Sound tab, so both always offer the same controls.
- */
+/** The effect sections, one composable each: the full sound sheet stacks them, a player chip opens one. */
 @Composable
-fun SoundPanel(modifier: Modifier = Modifier) {
-    val rate by PlayerHub.rate.collectAsState()
+internal fun EffectRangeSection() {
+    val range by PlayerHub.fxRange.collectAsState()
+    Section(Icons.Default.Tune, "Effect range", rangeLabel(range)) {
+        FxSlider("How far the sliders go", rangeLabel(range), range, 0f..1f, 0f) { PlayerHub.setFxRange(it) }
+        Text(
+            "Extreme: slow down to ${"%.2f".format(FxRange.slow(range).start)}×, speed up to ${"%.2f".format(FxRange.slow(range).endInclusive)}×, " +
+                "reverb ${(FxRange.reverb(range).endInclusive * 100).roundToInt()}%, bass +${FxRange.bass(range).endInclusive.roundToInt()} dB",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** The mood whose settings are all in place right now, if any. */
+@Composable
+internal fun activeMood(): Mood? {
     val speed by PlayerHub.speed.collectAsState()
     val reverb by PlayerHub.reverb.collectAsState()
     val retune by PlayerHub.retuneIndex.collectAsState()
     val bassGain by PlayerHub.bassGain.collectAsState()
-    val bassFreq by PlayerHub.bassFreq.collectAsState()
     val width by PlayerHub.width.collectAsState()
     val pan8d by PlayerHub.pan8d.collectAsState()
     val muffle by PlayerHub.muffle.collectAsState()
     val vinyl by PlayerHub.vinyl.collectAsState()
+    return Mood.entries.firstOrNull { m ->
+        abs(speed - m.rate) < 0.005f && retune == 0 && abs(reverb - m.reverb) < 0.005f &&
+            abs(bassGain - m.bassDb) < 0.05f && abs(width - m.width) < 0.01f &&
+            abs(pan8d - m.pan8d) < 0.01f && abs(muffle - m.muffle) < 0.01f &&
+            vinyl.on == (m.vinyl != null)
+    }
+}
+
+@Composable
+internal fun MoodsSection() {
+    val active = activeMood()
+    Section(Icons.Default.AutoAwesome, "Moods", "one tap sets every effect") {
+        ChipRow {
+            Mood.entries.forEach { m ->
+                FilterChip(selected = m == active, onClick = { PlayerHub.applyMood(m) }, label = { Text(m.label) })
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SpeedSection() {
+    val rate by PlayerHub.rate.collectAsState()
+    val reverb by PlayerHub.reverb.collectAsState()
     val range by PlayerHub.fxRange.collectAsState()
-
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Section(Icons.Default.Tune, "Effect range", rangeLabel(range)) {
-            FxSlider("How far the sliders go", rangeLabel(range), range, 0f..1f, 0f) { PlayerHub.setFxRange(it) }
-            Text(
-                "Extreme: slow down to ${"%.2f".format(FxRange.slow(range).start)}×, speed up to ${"%.2f".format(FxRange.slow(range).endInclusive)}×, " +
-                    "reverb ${(FxRange.reverb(range).endInclusive * 100).roundToInt()}%, bass +${FxRange.bass(range).endInclusive.roundToInt()} dB",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Section(Icons.Default.AutoAwesome, "Moods", "one tap sets every effect") {
-            ChipRow {
-                Mood.entries.forEach { m ->
-                    val on = abs(speed - m.rate) < 0.005f && retune == 0 && abs(reverb - m.reverb) < 0.005f &&
-                        abs(bassGain - m.bassDb) < 0.05f && abs(width - m.width) < 0.01f &&
-                        abs(pan8d - m.pan8d) < 0.01f && abs(muffle - m.muffle) < 0.01f &&
-                        vinyl.on == (m.vinyl != null)
-                    FilterChip(selected = on, onClick = { PlayerHub.applyMood(m) }, label = { Text(m.label) })
-                }
-            }
-        }
-
-        Section(Icons.Default.Speed, "Speed & pitch", "${"%.2f".format(rate)}× · ${semitones(rate)} semitones") {
-            FxSlider("Slow", "${"%.2f".format(rate)}×", rate, FxRange.slow(range), 1f) { PlayerHub.setRate(it) }
-            Text("Steps", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            ChipRow {
-                SLOW_STEPS.forEachIndexed { index, (stepRate, stepReverb) ->
-                    FilterChip(
-                        selected = abs(rate - stepRate) < 0.005f && abs(reverb - stepReverb) < 0.005f,
-                        onClick = { PlayerHub.setRate(stepRate); PlayerHub.setReverb(stepReverb) },
-                        label = { Text(if (index == 0) "Off" else "Step $index") },
-                    )
-                }
-            }
-        }
-
-        Section(Icons.Default.Waves, "Reverb", "${(reverb * 100).roundToInt()}%") {
-            FxSlider("Reverb", "${(reverb * 100).roundToInt()}%", reverb, FxRange.reverb(range), 0f) { PlayerHub.setReverb(it) }
-        }
-
-        Section(Icons.Default.GraphicEq, "Bass", if (bassGain < 0.05f) "off" else "+${"%.1f".format(bassGain)} dB") {
-            FxSlider("Boost", "+${"%.1f".format(bassGain)} dB", bassGain, FxRange.bass(range), 0f) { PlayerHub.setBass(it, bassFreq) }
-            FxSlider("Below", "${bassFreq.roundToInt()} Hz", bassFreq, 40f..320f, 120f, enabled = bassGain > 0.05f) {
-                PlayerHub.setBass(bassGain, it)
-            }
-        }
-
-        val preset = RETUNE_PRESETS[retune]
-        Section(Icons.Default.MusicNote, "Tuning (\"magic Hz\")", if (retune == 0) "440 Hz, off" else "${preset.hz} Hz") {
-            ChipRow {
-                RETUNE_PRESETS.forEachIndexed { index, p ->
-                    FilterChip(
-                        selected = retune == index,
-                        onClick = { PlayerHub.setRetune(index) },
-                        label = { Text(if (index == 0) "440 off" else "${p.hz} Hz") },
-                    )
-                }
-            }
-            Text(
-                "${preset.note} → ${preset.hz} Hz · ${"%.3f".format(preset.ratio)}× — ${preset.claim}",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "The nearest note is tuned onto that frequency. The claimed effects have no " +
-                    "support in research; they just sound different.",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Section(Icons.Default.Headphones, "Space", spaceSummary(width, pan8d, muffle)) {
-            FxSlider("Stereo width", "${(width * 100).roundToInt()}%", width, FxRange.width(range), 1f) { PlayerHub.setSpace(width = it) }
-            FxSlider("8D rotation", "${(pan8d * 100).roundToInt()}%", pan8d, 0f..1f, 0f) { PlayerHub.setSpace(pan8d = it) }
-            FxSlider("Another room", "${(muffle * 100).roundToInt()}%", muffle, FxRange.muffle(range), 0f) { PlayerHub.setSpace(muffle = it) }
-            Text(
-                "8D slowly circles the sound around your head; best on headphones.",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        val reversed by PlayerHub.reverseOn.collectAsState()
-        val preparing by PlayerHub.reversePreparing.collectAsState()
-        Section(Icons.Default.FastRewind, "Reverse", if (preparing) "decoding…" else if (reversed) "on" else "off") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Plays every track from its last second to its first. Each track is decoded " +
-                        "once first, so it can take a few seconds to start.",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(12.dp))
-                Switch(
-                    checked = reversed, onCheckedChange = { PlayerHub.toggleReverse() },
-                    modifier = Modifier.semantics { contentDescription = "Reverse mode" },
+    Section(Icons.Default.Speed, "Speed & pitch", "${"%.2f".format(rate)}× · ${semitones(rate)} semitones") {
+        FxSlider("Slow", "${"%.2f".format(rate)}×", rate, FxRange.slow(range), 1f) { PlayerHub.setRate(it) }
+        Text("Steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ChipRow {
+            SLOW_STEPS.forEachIndexed { index, (stepRate, stepReverb) ->
+                FilterChip(
+                    selected = abs(rate - stepRate) < 0.005f && abs(reverb - stepReverb) < 0.005f,
+                    onClick = { PlayerHub.setRate(stepRate); PlayerHub.setReverb(stepReverb) },
+                    label = { Text(if (index == 0) "Off" else "Step $index") },
                 )
             }
         }
+    }
+}
 
-        val rain by PlayerHub.rain.collectAsState()
-        val rainLevel by PlayerHub.rainLevel.collectAsState()
-        Section(Icons.Default.WaterDrop, "Rain", rain.label.lowercase()) {
-            ChipRow {
-                RainPreset.entries.forEach { p ->
-                    FilterChip(selected = rain == p, onClick = { PlayerHub.setRain(p) }, label = { Text(p.label) })
-                }
+@Composable
+internal fun ReverbSection() {
+    val reverb by PlayerHub.reverb.collectAsState()
+    val range by PlayerHub.fxRange.collectAsState()
+    Section(Icons.Default.Waves, "Reverb", "${(reverb * 100).roundToInt()}%") {
+        FxSlider("Reverb", "${(reverb * 100).roundToInt()}%", reverb, FxRange.reverb(range), 0f) { PlayerHub.setReverb(it) }
+    }
+}
+
+@Composable
+internal fun BassSection() {
+    val bassGain by PlayerHub.bassGain.collectAsState()
+    val bassFreq by PlayerHub.bassFreq.collectAsState()
+    val range by PlayerHub.fxRange.collectAsState()
+    Section(Icons.Default.GraphicEq, "Bass", if (bassGain < 0.05f) "off" else "+${"%.1f".format(bassGain)} dB") {
+        FxSlider("Boost", "+${"%.1f".format(bassGain)} dB", bassGain, FxRange.bass(range), 0f) { PlayerHub.setBass(it, bassFreq) }
+        FxSlider("Below", "${bassFreq.roundToInt()} Hz", bassFreq, 40f..320f, 120f, enabled = bassGain > 0.05f) {
+            PlayerHub.setBass(bassGain, it)
+        }
+    }
+}
+
+@Composable
+internal fun TuningSection() {
+    val retune by PlayerHub.retuneIndex.collectAsState()
+    val preset = RETUNE_PRESETS[retune]
+    Section(Icons.Default.MusicNote, "Tuning (\"magic Hz\")", if (retune == 0) "440 Hz, off" else "${preset.hz} Hz") {
+        ChipRow {
+            RETUNE_PRESETS.forEachIndexed { index, p ->
+                FilterChip(
+                    selected = retune == index,
+                    onClick = { PlayerHub.setRetune(index) },
+                    label = { Text(if (index == 0) "440 off" else "${p.hz} Hz") },
+                )
             }
-            FxSlider("Rain volume", "${(rainLevel * 100).roundToInt()}%", rainLevel, FxRange.rain(range), 1f, enabled = rain != RainPreset.OFF) {
-                PlayerHub.setRain(rain, it)
-            }
+        }
+        Text(
+            "${preset.note} → ${preset.hz} Hz · ${"%.3f".format(preset.ratio)}× — ${preset.claim}",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "The nearest note is tuned onto that frequency. The claimed effects have no " +
+                "support in research; they just sound different.",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+internal fun SpaceSection() {
+    val width by PlayerHub.width.collectAsState()
+    val pan8d by PlayerHub.pan8d.collectAsState()
+    val muffle by PlayerHub.muffle.collectAsState()
+    val range by PlayerHub.fxRange.collectAsState()
+    Section(Icons.Default.Headphones, "Space", spaceSummary(width, pan8d, muffle)) {
+        FxSlider("Stereo width", "${(width * 100).roundToInt()}%", width, FxRange.width(range), 1f) { PlayerHub.setSpace(width = it) }
+        FxSlider("8D rotation", "${(pan8d * 100).roundToInt()}%", pan8d, 0f..1f, 0f) { PlayerHub.setSpace(pan8d = it) }
+        FxSlider("Another room", "${(muffle * 100).roundToInt()}%", muffle, FxRange.muffle(range), 0f) { PlayerHub.setSpace(muffle = it) }
+        Text(
+            "8D slowly circles the sound around your head; best on headphones.",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+internal fun ReverseSection() {
+    val reversed by PlayerHub.reverseOn.collectAsState()
+    val preparing by PlayerHub.reversePreparing.collectAsState()
+    Section(Icons.Default.FastRewind, "Reverse", if (preparing) "decoding…" else if (reversed) "on" else "off") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Plays every track from its last second to its first. Each track is decoded " +
+                    "once first, so it can take a few seconds to start.",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = reversed, onCheckedChange = { PlayerHub.toggleReverse() },
+                modifier = Modifier.semantics { contentDescription = "Reverse mode" },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun RainSection() {
+    val rain by PlayerHub.rain.collectAsState()
+    val rainLevel by PlayerHub.rainLevel.collectAsState()
+    val range by PlayerHub.fxRange.collectAsState()
+    Section(Icons.Default.WaterDrop, "Rain", rain.label.lowercase()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Generated live, mixed on top of the music and never slowed down.",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = rain != RainPreset.OFF, onCheckedChange = { PlayerHub.toggleRain() },
+                modifier = Modifier.semantics { contentDescription = "Rain sounds" },
             )
         }
-
-        Section(Icons.Default.Album, "Vinyl", if (vinyl.on) "on" else "off") {
-            VinylControls()
+        ChipRow {
+            RainPreset.entries.forEach { p ->
+                FilterChip(selected = rain == p, onClick = { PlayerHub.setRain(p) }, label = { Text(p.label) })
+            }
         }
-
-        OutlinedButton(onClick = { PlayerHub.resetFx() }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Reset everything")
+        FxSlider("Rain volume", "${(rainLevel * 100).roundToInt()}%", rainLevel, FxRange.rain(range), 1f, enabled = rain != RainPreset.OFF) {
+            PlayerHub.setRain(rain, it)
         }
+    }
+}
+
+@Composable
+internal fun VinylSection() {
+    val vinyl by PlayerHub.vinyl.collectAsState()
+    Section(Icons.Default.Album, "Vinyl", if (vinyl.on) "on" else "off") {
+        VinylControls()
+    }
+}
+
+@Composable
+internal fun ResetFxButton() {
+    OutlinedButton(onClick = { PlayerHub.resetFx() }, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Reset everything")
     }
 }
 
@@ -200,18 +248,15 @@ fun SoundPanel(modifier: Modifier = Modifier) {
 internal fun Section(icon: ImageVector, title: String, summary: String, content: @Composable () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(
-                    title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                Text(summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SectionHeader(title, Modifier.weight(1f))
+                Text(summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             content()
         }
@@ -238,8 +283,8 @@ fun FxSlider(
 ) {
     Column {
         Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-            Text(label, fontSize = 13.sp, modifier = Modifier.weight(1f))
-            Text(valueText, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(valueText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         MarkedSlider(
             value = value, onValueChange = onChange, valueRange = range, default = default,
@@ -251,7 +296,7 @@ fun FxSlider(
 private fun rangeLabel(t: Float) =
     if (t < 0.01f) "normal (x1)" else "x${"%.1f".format(FxRange.factor(t)).removeSuffix(".0")}"
 
-private fun spaceSummary(width: Float, pan: Float, muffle: Float): String {
+internal fun spaceSummary(width: Float, pan: Float, muffle: Float): String {
     val parts = buildList {
         if (abs(width - 1f) > 0.01f) add("width ${(width * 100).roundToInt()}%")
         if (pan > 0.01f) add("8D")

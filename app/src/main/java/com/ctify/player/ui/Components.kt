@@ -1,5 +1,13 @@
 package com.ctify.player.ui
 
+import androidx.compose.foundation.progressSemantics
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Shape
+import com.ctify.player.ui.theme.Appearance
+import com.ctify.player.ui.theme.ThemeSource
+import com.ctify.player.ui.theme.accentBrush
+import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,7 +23,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
@@ -46,7 +53,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.ctify.player.data.Track
 import com.ctify.player.ui.radio.LiveBadge
@@ -78,10 +84,10 @@ private fun gradientFor(seed: String): Brush {
 }
 
 @Composable
-fun AlbumArt(track: Track?, size: Dp, corner: Dp = 6.dp, modifier: Modifier = Modifier.size(size)) {
+fun AlbumArt(track: Track?, size: Dp, shape: Shape = MaterialTheme.shapes.extraSmall, modifier: Modifier = Modifier.size(size)) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(corner))
+            .clip(shape)
             .background(gradientFor(track?.album ?: "ctify")),
         contentAlignment = Alignment.Center,
     ) {
@@ -128,13 +134,13 @@ fun PlaylistArt(
     playlist: com.ctify.player.data.Playlist,
     firstTrack: Track?,
     size: Dp,
-    corner: Dp = 6.dp,
+    shape: Shape = MaterialTheme.shapes.extraSmall,
     modifier: Modifier = Modifier.size(size),
 ) {
     if (playlist.coverUri != null) {
         Box(
             modifier = modifier
-                .clip(RoundedCornerShape(corner))
+                .clip(shape)
                 .background(gradientFor(playlist.name)),
             contentAlignment = Alignment.Center,
         ) {
@@ -150,7 +156,7 @@ fun PlaylistArt(
             )
         }
     } else {
-        AlbumArt(firstTrack, size, corner, modifier)
+        AlbumArt(firstTrack, size, shape, modifier)
     }
 }
 
@@ -174,7 +180,7 @@ fun TrackRow(
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .padding(horizontal = 8.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.small)
             .background(if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
             .clickable(onClickLabel = "play", onClick = onClick)
             .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
@@ -188,10 +194,10 @@ fun TrackRow(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(contentAlignment = Alignment.Center) {
-                    AlbumArt(track, 50.dp, corner = 10.dp)
+                    AlbumArt(track, 50.dp, shape = MaterialTheme.shapes.small)
                     if (isCurrent) {
                         Box(
-                            Modifier.size(50.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.45f)),
+                            Modifier.size(50.dp).clip(MaterialTheme.shapes.small).background(Color.Black.copy(alpha = 0.45f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
@@ -203,17 +209,17 @@ fun TrackRow(
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(track.title, color = titleColor, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(track.title, color = titleColor, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (statusIcon != null) Icon(statusIcon, null, tint = TextMuted, modifier = Modifier.size(14.dp).padding(end = 2.dp))
                         Text(
                             if (status != null) "$status · ${track.artist}" else track.artist,
-                            color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
-                Text(formatTime(track.durationMs), color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp))
+                Text(formatTime(track.durationMs), color = TextMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp))
             }
         }
         if (onToggleFavorite != null) {
@@ -254,7 +260,7 @@ fun MiniPlayer(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .background(SurfaceElevated),
     ) {
         Row(
@@ -265,10 +271,10 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            AlbumArt(track, 44.dp, corner = 10.dp)
+            AlbumArt(track, 44.dp, shape = MaterialTheme.shapes.small)
             Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-                Text(track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(status ?: track.artist, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(status ?: track.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (isLive) LiveBadge()
             IconButton(onClick = onTogglePlay) {
@@ -282,7 +288,18 @@ fun MiniPlayer(
             }
         }
         if (isLive) Spacer(Modifier.height(2.dp))
-        else LinearProgressIndicator(
+        else if (Appearance.source.collectAsState().value == ThemeSource.DUO) {
+            val fill = accentBrush()
+            val track = TextPrimary.copy(alpha = 0.15f)
+            Box(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp).height(2.dp)
+                    .progressSemantics(progress.coerceIn(0f, 1f))
+                    .drawBehind {
+                        drawRect(track)
+                        drawRect(fill, size = size.copy(width = size.width * progress.coerceIn(0f, 1f)))
+                    },
+            )
+        } else LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).height(2.dp),
             color = Accent,

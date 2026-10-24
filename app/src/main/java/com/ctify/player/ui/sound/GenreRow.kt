@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -39,17 +38,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.sound.GenrePreset
 import com.ctify.player.player.sound.SoundEngine
 import com.ctify.player.player.sound.SoundSettings
 import com.ctify.player.ui.FxSlider
+import com.ctify.player.ui.SectionHeader
 
 /** "Suggested for this song": the preset and why. It only applies on a tap. */
 @Composable
@@ -58,12 +56,12 @@ fun SuggestionCard() {
     val current by SoundSettings.genreKey.collectAsState()
     val now by PlayerHub.playback.collectAsState()
     val radio = now?.station != null
-    val shape = RoundedCornerShape(18.dp)
+    val shape = MaterialTheme.shapes.large
     val sug = s
     if (sug == null) {
         Text(
             "Play something to get a preset suggestion.",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         return
@@ -75,7 +73,7 @@ fun SuggestionCard() {
             Spacer(Modifier.width(8.dp))
             Text(
                 if (sug.autoFrom != null) "$label applied automatically" else "$label, ${sug.reason}",
-                fontSize = 14.sp, modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
             )
             if (sug.autoFrom != null) TextButton(onClick = { SoundEngine.undoAuto() }) { Text("Undo") }
         }
@@ -85,12 +83,12 @@ fun SuggestionCard() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 if (radio) "Suggested for this station" else "Suggested for this song",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondaryContainer,
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(label, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Text(sug.reason, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(sug.reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
                 }
                 Button(onClick = { SoundEngine.applySuggestion() }) { Text("Apply") }
             }
@@ -108,8 +106,8 @@ fun GenrePresetsRow() {
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Genre presets", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f).semantics { heading() })
-            Text("Auto-apply", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SectionHeader("Genre presets", Modifier.weight(1f))
+            Text("Auto-apply", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(8.dp))
             Switch(
                 checked = auto, onCheckedChange = { SoundSettings.setGenreAuto(it) },
@@ -135,7 +133,7 @@ fun GenrePresetsRow() {
         Text(
             if (auto) "Each new song gets its suggested preset. Picking another one teaches it for the song and the artist."
             else "Presets change only when you tap one. Long-press to edit.",
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
     editing?.let { p -> PresetEditor(p) { editing = null } }
@@ -146,7 +144,7 @@ fun GenrePresetsRow() {
 private fun PresetChip(label: String, selected: Boolean, edited: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = MaterialTheme.colorScheme
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.extraSmall,
         color = if (selected) c.secondaryContainer else Color.Transparent,
         border = if (selected) null else BorderStroke(1.dp, c.outline),
         modifier = Modifier
@@ -159,7 +157,7 @@ private fun PresetChip(label: String, selected: Boolean, edited: Boolean, onClic
     ) {
         Text(
             if (edited) "$label *" else label,
-            fontSize = 14.sp, fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
             color = if (selected) c.onSecondaryContainer else c.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
@@ -181,7 +179,7 @@ private fun PresetEditor(p: GenrePreset, onDismiss: () -> Unit) {
                 GraphicEditor(bands) { i, v -> bands = bands.toMutableList().also { it[i] = v } }
                 FxSlider("Tape warmth", "${(tape * 100).toInt()}%", tape, 0f..1f, 0f) { tape = it }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Loudness compensation", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("Loudness compensation", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     Switch(checked = loud, onCheckedChange = { loud = it })
                 }
             }

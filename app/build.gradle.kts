@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.documentfile)
     implementation(libs.coil.compose)
+    implementation(libs.materialkolor.material3)
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)

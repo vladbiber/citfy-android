@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -28,6 +27,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -43,11 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.genre.Genre
 import com.ctify.player.radio.CountryCount
@@ -57,6 +55,7 @@ import com.ctify.player.radio.StationQuery
 import com.ctify.player.radio.StationSort
 import com.ctify.player.radio.TabKind
 import com.ctify.player.radio.TagCount
+import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
@@ -137,7 +136,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, onSubmit: () 
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
-        shape = RoundedCornerShape(28.dp),
+        shape = MaterialTheme.shapes.extraLarge,
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = SurfaceElevated,
             unfocusedContainerColor = SurfaceElevated,
@@ -176,7 +175,7 @@ private fun BrowseHome(
             }
         }
         if (section == 0) {
-            item(key = "families") { Header("Genre families") }
+            item(key = "families") { SectionHeader("Genre families", Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp)) }
             items(Genre.entries, key = { "g" + it.name }) { g ->
                 val pinned = tabs.firstOrNull { it.kind == TabKind.GENRE && it.key == g.name }
                 PinRow(
@@ -187,7 +186,7 @@ private fun BrowseHome(
                     onPin = { if (pinned != null) radio.removeTab(pinned) else radio.pinTab(TabKind.GENRE, g.name, g.label) },
                 )
             }
-            item(key = "alltags") { Header("All tags") }
+            item(key = "alltags") { SectionHeader("All tags", Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp)) }
             loadStatus(tagIndex, blocked, List<TagCount>::isEmpty, "No tags found.")
             tagIndex.data?.let { list ->
                 items(list, key = { "t" + it.name }) { t ->
@@ -214,14 +213,6 @@ private fun BrowseHome(
 }
 
 @Composable
-private fun Header(text: String) {
-    Text(
-        text, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp).semantics { heading() },
-    )
-}
-
-@Composable
 private fun PinRow(title: String, subtitle: String, pinned: Boolean, onClick: () -> Unit, onPin: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClickLabel = "show stations", onClick = onClick)
@@ -229,8 +220,8 @@ private fun PinRow(title: String, subtitle: String, pinned: Boolean, onClick: ()
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, color = TextPrimary, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = onPin) {
             Icon(
@@ -249,12 +240,12 @@ private fun CountryRow(c: CountryCount, isOwn: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(flagOf(c.code), fontSize = 22.sp, modifier = Modifier.padding(end = 12.dp))
+        Text(flagOf(c.code), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(end = 12.dp))
         Column(Modifier.weight(1f)) {
-            Text(c.name, color = if (isOwn) Accent else TextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (isOwn) Text("Your country", color = TextMuted, fontSize = 12.sp)
+            Text(c.name, color = if (isOwn) Accent else TextPrimary, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (isOwn) Text("Your country", color = TextMuted, style = MaterialTheme.typography.labelSmall)
         }
-        Text("${c.count}", color = TextMuted, fontSize = 13.sp)
+        Text("${c.count}", color = TextMuted, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -264,7 +255,7 @@ private fun BackRow(title: String, onBack: () -> Unit, pin: Pair<TabKind, String
     Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary) }
         Text(
-            title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            title, color = TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).semantics { heading() },
         )
         if (pin != null) {

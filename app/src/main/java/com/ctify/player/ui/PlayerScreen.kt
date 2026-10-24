@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -84,13 +83,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.ctify.player.CtifyApp
 import com.ctify.player.ui.theme.isAppInDarkTheme
 import com.ctify.player.ui.theme.Appearance
+import com.ctify.player.ui.theme.LiquidBackground
+import com.ctify.player.ui.theme.ThemeSource
+import com.ctify.player.ui.theme.accentBrush
+import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.ui.radio.RewindRow
@@ -118,11 +120,18 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.ctify.player.player.fx.RETUNE_PRESETS
 import kotlin.math.abs
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.unit.Dp
+import com.ctify.player.data.Track
+import com.ctify.player.player.fx.Mood
+import com.ctify.player.player.sound.GenrePreset
+import com.ctify.player.player.sound.SoundSettings
+import com.ctify.player.ui.player.SkinPicker
 
 private val Glass: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f)
 private val Ink: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
@@ -130,24 +139,37 @@ private val InkDim: Color @Composable @ReadOnlyComposable get() = MaterialTheme.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlayerContent(onClose: () -> Unit) {
+fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     val ctx = LocalContext.current
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     var skin by remember { mutableStateOf(Skin.load(ctx)) }
     var sheet by remember { mutableStateOf(false) }
     var queue by remember { mutableStateOf(false) }
+    var picker by remember { mutableStateOf(false) }
+    var panel by remember { mutableStateOf<ChipPanel?>(null) }
+    val radio = (ctx.applicationContext as CtifyApp).radio
+    val recents by radio.recents.collectAsState(initial = emptyList())
+    val favStations by radio.favorites.collectAsState(initial = emptyList())
+    // Radio picked with no station ever played or favorited: show the way to the Radio tab
+    var pickStation by remember { mutableStateOf(false) }
+    val onRadio = state?.station != null || pickStation
+    LaunchedEffect(state?.station != null) { if (state?.station != null) pickStation = false }
     val dark = isAppInDarkTheme()
     val coverColors by Appearance.coverColors.collectAsState()
     val accent = rememberArtAccent(if (coverColors) track?.coverUri else null, MaterialTheme.colorScheme.primary)
         .let { if (dark) it else it.darkened() }
     val art = rememberArtPainter(track?.coverUri)
     val live = rememberLiveProgress()
+    val source by Appearance.source.collectAsState()
+    // two-color fade on the small spots; cover colors win when they are on
+    val fill: Brush? = if (source == ThemeSource.DUO && !coverColors) accentBrush() else null
 
     // not inside a Surface, so set the text color here or bare Text turns black
     CompositionLocalProvider(LocalContentColor provides Ink) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Backdrop(track?.coverUri, accent)
+        if (!coverColors) LiquidBackground(Modifier.fillMaxSize())
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
             // very short screens (or huge fonts) scroll; otherwise the stage takes what is left
             val compact = maxHeight < 560.dp
@@ -158,7 +180,20 @@ fun PlayerContent(onClose: () -> Unit) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                TopPill(skin, onClose, onSkin = { skin = it; Skin.save(ctx, it) }, onSound = { sheet = true })
+                TopPill(
+                    onRadio, onClose,
+                    onSource = { toRadio ->
+                        if (toRadio && !onRadio) {
+                            // the most recent station first, so next/previous walk the history
+                            val list = recents.ifEmpty { favStations }
+                            if (list.isEmpty()) pickStation = true else PlayerHub.playStations(list, 0)
+                        } else if (!toRadio && onRadio) {
+                            pickStation = false
+                            if (state?.station != null) PlayerHub.resumeTracks()
+                        }
+                    },
+                    onSound = { sheet = true },
+                )
                 BoxWithConstraints(
                     Modifier
                         .fillMaxWidth()
@@ -166,36 +201,17 @@ fun PlayerContent(onClose: () -> Unit) {
                         .padding(vertical = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val h = maxHeight
-                    val side = when (skin) {
-                        Skin.TP7 -> minOf(maxWidth - 24.dp, h / 1.3f)
-                        Skin.TAPE -> minOf(maxWidth, (h - 48.dp) * 1.6f)
-                        Skin.COVER -> minOf(maxWidth, h - 56.dp)
-                        else -> minOf(maxWidth, h)
-                    }.coerceIn(120.dp, 480.dp)
-                    AnimatedContent(
+                    if (pickStation) FilledTonalButton(onClick = onOpenRadio) { Text("Pick a station") }
+                    else AnimatedContent(
                         targetState = skin,
                         transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
                         label = "skin",
                     ) { s ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            val m = Modifier.width(side)
-                            val title = track?.title ?: "Nothing playing"
-                            when (s) {
-                                Skin.VINYL -> VinylSkin(live, art, accent, m, title)
-                                Skin.CD -> CdSkin(live, art, accent, m, title)
-                                Skin.TAPE -> TapeSkin(live, art, accent, track?.album ?: track?.title ?: "ctify", m)
-                                Skin.TP7 -> Tp7Skin(live, art, accent, track?.let { "${it.title} · ${it.artist}" } ?: "ctify", m)
-                                Skin.COVER -> {
-                                    CoverSkin(live, art, accent, m)
-                                    if (state?.station == null) SeekRow(live, accent, Modifier.width(side * 0.86f))
-                                }
-                            }
-                        }
+                        SkinView(s, live, art, accent, track, skinSide(s, maxWidth, maxHeight), seek = state?.station == null, fill = fill)
                     }
                 }
-                ControlCard(live, accent, onQueue = { queue = true }, onSound = { sheet = true })
-                SoundStrip(accent, onOpen = { sheet = true })
+                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true })
+                SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
         }
     }
@@ -209,6 +225,24 @@ fun PlayerContent(onClose: () -> Unit) {
         ) {
             SoundSheet()
         }
+    }
+    panel?.let { p ->
+        ModalBottomSheet(
+            onDismissRequest = { panel = null },
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            ChipPanelSheet(p)
+        }
+    }
+    if (picker) {
+        val still = remember { LiveProgress(still = true) }
+        SkinPicker(
+            current = skin,
+            preview = { s, side -> SkinView(s, still, art, accent, track, side, seek = false) },
+            onSelect = { skin = it; Skin.save(ctx, it); picker = false },
+            onDismiss = { picker = false },
+        )
     }
     if (queue) {
         ModalBottomSheet(
@@ -227,6 +261,33 @@ private fun Color.darkened(): Color {
     androidx.core.graphics.ColorUtils.colorToHSL(toArgb(), hsl)
     hsl[2] = hsl[2].coerceAtMost(0.40f)
     return Color(androidx.core.graphics.ColorUtils.HSLToColor(hsl))
+}
+
+/** Width a skin gets in a [maxWidth] x [h] stage. */
+internal fun skinSide(skin: Skin, maxWidth: Dp, h: Dp): Dp = when (skin) {
+    Skin.TP7 -> minOf(maxWidth - 24.dp, h / 1.3f)
+    Skin.TAPE -> minOf(maxWidth, (h - 48.dp) * 1.6f)
+    Skin.COVER -> minOf(maxWidth, h - 56.dp)
+    else -> minOf(maxWidth, h)
+}.coerceIn(120.dp, 480.dp)
+
+/** One skin drawn for [track]; [seek] adds the cover's own seek row. */
+@Composable
+internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, track: Track?, side: Dp, seek: Boolean, fill: Brush? = null) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        val m = Modifier.width(side)
+        val title = track?.title ?: "Nothing playing"
+        when (s) {
+            Skin.VINYL -> VinylSkin(live, art, accent, m, title)
+            Skin.CD -> CdSkin(live, art, accent, m, title)
+            Skin.TAPE -> TapeSkin(live, art, accent, track?.album ?: track?.title ?: "ctify", m)
+            Skin.TP7 -> Tp7Skin(live, art, accent, track?.let { "${it.title} · ${it.artist}" } ?: "ctify", m)
+            Skin.COVER -> {
+                CoverSkin(live, art, accent, m)
+                if (seek) SeekRow(live, accent, Modifier.width(side * 0.86f), fill)
+            }
+        }
+    }
 }
 
 @Composable
@@ -253,34 +314,30 @@ private fun Backdrop(art: String?, accent: Color) {
 }
 
 @Composable
-private fun TopPill(skin: Skin, onClose: () -> Unit, onSkin: (Skin) -> Unit, onSound: () -> Unit) {
+private fun TopPill(onRadio: Boolean, onClose: () -> Unit, onSource: (radio: Boolean) -> Unit, onSound: () -> Unit) {
     Surface(color = Glass, shape = CircleShape) {
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close player", tint = Ink)
             }
-            Row(
-                Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).selectableGroup(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Skin.entries.forEach { s ->
-                    val on = s == skin
+            Row(Modifier.selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
+                listOf(false to "Now Playing", true to "Radio").forEach { (radio, label) ->
+                    val on = radio == onRadio
                     Box(
                         Modifier
                             .heightIn(min = 48.dp)
-                            .selectable(selected = on, role = Role.Tab) { onSkin(s) }
-                            .semantics { contentDescription = "${s.label} look" },
+                            .selectable(selected = on, role = Role.Tab) { onSource(radio) },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            s.label,
-                            fontSize = 13.sp,
+                            label,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = if (on) Ink else InkDim,
                             fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
                             modifier = Modifier
                                 .clip(CircleShape)
                                 .background(if (on) Ink.copy(alpha = 0.12f) else Color.Transparent)
-                                .padding(horizontal = 8.dp, vertical = 7.dp),
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
                         )
                     }
                 }
@@ -292,40 +349,42 @@ private fun TopPill(skin: Skin, onClose: () -> Unit, onSkin: (Skin) -> Unit, onS
     }
 }
 
-/** What the sound is doing right now, always one tap away from the full settings. */
+/** What the sound is doing right now; each chip opens only its own control. */
 @Composable
-private fun SoundStrip(accent: Color, onOpen: () -> Unit) {
+private fun SoundStrip(accent: Color, onSkin: () -> Unit, onPanel: (ChipPanel) -> Unit) {
     val rate by PlayerHub.rate.collectAsState()
     val reverb by PlayerHub.reverb.collectAsState()
     val bass by PlayerHub.bassGain.collectAsState()
     val retune by PlayerHub.retuneIndex.collectAsState()
+    val width by PlayerHub.width.collectAsState()
     val pan by PlayerHub.pan8d.collectAsState()
     val muffle by PlayerHub.muffle.collectAsState()
     val v by PlayerHub.vinyl.collectAsState()
     val rain by PlayerHub.rain.collectAsState()
     val reversed by PlayerHub.reverseOn.collectAsState()
     val preparing by PlayerHub.reversePreparing.collectAsState()
+    val genre by SoundSettings.genreKey.collectAsState()
+    val mood = activeMood()
+    val space = spaceSummary(width, pan, muffle)
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StripChip("Sound", Icons.Default.Tune, true, accent, description = "Sound settings", onClick = onOpen)
-        StripChip("Vinyl", Icons.Default.Album, v.on, accent, toggle = true) { PlayerHub.setVinyl(v.copy(on = !v.on)) }
+        StripChip("Skin", Icons.Default.Palette, false, accent, description = "Player look", onClick = onSkin)
+        StripChip(mood?.takeIf { it != Mood.ORIGINAL }?.label ?: "Moods", null, mood != null && mood != Mood.ORIGINAL, accent) { onPanel(ChipPanel.MOODS) }
+        StripChip(GenrePreset.labelOf(genre), null, genre != GenrePreset.BALANCED, accent, description = "Genre preset ${GenrePreset.labelOf(genre)}") {
+            onPanel(ChipPanel.GENRE)
+        }
+        StripChip("Speed ${"%.2f".format(rate)}×", null, abs(rate - 1f) > 0.004f, accent) { onPanel(ChipPanel.SPEED) }
+        StripChip("Reverb ${(reverb * 100).roundToInt()}%", null, reverb > 0.004f, accent) { onPanel(ChipPanel.REVERB) }
+        StripChip(if (bass < 0.05f) "Bass off" else "Bass +${bass.roundToInt()} dB", null, bass >= 0.05f, accent) { onPanel(ChipPanel.BASS) }
+        StripChip("${RETUNE_PRESETS[retune].hz} Hz", null, retune != 0, accent) { onPanel(ChipPanel.HZ) }
+        StripChip(if (space == "off") "Space" else "Space · $space", null, space != "off", accent) { onPanel(ChipPanel.SPACE) }
         StripChip(
-            if (rain == RainPreset.OFF) "Rain" else rain.label, Icons.Default.WaterDrop,
-            rain != RainPreset.OFF, accent, toggle = true, description = "Rain sounds",
-        ) { PlayerHub.toggleRain() }
-        StripChip(
-            if (preparing) "Reverse: decoding…" else "Reverse",
-            Icons.Default.FastRewind, reversed, accent, toggle = true,
-        ) { PlayerHub.toggleReverse() }
-        StripChip("Slow ${"%.2f".format(rate)}×", null, abs(rate - 1f) > 0.004f, accent, onClick = onOpen)
-        StripChip("Reverb ${(reverb * 100).roundToInt()}%", null, reverb > 0.004f, accent, onClick = onOpen)
-        StripChip(if (bass < 0.05f) "Bass off" else "Bass +${bass.roundToInt()} dB", null, bass >= 0.05f, accent, onClick = onOpen)
-        StripChip("${RETUNE_PRESETS[retune].hz} Hz", null, retune != 0, accent, onClick = onOpen)
-        if (pan > 0.01f) StripChip("8D", null, true, accent, onClick = onOpen)
-        if (muffle > 0.01f) StripChip("Another room", null, true, accent, onClick = onOpen)
+            if (preparing) "Reverse: decoding…" else "More", Icons.Default.MoreHoriz,
+            v.on || rain != RainPreset.OFF || reversed, accent, description = "Rain, vinyl and reverse",
+        ) { onPanel(ChipPanel.MORE) }
     }
 }
 
@@ -357,13 +416,13 @@ private fun StripChip(
                 Icon(icon, contentDescription = null, tint = if (on) accent else Ink, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(5.dp))
             }
-            Text(label, fontSize = 12.sp, color = if (on) Ink else InkDim, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = if (on) Ink else InkDim, maxLines = 1)
         }
     }
 }
 
 @Composable
-private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier) {
+private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill: Brush? = null) {
     Column(modifier) {
         PillSlider(
             value = live.fraction,
@@ -373,16 +432,17 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier) {
             label = "Position",
             stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
             marks = chapterMarks(live),
+            brush = fill,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatMs(live.positionMs.toInt()), fontSize = 11.sp, color = InkDim)
-            Text(formatMs(live.durationMs.toInt()), fontSize = 11.sp, color = InkDim)
+            Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
+            Text(formatMs(live.durationMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
         }
     }
 }
 
 @Composable
-private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, onSound: () -> Unit) {
+private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onQueue: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     val station = state?.station
@@ -392,17 +452,16 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
     val stationFavs by app.radio.favoriteIds.collectAsState(initial = emptySet())
     val fav = if (station != null) station.uuid in stationFavs else track != null && track.id in favorites
 
-    Surface(color = Glass, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
+    Surface(color = Glass, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
         Column(Modifier.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        track?.title ?: "Nothing playing", color = Ink, fontSize = 17.sp,
-                        fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        track?.title ?: "Nothing playing", color = Ink, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         state?.radioStatus.takeIf { station != null } ?: track?.artist ?: "pick something in Library",
-                        color = InkDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = InkDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
                 IconButton(onClick = {
@@ -431,13 +490,13 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                             Modifier
                                 .size(width = 60.dp, height = 48.dp)
                                 .clip(CircleShape)
-                                .background(accent)
+                                .background(fill ?: SolidColor(accent))
                                 .clickable(role = Role.Button) { PlayerHub.togglePlay() },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = if (accent.luminance() > 0.4f) Color(0xFF1A1719) else Color.White,
+                                contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = if (fill != null) MaterialTheme.colorScheme.onPrimary else if (accent.luminance() > 0.4f) Color(0xFF1A1719) else Color.White,
                             )
                         }
                         IconButton(onClick = { PlayerHub.next() }) {
@@ -448,10 +507,6 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                             if (repeat == "track") Icons.Default.RepeatOne else Icons.Default.Repeat,
                             if (repeat == "track") "Repeat one" else "Repeat", repeat != "off", accent,
                         ) { PlayerHub.cycleRepeat() }
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = onSound, modifier = Modifier.size(44.dp)) {
-                            Icon(Icons.Default.MoreHoriz, contentDescription = "Sound settings", tint = Ink)
-                        }
                     }
                     val bufferStart = state?.bufferStartMs
                     val edge = state?.durationMs ?: 0L
@@ -460,10 +515,10 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                     } else if (station != null) {
                         Row(Modifier.heightIn(min = 32.dp).padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             LiveBadge(accent)
-                            Text(station.name, fontSize = 11.sp, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+                            Text(station.name, style = MaterialTheme.typography.labelSmall, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
                         }
-                    } else Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
-                        Text(formatMs(live.positionMs.toInt()), fontSize = 11.sp, color = InkDim)
+                    } else if (seekBar) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
+                        Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
                         PillSlider(
                             value = live.fraction,
                             onChange = { live.preview = (it * live.durationMs).toLong() },
@@ -473,8 +528,9 @@ private fun ControlCard(live: LiveProgress, accent: Color, onQueue: () -> Unit, 
                             stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
                             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
                             marks = chapterMarks(live),
+                            brush = fill,
                         )
-                        Text(formatMs(live.durationMs.toInt()), fontSize = 11.sp, color = InkDim)
+                        Text(formatMs(live.durationMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
                     }
                     if (station == null) ChapterRow(live, Ink)
                 }

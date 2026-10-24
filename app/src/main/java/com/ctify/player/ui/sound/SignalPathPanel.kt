@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
@@ -90,21 +89,21 @@ fun SignalPathPanel() {
         Text(
             if (stages.isEmpty()) "The DAC gets the samples unchanged and controls the volume. Any effect turns this off."
             else "Turn every stage off first (Studio flat does that).",
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             "Rates offered: " + bpFormats.map { it.sampleRate }.distinct().sorted().joinToString(", ") { khz(it) },
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        bpError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
+        bpError?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
     }
 }
 
 @Composable
 private fun Line(label: String, value: String) {
     Row(Modifier.padding(vertical = 2.dp)) {
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
-        Text(value, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
+        Text(value, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
     }
 }
 

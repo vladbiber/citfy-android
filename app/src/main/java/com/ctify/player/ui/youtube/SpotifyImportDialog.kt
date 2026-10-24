@@ -15,6 +15,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.data.MusicRepository
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
@@ -93,7 +93,7 @@ fun SpotifyImportDialog(repository: MusicRepository, initialLink: String?, onDis
         text = {
             Column {
                 if (total == 0 && !running) {
-                    Text("Paste a link to a public Spotify playlist or album. Ctify finds every song on YouTube and saves them as a playlist that plays online.", color = TextSecondary, fontSize = 14.sp)
+                    Text("Paste a link to a public Spotify playlist or album. Ctify finds every song on YouTube and saves them as a playlist that plays online.", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = link, onValueChange = { link = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -106,25 +106,25 @@ fun SpotifyImportDialog(repository: MusicRepository, initialLink: String?, onDis
                     )
                 }
                 if (running || total > 0) {
-                    if (name.isNotBlank()) Text(name, fontSize = 16.sp)
+                    if (name.isNotBlank()) Text(name, style = MaterialTheme.typography.bodyLarge)
                     if (total > 0) {
                         LinearProgressIndicator(progress = { done / total.toFloat() }, color = Accent, modifier = Modifier.fillMaxWidth())
-                        Text("$done of $total checked · ${found.size} found", color = TextSecondary, fontSize = 13.sp)
+                        Text("$done of $total checked · ${found.size} found", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                     } else LinearProgressIndicator(color = Accent, modifier = Modifier.fillMaxWidth())
-                    if (running) Text(current, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (running) Text(current, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (finished && missing.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Not found on YouTube (${missing.size}):", color = TextSecondary, fontSize = 13.sp)
+                    Text("Not found on YouTube (${missing.size}):", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                     LazyColumn(Modifier.heightIn(max = 160.dp)) {
-                        items(missing) { Text(it, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        items(missing) { Text(it, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                 }
                 if (finished) {
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Playlist name") }, modifier = Modifier.fillMaxWidth())
                 }
-                error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             }
         },
         confirmButton = {

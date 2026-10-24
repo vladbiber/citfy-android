@@ -195,7 +195,7 @@ private fun DiscStage(
     ) {
         val g = geoFor(size)
         drawDisc(g.c, g.r, platter.angle)
-        drawWave(g, live.fraction, spectrum, accent, Math.toRadians(platter.angle * 2.0).toFloat())
+        drawWave(g, live.fraction, if (live.still) FloatArray(0) else spectrum, accent, Math.toRadians(platter.angle * 2.0).toFloat())
         if (timeInside) {
             val txt = measurer.measure(formatMs(live.positionMs.toInt()), TextStyle(color = accent, fontSize = 11.sp))
             val a = Math.toRadians(122.0)

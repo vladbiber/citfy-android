@@ -1,5 +1,6 @@
 package com.ctify.player.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,19 +25,19 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
@@ -47,7 +48,6 @@ import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,7 +60,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,15 +69,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.data.Playlist
 import com.ctify.player.data.Track
@@ -86,7 +92,15 @@ import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.net.Feature
+import com.ctify.player.net.NetworkGate
+import com.ctify.player.net.Traffic
+import com.ctify.player.ui.youtube.DownloadPicker
 import com.ctify.player.ui.youtube.PlaylistDownloadBar
+import com.ctify.player.ui.youtube.pickSong
+import com.ctify.player.ui.youtube.toYtSong
+import com.ctify.player.youtube.download.Downloads
+import kotlinx.coroutines.launch
 import com.ctify.player.ui.youtube.isStreamed
 import com.ctify.player.ui.youtube.rememberDownloadStates
 import com.ctify.player.ui.youtube.ytStatus
@@ -94,28 +108,12 @@ import com.ctify.player.ui.youtube.ytStatus
 internal fun LazyGridScope.full(content: @Composable () -> Unit) =
     item(span = { GridItemSpan(maxLineSpan) }) { content() }
 
-@Composable
-internal fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text, color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold,
-        modifier = modifier.padding(vertical = 6.dp).semantics { heading() },
-    )
-}
-
-@Composable
-internal fun GridHeader(text: String) {
-    Text(
-        text, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 10.dp, start = 4.dp).semantics { heading() },
-    )
-}
-
 /** A playlist as a cover card in a grid. */
 @Composable
 internal fun PlaylistCard(playlist: Playlist, firstTrack: Track?, onClick: () -> Unit) {
     Column(
         Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClickLabel = "open", onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = "Playlist ${playlist.name}, ${playlist.trackIds.size} songs"
@@ -123,23 +121,75 @@ internal fun PlaylistCard(playlist: Playlist, firstTrack: Track?, onClick: () ->
             .padding(4.dp),
     ) {
         if (playlist.coverUri != null || firstTrack != null) {
-            PlaylistArt(playlist, firstTrack, 0.dp, corner = 14.dp, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+            PlaylistArt(playlist, firstTrack, 0.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
         } else {
             Box(
-                Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(SurfaceElevated),
+                Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.small).background(SurfaceElevated),
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Accent, modifier = Modifier.size(36.dp)) }
         }
         Spacer(Modifier.height(8.dp))
-        Text(playlist.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text("${playlist.trackIds.size} songs", color = TextSecondary, fontSize = 12.sp, maxLines = 1)
+        Text(playlist.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text("${playlist.trackIds.size} songs", color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
 
 @Composable
 internal fun EmptyHint(text: String) {
     Box(Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 8.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = TextSecondary, fontSize = 14.sp)
+        Text(text, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** What the + menu offers; Library and Discover share it. */
+class AddActions(
+    val importFolder: () -> Unit,
+    val importFile: () -> Unit,
+    val youTube: () -> Unit,
+    val spotify: () -> Unit,
+    val downloads: () -> Unit,
+)
+
+/** The + button and its menu; [onNewPlaylist] adds the playlist entry. */
+@Composable
+internal fun AddMenu(add: AddActions, onNewPlaylist: (() -> Unit)? = null) {
+    var showAddMenu by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { showAddMenu = true }) {
+            Icon(Icons.Filled.Add, if (onNewPlaylist != null) "Add music or a playlist" else "Add music", tint = TextPrimary)
+        }
+        DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }, containerColor = SurfaceElevated) {
+            DropdownMenuItem(
+                text = { Text("Import a folder", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.FolderOpen, null, tint = Accent) },
+                onClick = { showAddMenu = false; add.importFolder() },
+            )
+            DropdownMenuItem(
+                text = { Text("Add a song", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.LibraryAdd, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; add.importFile() },
+            )
+            DropdownMenuItem(
+                text = { Text("Add from YouTube", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; add.youTube() },
+            )
+            DropdownMenuItem(
+                text = { Text("Import from Spotify", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.QueueMusic, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; add.spotify() },
+            )
+            DropdownMenuItem(
+                text = { Text("Downloads", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.Filled.Download, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; add.downloads() },
+            )
+            if (onNewPlaylist != null) DropdownMenuItem(
+                text = { Text("New playlist", color = TextPrimary) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, tint = TextSecondary) },
+                onClick = { showAddMenu = false; onNewPlaylist() },
+            )
+        }
     }
 }
 
@@ -147,27 +197,28 @@ internal fun EmptyHint(text: String) {
 fun LibraryScreen(
     viewModel: PlayerViewModel,
     onMore: (String) -> Unit,
-    onImport: () -> Unit,
-    onImportFolder: () -> Unit,
+    add: AddActions,
     openedPlaylist: String?,
     onOpenPlaylist: (String?) -> Unit,
     section: Int = 0,
     onSection: (Int) -> Unit = {},
-    onYouTube: () -> Unit = {},
-    onSpotify: () -> Unit = {},
-    onDownloads: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val playlists by viewModel.repository.playlists.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var showCreate by remember { mutableStateOf(false) }
-    var showAddMenu by remember { mutableStateOf(false) }
+    var showPicker by remember { mutableStateOf(false) }
+    // one query for every section and the opened playlist
+    var query by rememberSaveable { mutableStateOf("") }
+    val q = query.trim()
 
     val opened = openedPlaylist?.takeIf { name -> playlists.any { it.name == name } }
     if (opened != null) {
-        PlaylistDetail(viewModel, playlists.first { it.name == opened }, ui.currentTrackId, ui.isPlaying, favorites, onMore, onOpenPlaylist)
+        PlaylistDetail(viewModel, playlists.first { it.name == opened }, ui.currentTrackId, ui.isPlaying, favorites, query, { query = it }, onOpenPlaylist)
         return
     }
 
@@ -181,45 +232,10 @@ fun LibraryScreen(
         full {
             Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 ScreenTitle("Library", Modifier.weight(1f))
-                Box {
-                    IconButton(onClick = { showAddMenu = true }) {
-                        Icon(Icons.Filled.Add, "Add music or a playlist", tint = TextPrimary)
-                    }
-                    DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }, containerColor = SurfaceElevated) {
-                        DropdownMenuItem(
-                            text = { Text("Import a folder", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.FolderOpen, null, tint = Accent) },
-                            onClick = { showAddMenu = false; onImportFolder() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add a song", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.LibraryAdd, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; onImport() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add from YouTube", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; onYouTube() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Import from Spotify", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.QueueMusic, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; onSpotify() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Downloads", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Filled.Download, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; onDownloads() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("New playlist", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, tint = TextSecondary) },
-                            onClick = { showAddMenu = false; showCreate = true },
-                        )
-                    }
-                }
+                AddMenu(add, onNewPlaylist = { showCreate = true })
             }
         }
+        full { SearchField(query, { query = it }, "Search songs, favorites and playlists", Modifier.padding(horizontal = 8.dp)) }
         full {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).selectableGroup(),
@@ -233,21 +249,41 @@ fun LibraryScreen(
 
         when (section) {
             0 -> {
+                val shown = if (q.isEmpty()) tracks else tracks.filter { it.matches(q) }
                 if (tracks.isEmpty()) full { EmptyHint("No music yet. Tap + to import a folder or a song.") }
-                tracks.forEach { t ->
+                else if (shown.isEmpty()) full { EmptyHint("No songs match \"$q\"") }
+                shown.forEach { t ->
                     full {
                         TrackRow(
                             track = t, isCurrent = t.id == ui.currentTrackId,
                             isPlaying = ui.isPlaying && t.id == ui.currentTrackId, isFavorite = t.id in favorites,
-                            onClick = { viewModel.playQueue(tracks, tracks.indexOf(t)) },
+                            onClick = { viewModel.playQueue(shown, shown.indexOf(t)) },
                             onToggleFavorite = { viewModel.toggleFavorite(t.id) }, onMore = { onMore(t.id) },
                         )
                     }
                 }
             }
             1 -> {
-                val favs = viewModel.repository.favoriteTracks()
-                if (favs.isEmpty()) full { EmptyHint("Tap the heart on a song to save it here.") }
+                val allFavs = viewModel.repository.favoriteTracks()
+                val favs = if (q.isEmpty()) allFavs else allFavs.filter { it.matches(q) }
+                // local files are already on the phone; only YouTube streams need saving
+                val streamed = allFavs.filter { it.isStreamed() }
+                if (streamed.isNotEmpty()) full {
+                    Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(onClick = {
+                            scope.launch {
+                                val n = Downloads.enqueue(streamed.map { it.toYtSong() })
+                                val wait = NetworkGate.blockReason(Feature.YOUTUBE, Traffic.DOWNLOAD)?.let { ". $it" } ?: ""
+                                Toast.makeText(ctx, if (n == 0) "Already saved or in the queue" else "$n songs added to downloads$wait", Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Icon(Icons.Filled.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Download all (${streamed.size})")
+                        }
+                        TextButton(onClick = { showPicker = true }) { Text("Choose songs") }
+                    }
+                }
+                if (allFavs.isEmpty()) full { EmptyHint("Tap the heart on a song to save it here.") }
+                else if (favs.isEmpty()) full { EmptyHint("No favorites match \"$q\"") }
                 favs.forEach { t ->
                     full {
                         TrackRow(
@@ -260,8 +296,13 @@ fun LibraryScreen(
                 }
             }
             else -> {
+                // a playlist matches by name or by any of its songs
+                val shown = if (q.isEmpty()) playlists else playlists.filter { pl ->
+                    pl.name.contains(q, true) || pl.trackIds.any { viewModel.repository.trackById(it)?.matches(q) == true }
+                }
                 if (playlists.isEmpty()) full { EmptyHint("No playlists yet. Tap + to create one.") }
-                items(playlists, key = { it.name }) { pl ->
+                else if (shown.isEmpty()) full { EmptyHint("No playlists match \"$q\"") }
+                items(shown, key = { it.name }) { pl ->
                     PlaylistCard(pl, pl.trackIds.firstNotNullOfOrNull { viewModel.repository.trackById(it) }) {
                         onOpenPlaylist(pl.name)
                     }
@@ -271,6 +312,10 @@ fun LibraryScreen(
     }
 
     if (showCreate) CreatePlaylistDialog(viewModel, onDismiss = { showCreate = false })
+    if (showPicker) {
+        val streamed = viewModel.repository.favoriteTracks().filter { it.isStreamed() }
+        DownloadPicker("Download favorites", streamed.map { it.pickSong() }, onDismiss = { showPicker = false })
+    }
 }
 
 @Composable
@@ -284,7 +329,7 @@ private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             label,
             color = if (selected) MaterialTheme.colorScheme.onPrimary else TextPrimary,
-            fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .clip(CircleShape)
                 .background(if (selected) Accent else SurfaceElevated)
@@ -300,12 +345,22 @@ private fun PlaylistDetail(
     currentId: String?,
     isPlaying: Boolean,
     favorites: Set<String>,
-    onMore: (String) -> Unit,
+    query: String,
+    onQuery: (String) -> Unit,
     onOpenPlaylist: (String?) -> Unit,
 ) {
     val name = playlist.name
     val plTracks = viewModel.repository.playlistTracks(name)
+    val q = query.trim()
+    val shown = if (q.isEmpty()) plTracks else plTracks.filter { it.matches(q) }
     val dlStates = rememberDownloadStates()
+    var moreFor by remember { mutableStateOf<String?>(null) }
+    val grid = rememberLazyGridState()
+    // the dragged row follows the finger: its top when the drag began plus how far it moved
+    var dragKey by remember { mutableStateOf<String?>(null) }
+    var dragStart by remember { mutableFloatStateOf(0f) }
+    var dragDelta by remember { mutableFloatStateOf(0f) }
+    fun indexOf(trackId: String) = viewModel.repository.playlists.value.firstOrNull { it.name == name }?.trackIds?.indexOf(trackId) ?: -1
     var showPlMenu by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -318,6 +373,7 @@ private fun PlaylistDetail(
     LazyVerticalGrid(
         columns = GridCells.Fixed(1),
         modifier = Modifier.fillMaxSize(),
+        state = grid,
         contentPadding = PaddingValues(bottom = 16.dp),
     ) {
         full {
@@ -358,13 +414,13 @@ private fun PlaylistDetail(
         }
         full {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                PlaylistArt(playlist, plTracks.firstOrNull(), 180.dp, corner = 18.dp)
+                PlaylistArt(playlist, plTracks.firstOrNull(), 180.dp, shape = MaterialTheme.shapes.large)
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    name, color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                    name, color = TextPrimary, style = MaterialTheme.typography.headlineMedium, maxLines = 2,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() },
                 )
-                Text("Playlist · ${plTracks.size} songs", color = TextSecondary, fontSize = 13.sp)
+                Text("Playlist · ${plTracks.size} songs", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = { viewModel.playQueue(plTracks, 0) }, enabled = plTracks.isNotEmpty()) {
@@ -382,18 +438,54 @@ private fun PlaylistDetail(
                 Spacer(Modifier.height(10.dp))
             }
         }
+        if (!reordering && plTracks.isNotEmpty()) full {
+            SearchField(query, onQuery, "Search this playlist", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
         if (plTracks.isEmpty()) full { EmptyHint("This playlist is empty. Add songs with the menu on any track.") }
+        else if (!reordering && shown.isEmpty()) full { EmptyHint("No songs here match \"$q\"") }
+        // reordering always shows the whole playlist, so positions are the real ones
         if (reordering) plTracks.forEachIndexed { i, t ->
-            full { ReorderRow(t, i, plTracks.size) { to -> viewModel.repository.moveInPlaylist(name, i, to) } }
-        } else plTracks.forEach { t ->
+            val key = "r" + t.id
+            item(key = key, span = { GridItemSpan(maxLineSpan) }) {
+                val dragging = dragKey == key
+                ReorderRow(
+                    t, i, plTracks.size,
+                    modifier = if (dragging) Modifier.zIndex(1f).graphicsLayer {
+                        val now = grid.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.offset?.y ?: 0
+                        translationY = dragStart + dragDelta - now
+                    } else Modifier.animateItem(),
+                    // shortcut: no auto-scroll at the list edges; drop, scroll, and drag again for long moves
+                    handle = Modifier.pointerInput(key) {
+                        detectDragGestures(
+                            onDragStart = {
+                                dragKey = key; dragDelta = 0f
+                                dragStart = grid.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.offset?.y?.toFloat() ?: 0f
+                            },
+                            onDragEnd = { dragKey = null },
+                            onDragCancel = { dragKey = null },
+                        ) { change, amount ->
+                            change.consume()
+                            dragDelta += amount.y
+                            val rows = grid.layoutInfo.visibleItemsInfo
+                            val me = rows.firstOrNull { it.key == key } ?: return@detectDragGestures
+                            val middle = (dragStart + dragDelta + me.size.height / 2).toInt()
+                            val over = rows.firstOrNull {
+                                it.key != key && (it.key as? String)?.startsWith("r") == true && middle in it.offset.y until it.offset.y + it.size.height
+                            } ?: return@detectDragGestures
+                            viewModel.repository.moveInPlaylist(name, indexOf(t.id), indexOf((over.key as String).removePrefix("r")))
+                        }
+                    },
+                ) { to -> viewModel.repository.moveInPlaylist(name, indexOf(t.id), to) }
+            }
+        } else shown.forEach { t ->
             full {
                 TrackRow(
                     track = t, isCurrent = t.id == currentId, isPlaying = isPlaying && t.id == currentId,
                     isFavorite = t.id in favorites,
-                    onClick = { viewModel.playQueue(plTracks, plTracks.indexOf(t)) },
+                    onClick = { viewModel.playQueue(shown, shown.indexOf(t)) },
                     onToggleFavorite = { viewModel.toggleFavorite(t.id) },
                     onRemove = { viewModel.repository.removeFromPlaylist(name, t.id) },
-                    onMore = { onMore(t.id) },
+                    onMore = { moreFor = t.id },
                     status = ytStatus(t, dlStates)?.first,
                     statusIcon = ytStatus(t, dlStates)?.second,
                 )
@@ -401,6 +493,12 @@ private fun PlaylistDetail(
         }
     }
 
+    moreFor?.let { id ->
+        AddToPlaylistSheet(
+            viewModel, trackId = id, onDismiss = { moreFor = null },
+            onMoveToTop = { viewModel.repository.moveInPlaylist(name, indexOf(id), 0) }.takeIf { indexOf(id) > 0 },
+        )
+    }
     if (showRename) {
         RenamePlaylistDialog(
             currentName = name,
@@ -436,20 +534,27 @@ private fun PlaylistDetail(
     }
 }
 
-/** One song while a playlist is being reordered: up and down, or straight to the top or bottom. */
+/** One song while a playlist is being reordered: drag the handle, or use the accessibility actions. */
 @Composable
-private fun ReorderRow(track: Track, index: Int, size: Int, onMove: (Int) -> Unit) {
+private fun ReorderRow(track: Track, index: Int, size: Int, modifier: Modifier, handle: Modifier, onMove: (Int) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp),
+        modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp).semantics(mergeDescendants = true) {
+            customActions = listOfNotNull(
+                CustomAccessibilityAction("Move to top") { onMove(0); true }.takeIf { index > 0 },
+                CustomAccessibilityAction("Move up") { onMove(index - 1); true }.takeIf { index > 0 },
+                CustomAccessibilityAction("Move down") { onMove(index + 1); true }.takeIf { index < size - 1 },
+            )
+        },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("${index + 1}", color = TextMuted, fontSize = 13.sp, modifier = Modifier.width(28.dp))
+        Text("${index + 1}", color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(28.dp))
         Column(Modifier.weight(1f)) {
             Text(track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, color = TextSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconButton(onClick = { onMove(0) }, enabled = index > 0) { Icon(Icons.Filled.VerticalAlignTop, "Move ${track.title} to the top") }
-        IconButton(onClick = { onMove(index - 1) }, enabled = index > 0) { Icon(Icons.Filled.ArrowUpward, "Move ${track.title} up") }
-        IconButton(onClick = { onMove(index + 1) }, enabled = index < size - 1) { Icon(Icons.Filled.ArrowDownward, "Move ${track.title} down") }
+        Icon(
+            Icons.Filled.DragHandle, "Drag to move ${track.title}", tint = TextSecondary,
+            modifier = handle.size(48.dp).padding(12.dp),
+        )
     }
 }

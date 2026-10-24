@@ -21,7 +21,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.fx.VinylPreset
 import kotlin.math.abs
@@ -37,7 +36,7 @@ fun VinylControls(modifier: Modifier = Modifier) {
                 Text("Real vinyl sound", fontWeight = FontWeight.SemiBold)
                 Text(
                     "Crackle, pops, wow & flutter and a warm, rolled-off top end",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Switch(

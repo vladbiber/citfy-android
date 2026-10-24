@@ -35,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.radio.RadioRepository
 import com.ctify.player.radio.RadioTab
@@ -51,14 +50,14 @@ import com.ctify.player.ui.wheel.WheelSource
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private const val FIXED_PAGES = 4
+private const val FIXED_PAGES = 3
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RadioScreen() {
     val radio = radioRepo()
     val tabs by radio.tabs.collectAsStateWithLifecycle(initialValue = emptyList())
-    val titles = listOf("For you", "Favorites", "Heard", "Browse") + tabs.map { it.title }
+    val titles = listOf("For you", "Favorites", "Browse") + tabs.map { it.title }
     val pager = rememberPagerState { titles.size }
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
@@ -94,8 +93,7 @@ fun RadioScreen() {
             when (page) {
                 0 -> ForYouPage()
                 1 -> FavoritesPage()
-                2 -> HeardPage()
-                3 -> BrowsePage()
+                2 -> BrowsePage()
                 else -> tabs.getOrNull(page - FIXED_PAGES)?.let { tab -> PinnedTabPage(tab, onSettings = { settingsFor = tab }) }
             }
         }
@@ -147,13 +145,14 @@ private fun stationWheelSources(radio: RadioRepository, page: Int, tabs: List<Ra
         0 -> StationListSource("for_you", "For you", radio) {
             radio.cached(RadioRepository.CLIAMP_KEY).orEmpty() + radio.cached(RadioRepository.FOR_YOU_KEY).orEmpty()
         }
-        2 -> StationListSource("recent", "Recent", radio) { radio.recents.first() }
         in FIXED_PAGES..Int.MAX_VALUE -> tabs.getOrNull(page - FIXED_PAGES)?.let { tab ->
             StationListSource("tab_${tab.id}", tab.title, radio) { radio.cached("tab_${tab.id}").orEmpty() }
         }
         else -> null
     }
-    return listOfNotNull(here, favorites)
+    // recent stations used to come with the Heard page, which moved to Discover
+    val recent = StationListSource("recent", "Recent", radio) { radio.recents.first() }
+    return listOfNotNull(here, favorites, recent)
 }
 
 private fun pageKey(page: Int, tabs: List<RadioTab>): Any =
@@ -179,7 +178,7 @@ private fun ForYouPage() {
         item(key = "intro") {
             Text(
                 "The cliamp channels, then stations like the ones you play and heart.",
-                color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }
         loadStatus(state, blocked, List<Station>::isEmpty, "Nothing here yet. Try Browse.")
@@ -204,8 +203,7 @@ private fun PinnedTabPage(tab: RadioTab, onSettings: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    tabSummary(tab), color = TextMuted, fontSize = 13.sp, modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
+                    tabSummary(tab), color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onSettings) {
                     Icon(Icons.Filled.Tune, contentDescription = "Settings for ${tab.title}", tint = TextSecondary)

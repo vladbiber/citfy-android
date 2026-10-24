@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -40,7 +39,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ctify.player.player.fx.EqBand
 import com.ctify.player.player.fx.EqSpec
 import com.ctify.player.player.fx.FilterType
@@ -93,7 +91,7 @@ fun GraphicEditor(bands: List<Float>, onChange: (Int, Float) -> Unit) {
         EqSpec.GRAPHIC_FREQS.forEachIndexed { i, f ->
             val g = bands.getOrElse(i) { 0f }
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("%+.0f".format(g), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("%+.0f".format(g), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Slider(
                     value = g,
                     onValueChange = { v -> onChange(i, if (kotlin.math.abs(v) < 0.4f) 0f else (v * 2f).roundToInt() / 2f) },
@@ -108,7 +106,7 @@ fun GraphicEditor(bands: List<Float>, onChange: (Int, Float) -> Unit) {
                         .width(150.dp)
                         .height(32.dp),
                 )
-                Text(freqLabel(f), fontSize = 10.sp, textAlign = TextAlign.Center)
+                Text(freqLabel(f), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
             }
         }
     }
@@ -147,10 +145,10 @@ fun ParametricEditor(bands: List<EqBand>, onChange: (List<EqBand>) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         bands.forEachIndexed { i, b ->
             fun set(nb: EqBand) = onChange(bands.toMutableList().also { it[i] = nb })
-            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)) {
+            Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.small) {
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Filter ${i + 1}", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Text("Filter ${i + 1}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         IconButton(onClick = { onChange(bands.toMutableList().also { it.removeAt(i) }) }) {
                             Icon(Icons.Default.Delete, contentDescription = "Remove filter ${i + 1}")
                         }
