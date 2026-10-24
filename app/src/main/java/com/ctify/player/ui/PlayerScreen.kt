@@ -55,7 +55,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Favorite
+import com.ctify.player.ui.player.SleepSheet
+import com.ctify.player.ui.player.sleepLeft
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.LocalContentColor
@@ -146,6 +149,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     var skin by remember { mutableStateOf(Skin.load(ctx)) }
     var sheet by remember { mutableStateOf(false) }
     var queue by remember { mutableStateOf(false) }
+    var sleep by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
     var panel by remember { mutableStateOf<ChipPanel?>(null) }
     val radio = (ctx.applicationContext as CtifyApp).radio
@@ -210,7 +214,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                         SkinView(s, live, art, accent, track, skinSide(s, maxWidth, maxHeight), seek = state?.station == null, fill = fill)
                     }
                 }
-                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true })
+                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true }, onSleep = { sleep = true })
                 SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
         }
@@ -243,6 +247,15 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             onSelect = { skin = it; Skin.save(ctx, it); picker = false },
             onDismiss = { picker = false },
         )
+    }
+    if (sleep) {
+        ModalBottomSheet(
+            onDismissRequest = { sleep = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            SleepSheet(live = state?.station != null, onDone = { sleep = false })
+        }
     }
     if (queue) {
         ModalBottomSheet(
@@ -442,7 +455,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill:
 }
 
 @Composable
-private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onQueue: () -> Unit) {
+private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onQueue: () -> Unit, onSleep: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     val station = state?.station
@@ -472,6 +485,14 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                         if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
                         tint = if (fav) accent else Ink,
+                    )
+                }
+                val sleepLeft = sleepLeft()
+                IconButton(onClick = onSleep) {
+                    Icon(
+                        Icons.Default.Bedtime,
+                        contentDescription = sleepLeft?.let { "Sleep timer, pausing $it" } ?: "Sleep timer",
+                        tint = if (sleepLeft != null) accent else Ink,
                     )
                 }
                 if (station == null) IconButton(onClick = onQueue) {
