@@ -60,7 +60,9 @@ import coil.compose.AsyncImage
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.player.PlayerViewModel
-import com.ctify.player.ui.TrackRow
+import com.ctify.player.ui.songs.Snack
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongRow
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
@@ -77,7 +79,7 @@ import kotlinx.coroutines.launch
 
 /** Search YouTube Music for songs and albums; play them or save them. */
 @Composable
-fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloads: () -> Unit, onAddToPlaylist: (String) -> Unit) {
+fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloads: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -88,10 +90,8 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
     var songs by remember { mutableStateOf<List<YtSong>>(emptyList()) }
     var albums by remember { mutableStateOf<List<YtPlaylistRef>>(emptyList()) }
     var album by remember { mutableStateOf<YtAlbum?>(null) }
-    var menuFor by remember { mutableStateOf<YtSong?>(null) }
     val downloads by Downloads.all().collectAsState(initial = emptyList())
     val pending = downloads.count { it.state == DownloadState.QUEUED || it.state == DownloadState.RUNNING }
-    val ui by viewModel.ui.collectAsState()
 
     fun run(block: suspend () -> Unit) {
         NetworkGate.blockReason(Feature.YOUTUBE)?.let { error = it; return }
@@ -146,13 +146,16 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
     }
 
     fun save(list: List<YtSong>) {
-        viewModel.repository.saveStreamed(list.map { it.toTrack() })
-        Toast.makeText(ctx, if (list.size == 1) "Saved to your library" else "${list.size} songs saved to your library", Toast.LENGTH_SHORT).show()
+        val tracks = list.map { it.toTrack() }
+        viewModel.repository.saveStreamed(tracks)
+        Snack.show(if (list.size == 1) "Saved to your library · plays online" else "${list.size} songs saved to your library · they play online") {
+            viewModel.repository.removeStreamed(tracks.map { it.id })
+        }
     }
 
     fun saveAlbum(a: YtAlbum) {
         viewModel.repository.saveAsPlaylist(a.title, a.songs.map { it.toTrack() }, a.thumbnail)
-        Toast.makeText(ctx, "Saved \"${a.title}\" as a playlist", Toast.LENGTH_SHORT).show()
+        Snack.show("Saved \"${a.title}\" as a playlist")
     }
 
     BackHandler(enabled = album != null) { album = null }
@@ -195,7 +198,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                 when {
                     loading -> CircularProgressIndicator(Modifier.align(Alignment.Center), color = Accent)
                     error != null -> Hint(error!!)
-                    shown != null -> AlbumDetail(shown, ui.currentTrackId, ui.isPlaying, onPlay = { play(shown.songs, it) }, onDownload = { download(shown.songs, shown) }, onSave = { saveAlbum(shown) }, onMenu = { menuFor = it })
+                    shown != null -> AlbumDetail(shown, onPlay = { play(shown.songs, it) }, onDownload = { download(shown.songs, shown) }, onSave = { saveAlbum(shown) })
                     albumsMode -> if (albums.isEmpty()) Hint("Search for an album to play or save it whole.") else LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
                         items(albums, key = { it.id }) { a ->
                             CardRow(a.thumbnail, a.title, a.subtitle) { run { album = YouTubeSource.album(a.id) } }
@@ -221,12 +224,9 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                                 }
                             }
                         }
+                        val tracks = songs.map { it.toTrack() }
                         items(songs, key = { it.videoId }) { s ->
-                            val t = s.toTrack()
-                            TrackRow(
-                                track = t, isCurrent = t.id == ui.currentTrackId, isPlaying = ui.isPlaying && t.id == ui.currentTrackId,
-                                isFavorite = false, onClick = { play(songs, songs.indexOf(s)) }, onToggleFavorite = null, onMore = { menuFor = s },
-                            )
+                            SongRow(s.toTrack(), SongContext.Search, tracks, onPlay = { play(songs, songs.indexOf(s)) })
                         }
                     }
                 }
@@ -234,39 +234,11 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
         }
     }
 
-    menuFor?.let { s ->
-        AlertDialog(
-            onDismissRequest = { menuFor = null },
-            title = { Text(s.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-            text = {
-                Column {
-                    MenuItem("Save to library (streams, no download)") { menuFor = null; save(listOf(s)) }
-                    MenuItem("Add to playlist") {
-                        menuFor = null
-                        val t = s.toTrack()
-                        viewModel.repository.remember(listOf(t))
-                        onAddToPlaylist(t.id)
-                    }
-                    MenuItem("Download") { menuFor = null; download(listOf(s), album?.takeIf { a -> a.songs.any { it.videoId == s.videoId } }) }
-                    MenuItem("Play song radio") {
-                        menuFor = null
-                        run { val radio = YouTubeSource.radio(s.videoId); play(listOf(s) + radio.filter { it.videoId != s.videoId }, 0) }
-                    }
-                    MenuItem("Add to queue") {
-                        menuFor = null
-                        val t = s.toTrack()
-                        viewModel.repository.remember(listOf(t))
-                        viewModel.addToQueue(t.id)
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { menuFor = null }) { Text("Close") } },
-        )
-    }
 }
 
 @Composable
-private fun AlbumDetail(album: YtAlbum, currentId: String?, playing: Boolean, onPlay: (Int) -> Unit, onDownload: () -> Unit, onSave: () -> Unit, onMenu: (YtSong) -> Unit) {
+private fun AlbumDetail(album: YtAlbum, onPlay: (Int) -> Unit, onDownload: () -> Unit, onSave: () -> Unit) {
+    val tracks = album.songs.map { it.toTrack() }
     LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -287,11 +259,7 @@ private fun AlbumDetail(album: YtAlbum, currentId: String?, playing: Boolean, on
             }
         }
         items(album.songs, key = { it.videoId }) { s ->
-            val t = s.toTrack()
-            TrackRow(
-                track = t.copy(title = "${s.trackNumber ?: ""}. ${s.title}"), isCurrent = t.id == currentId, isPlaying = playing && t.id == currentId,
-                isFavorite = false, onClick = { onPlay(album.songs.indexOf(s)) }, onToggleFavorite = null, onMore = { onMenu(s) },
-            )
+            SongRow(s.toTrack(), SongContext.Search, tracks, onPlay = { onPlay(album.songs.indexOf(s)) })
         }
     }
 }
@@ -314,11 +282,6 @@ internal fun CardRow(image: String?, title: String, subtitle: String, onClick: (
 @Composable
 private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
     androidx.compose.material3.FilterChip(selected = selected, onClick = onClick, label = { Text(label) })
-}
-
-@Composable
-private fun MenuItem(label: String, onClick: () -> Unit) {
-    Text(label, color = TextPrimary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
 }
 
 @Composable

@@ -50,6 +50,10 @@ object LastFm {
     suspend fun artistTracks(artist: String): List<Song> =
         songs(list(call("artist.getTopTracks", "artist" to artist, "limit" to "30", "autocorrect" to "1"), "toptracks", "track"))
 
+    /** The artist's most used tag that is a genre, for "Go to genre". */
+    suspend fun artistTopTag(artist: String): String? =
+        list(call("artist.getTopTags", "artist" to artist, "autocorrect" to "1"), "toptags", "tag").map { it.getString("name").lowercase() }.firstOrNull { it !in NOT_GENRES }
+
     private fun artists(a: List<JSONObject>) = a.map { Artist(it.getString("name"), image(it)) }
 
     private fun songs(a: List<JSONObject>) = a.mapNotNull { t ->

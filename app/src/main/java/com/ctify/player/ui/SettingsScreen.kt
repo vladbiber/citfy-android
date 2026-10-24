@@ -65,6 +65,7 @@ import com.ctify.player.data.Backup
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.radio.RadioPrefs
+import com.ctify.player.recommend.HiddenArtists
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.GradientStyle
 import com.ctify.player.ui.theme.Swatch
@@ -212,6 +213,21 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 steps = 14,
                 modifier = Modifier.semantics { contentDescription = "Radio rewind buffer, $bufferMin minutes" },
             )
+
+            SectionHeader("Hidden artists", Modifier.padding(top = 24.dp, bottom = 4.dp))
+            val hidden by HiddenArtists.names.collectAsState()
+            Text(
+                if (hidden.isEmpty()) "None. Use Hide artist in a recommended song's menu to keep an artist out of For you, genres and creators."
+                else "Kept out of For you, recommendations, genres and creators.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            hidden.sortedBy { it.lowercase() }.forEach { name ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { HiddenArtists.unhide(name) }) { Text("Unhide") }
+                }
+            }
 
             SectionHeader("History", Modifier.padding(top = 24.dp, bottom = 4.dp))
             Text(

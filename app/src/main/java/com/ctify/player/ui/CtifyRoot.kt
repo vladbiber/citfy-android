@@ -59,6 +59,13 @@ import androidx.compose.runtime.collectAsState
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.youtube.SpotifyImportDialog
 import com.ctify.player.youtube.YtIntake
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.SnackbarHost
+import com.ctify.player.recommend.HiddenArtists
+import com.ctify.player.ui.songs.SelectionBar
+import com.ctify.player.ui.songs.SongSheetHost
+import com.ctify.player.ui.songs.SongSheets
+import com.ctify.player.ui.songs.rememberSnackState
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
@@ -76,7 +83,6 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     val sharedLink by YtIntake.pending.collectAsState()
     LaunchedEffect(sharedLink) { if (sharedLink != null) showYouTube = true }
     var showDownloads by remember { mutableStateOf(false) }
-    var moreTrackId by remember { mutableStateOf<String?>(null) }
     var openedPlaylist by remember { mutableStateOf<String?>(null) }
     var librarySection by remember { mutableIntStateOf(0) }
 
@@ -92,7 +98,6 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     val folderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> if (uri != null) viewModel.importFolder(uri) }
-    val onMore: (String) -> Unit = { moreTrackId = it }
     val add = AddActions(
         importFolder = { folderLauncher.launch(null) },
         importFile = { importLauncher.launch(arrayOf("audio/*")) },
@@ -101,8 +106,16 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
         downloads = { showDownloads = true },
     )
 
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    remember { HiddenArtists.init(ctx) }
+    val snack = rememberSnackState()
+    val overlay = showWheel || showYouTube || showNowPlaying
+    val goTo by SongSheets.goTo.collectAsState()
+    LaunchedEffect(goTo) { if (goTo != null) { tab = Tab.Home.ordinal; showWheel = false; showYouTube = false; showNowPlaying = false } }
+
     Scaffold(
         containerColor = BgBlack,
+        snackbarHost = { if (!overlay) SnackbarHost(snack) },
         bottomBar = {
             androidx.compose.foundation.layout.Column {
                 if (current != null) {
@@ -152,14 +165,12 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                 0 -> HomeScreen(
                     viewModel,
                     onOpenNowPlaying = { showNowPlaying = true },
-                    onMore = onMore,
                     onOpenPlaylist = { name -> openedPlaylist = name; tab = Tab.Library.ordinal },
                     onSpinWheel = { showWheel = true },
                     add = add,
                 )
                 Tab.Library.ordinal -> LibraryScreen(
                     viewModel,
-                    onMore = onMore,
                     add = add,
                     openedPlaylist = openedPlaylist,
                     onOpenPlaylist = { openedPlaylist = it },
@@ -189,7 +200,6 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                 onClose = { showWheel = false },
                 library = viewModel.repository,
                 sources = extra,
-                onAddToPlaylist = { moreTrackId = it },
             )
         }
     }
@@ -200,7 +210,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
         exit = slideOutVertically(targetOffsetY = { it }),
     ) {
         BackHandler { showYouTube = false }
-        YouTubeScreen(viewModel, onClose = { showYouTube = false }, onOpenDownloads = { showDownloads = true }, onAddToPlaylist = { moreTrackId = it })
+        YouTubeScreen(viewModel, onClose = { showYouTube = false }, onOpenDownloads = { showDownloads = true })
     }
 
     if (showDownloads) DownloadsSheet(onDismiss = { showDownloads = false })
@@ -210,9 +220,6 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
         SpotifyImportDialog(viewModel.repository, link.ifBlank { null }, onDismiss = { YtIntake.spotify.value = null })
     }
 
-    moreTrackId?.let { id ->
-        AddToPlaylistSheet(viewModel, trackId = id, onDismiss = { moreTrackId = null })
-    }
 
     AnimatedVisibility(
         visible = showNowPlaying && current != null,
@@ -229,6 +236,12 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
             PlayerContent(onClose = { showNowPlaying = false }, onOpenRadio = { showNowPlaying = false; tab = Tab.Radio.ordinal })
         }
     }
+
+    // song sheet, selection bar and, over full-screen overlays, the snackbar
+    SongSheetHost()
+    Box(Modifier.fillMaxSize().systemBarsPadding().padding(bottom = 8.dp), contentAlignment = Alignment.BottomCenter) { if (overlay) SnackbarHost(snack) }
+    // the parent Surface stretches its children, so the bar gets a full-size box to sit at the top of
+    Box(Modifier.fillMaxSize()) { SelectionBar() }
 }
 
 internal fun contentPadding() = PaddingValues(bottom = 12.dp)

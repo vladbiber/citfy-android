@@ -14,8 +14,8 @@ object SongRadio {
     private val found = ConcurrentHashMap<String, List<YtSong>>()
 
     /** The YouTube song for [artist] and [title], only when the match is confident. Network errors give null and are retried next time. */
-    suspend fun find(artist: String, title: String, durationMs: Long = 0L): YtSong? {
-        val key = "${artist.lowercase()}|${title.lowercase()}"
+    suspend fun find(artist: String?, title: String, durationMs: Long = 0L): YtSong? {
+        val key = "${artist.orEmpty().lowercase()}|${title.lowercase()}"
         found[key]?.let { return it.firstOrNull() }
         val song = try {
             SongMatcher.candidates(artist, title, durationMs).firstOrNull()?.takeIf { it.score >= SongMatcher.ACCEPT }?.song
@@ -40,7 +40,7 @@ object SongRadio {
         } catch (_: Exception) {
             return
         }
-        val rest = RadioMixer.clean(listOf(song), mix, emptySet()).take(25).map { it.toTrack() }
+        val rest = HiddenArtists.filter(RadioMixer.clean(listOf(song), mix, emptySet()), HiddenArtists.names.value) { it.artist }.take(25).map { it.toTrack() }
         repo.remember(rest)
         rest.forEach { PlayerHub.addToQueue(it.id) }
     }

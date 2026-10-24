@@ -98,6 +98,7 @@ object PlayerHub {
         putStringArray(Cmd.ARG_IDS, ids.toTypedArray()); putInt(Cmd.ARG_INDEX, startIndex)
     }
     fun addToQueue(id: String) = send(Cmd.ADD_TO_QUEUE) { putString(Cmd.ARG_ID, id) }
+    fun playNext(id: String) = send(Cmd.ADD_TO_QUEUE) { putString(Cmd.ARG_ID, id); putBoolean(Cmd.ARG_NEXT, true) }
     fun playStations(stations: List<com.ctify.player.radio.Station>, index: Int) = send(Cmd.PLAY_STATIONS) {
         putString(Cmd.ARG_STATIONS, com.ctify.player.radio.Station.toJson(stations)); putInt(Cmd.ARG_INDEX, index)
     }

@@ -55,7 +55,13 @@ import com.ctify.player.data.MusicRepository
 import com.ctify.player.lastfm.LastFm
 import com.ctify.player.lastfm.Taste
 import com.ctify.player.radio.RadioRepository
+import com.ctify.player.recommend.HiddenArtists
 import com.ctify.player.recommend.SongRadio
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongSheets
+import com.ctify.player.ui.songs.SongTarget
+import androidx.compose.foundation.combinedClickable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.ui.EmptyHint
 import com.ctify.player.ui.ScreenTitle
 import com.ctify.player.ui.SectionHeader
@@ -177,7 +183,8 @@ internal fun CreatorsPage(creators: List<LastFm.Artist>, onOpen: (LastFm.Artist)
 /** A genre's top songs from Last.fm; a tap finds the song on YouTube and plays it. */
 @Composable
 internal fun GenrePage(tag: String, repo: MusicRepository, onBack: () -> Unit) {
-    val songs = rememberLoad(tag, null as List<LastFm.Song>?) { LastFm.tagTracks(tag) }
+    val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
+    val songs = rememberLoad(tag, null as List<LastFm.Song>?) { LastFm.tagTracks(tag) }?.let { HiddenArtists.filter(it, hidden) { s -> s.artist } }
     val covers = rememberLoad(tag, emptyList()) { LastFm.tagCovers(tag) }
     SongsPage(genreLabel(tag), { Collage(covers, 200.dp) }, songs, repo, onBack)
 }
@@ -186,7 +193,8 @@ internal fun GenrePage(tag: String, repo: MusicRepository, onBack: () -> Unit) {
 @Composable
 internal fun ArtistPage(artist: LastFm.Artist, repo: MusicRepository, onOpen: (LastFm.Artist) -> Unit, onBack: () -> Unit) {
     val songs = rememberLoad(artist.name, null as List<LastFm.Song>?) { LastFm.artistTracks(artist.name) }
-    val similar = rememberLoad(artist.name, emptyList()) { LastFm.similar(artist.name) }
+    val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
+    val similar = HiddenArtists.filter(rememberLoad(artist.name, emptyList()) { LastFm.similar(artist.name) }, hidden) { it.name }
     SongsPage(artist.name, { Avatar(artist, 160.dp) }, songs, repo, onBack) {
         if (similar.isNotEmpty()) {
             SectionHeader("Similar artists", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp))
@@ -221,7 +229,10 @@ private fun SongsPage(
         itemsIndexed(songs.orEmpty(), key = { i, s -> "$i${s.title}" }) { i, s ->
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                    .clickable(enabled = busy == null, onClickLabel = "play from YouTube") {
+                    .combinedClickable(
+                        enabled = busy == null, onClickLabel = "play from YouTube", onLongClickLabel = "more options",
+                        onLongClick = { SongSheets.show(SongTarget.Named(s.title, s.artist), SongContext.Recommended) },
+                    ) {
                         busy = s
                         scope.launch {
                             val song = SongRadio.find(s.artist, s.title)
@@ -255,10 +266,13 @@ internal fun rememberGenres(repo: MusicRepository, radio: RadioRepository): List
 
 /** Your most played artists, then artists similar to the top three (or a genre's top artists with no history yet). */
 @Composable
-internal fun rememberCreators(repo: MusicRepository, firstGenre: String?): List<LastFm.Artist> =
-    if (!LastFm.enabled) emptyList()
-    else rememberLoad("creators$firstGenre", emptyList()) {
+internal fun rememberCreators(repo: MusicRepository, firstGenre: String?): List<LastFm.Artist> {
+    if (!LastFm.enabled) return emptyList()
+    val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
+    val all = rememberLoad("creators$firstGenre", emptyList()) {
         val mine = Taste.artists(Taste.plays(repo))
         val more = if (mine.isEmpty()) orEmpty { LastFm.tagArtists(firstGenre ?: "pop") } else mine.take(3).flatMap { a -> orEmpty { LastFm.similar(a.name) } }
-        (mine + more).distinctBy { it.name.lowercase() }.take(60)
+        (mine + more).distinctBy { it.name.lowercase() }
     }
+    return remember(all, hidden) { HiddenArtists.filter(all, hidden) { it.name }.take(60) }
+}

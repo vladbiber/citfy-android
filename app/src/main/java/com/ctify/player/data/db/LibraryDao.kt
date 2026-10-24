@@ -78,6 +78,12 @@ interface LibraryDao {
     @Query("DELETE FROM plays WHERE id NOT IN (SELECT id FROM plays ORDER BY id DESC LIMIT :keep)")
     suspend fun prunePlays(keep: Int)
 
+    @Query("SELECT * FROM plays WHERE trackId IN (:trackIds)")
+    suspend fun plays(trackIds: List<String>): List<PlayEntity>
+
+    @Insert
+    suspend fun insertPlays(plays: List<PlayEntity>)
+
     @Query("DELETE FROM plays WHERE trackId IN (:trackIds)")
     suspend fun deletePlays(trackIds: List<String>)
 

@@ -16,7 +16,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -39,10 +41,14 @@ object Recommendations {
     private const val RETRY_MS = 15 * 60 * 1000L
     private const val SEEDS = 3
     private const val PER_SHELF = 30
+    // twice what is shown, so hidden artists leave no holes
+    private const val KEEP = PER_SHELF * 2
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _shelves = MutableStateFlow<Map<Shelf, List<YtSong>>>(emptyMap())
-    val shelves: StateFlow<Map<Shelf, List<YtSong>>> = _shelves.asStateFlow()
+    val shelves: StateFlow<Map<Shelf, List<YtSong>>> = combine(_shelves, HiddenArtists.names) { all, hidden ->
+        all.mapValues { (_, songs) -> HiddenArtists.filter(songs, hidden) { it.artist }.take(PER_SHELF) }
+    }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
     private var savedAt = 0L
     private var triedAt = 0L
     private var loaded = false
@@ -51,6 +57,7 @@ object Recommendations {
     /** Shows the cached shelves and refreshes them in the background once they are stale. */
     fun refresh(context: Context, repo: MusicRepository) {
         if (job?.isActive == true) return
+        HiddenArtists.init(context)
         val file = File(context.applicationContext.cacheDir, "recommendations.json")
         job = scope.launch {
             if (!loaded) { loaded = true; runCatching { read(file) } }
@@ -79,7 +86,7 @@ object Recommendations {
             Shelf.LIKED to shelf(favorites.shuffled(), favorites, played),
             Shelf.DOWNLOADS to shelf(downloads.shuffled(), downloads, played),
         )
-        return shelves + (Shelf.FOR_YOU to RadioMixer.mix(shelves.values.toList(), played).take(PER_SHELF))
+        return shelves + (Shelf.FOR_YOU to RadioMixer.mix(shelves.values.toList(), played).take(KEEP))
     }
 
     /** Mixes of the first [SEEDS] songs that have a YouTube video; [known] songs are left out. */
@@ -97,7 +104,7 @@ object Recommendations {
             }
         }
         // known local files have no video id; sameWork still catches them by title and artist
-        return RadioMixer.clean(known.map { it.toYtSong() }, RadioMixer.mix(mixes, played), played).take(PER_SHELF)
+        return RadioMixer.clean(known.map { it.toYtSong() }, RadioMixer.mix(mixes, played), played).take(KEEP)
     }
 
     private suspend fun videoId(t: Track): String? = t.ytVideoId() ?: SongRadio.find(t.artist, t.title, t.durationMs)?.videoId

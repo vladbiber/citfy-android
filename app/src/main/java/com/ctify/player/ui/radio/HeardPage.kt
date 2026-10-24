@@ -1,13 +1,11 @@
 package com.ctify.player.ui.radio
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -29,8 +27,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,7 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.CtifyApp
 import com.ctify.player.radio.HeardSong
-import com.ctify.player.radio.SongLinks
+import com.ctify.player.radio.HeardLikes
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongSheets
+import com.ctify.player.ui.songs.SongTarget
 import com.ctify.player.ui.EmptyHint
 import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.theme.Accent
@@ -132,8 +131,12 @@ internal fun HeardSection() {
 
 @Composable
 internal fun HeardRow(song: HeardSong) {
+    var play by remember { mutableStateOf(false) }
+    if (play) HeardYouTube(song, HeardAction.PLAY) { play = false }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 64.dp)
+            .combinedClickable(onClickLabel = "play from YouTube", onLongClickLabel = "more options", onLongClick = { showSheet(song) }) { play = true }
+            .padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -155,7 +158,7 @@ private fun HeardCard(song: HeardSong) {
     Column(Modifier.width(140.dp)) {
         Box(
             Modifier.clip(MaterialTheme.shapes.small)
-                .clickable(onClickLabel = "play from YouTube") { play = true }
+                .combinedClickable(onClickLabel = "play from YouTube", onLongClickLabel = "more options", onLongClick = { showSheet(song) }) { play = true }
                 .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(song.title, song.artist).joinToString(", by ") },
         ) {
             AlbumArt(Track("h${song.id}", song.title, song.artist.orEmpty(), song.title, "", cover, 0L, isDemo = false), 140.dp, shape = MaterialTheme.shapes.small)
@@ -168,39 +171,20 @@ private fun HeardCard(song: HeardSong) {
     if (play) HeardYouTube(song, HeardAction.PLAY) { play = false }
 }
 
-/** The heart and the "more" menu of a heard song. */
+/** The heart (Liked songs) and the ⋮ that opens the song sheet. */
 @Composable
 private fun HeardActions(song: HeardSong) {
-    val radio = radioRepo()
     val ctx = LocalContext.current
-    var menu by remember { mutableStateOf(false) }
-    var ytAction by remember { mutableStateOf<HeardAction?>(null) }
-    val open: (String) -> Unit = { url ->
-        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }
-    IconButton(onClick = { radio.setHeardLiked(song, !song.liked) }) {
+    IconButton(onClick = { HeardLikes.setLiked(ctx, song, !song.liked) }) {
         Icon(
             if (song.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
             contentDescription = if (song.liked) "Unlike" else "Like",
             tint = if (song.liked) Accent else TextSecondary,
         )
     }
-    Box {
-        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More for ${song.title}", tint = TextSecondary) }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Play from YouTube") }, onClick = { menu = false; ytAction = HeardAction.PLAY })
-            DropdownMenuItem(text = { Text("Download") }, onClick = { menu = false; ytAction = HeardAction.DOWNLOAD })
-            DropdownMenuItem(text = { Text("Find on YouTube") }, onClick = { menu = false; open(SongLinks.youtube(song)) })
-            DropdownMenuItem(text = { Text("Find on YouTube Music") }, onClick = { menu = false; open(SongLinks.youtubeMusic(song)) })
-            DropdownMenuItem(text = { Text("Find on Spotify") }, onClick = { menu = false; open(SongLinks.spotify(song)) })
-            DropdownMenuItem(text = { Text("Find on Apple Music") }, onClick = { menu = false; open(SongLinks.appleMusic(song)) })
-            DropdownMenuItem(
-                text = { Text("Remove", color = MaterialTheme.colorScheme.error) },
-                onClick = { menu = false; radio.deleteHeard(song) },
-            )
-        }
-    }
-    ytAction?.let { HeardYouTube(song, it) { ytAction = null } }
+    IconButton(onClick = { showSheet(song) }) { Icon(Icons.Filled.MoreVert, contentDescription = "More for ${song.title}", tint = TextSecondary) }
 }
+
+private fun showSheet(song: HeardSong) = SongSheets.show(SongTarget.of(song), SongContext.Heard)
 
 private fun timeLabel(at: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(at))

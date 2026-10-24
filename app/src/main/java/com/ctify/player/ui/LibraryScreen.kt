@@ -104,6 +104,9 @@ import kotlinx.coroutines.launch
 import com.ctify.player.ui.youtube.isStreamed
 import com.ctify.player.ui.youtube.rememberDownloadStates
 import com.ctify.player.ui.youtube.ytStatus
+import com.ctify.player.ui.songs.Snack
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongRow
 
 internal fun LazyGridScope.full(content: @Composable () -> Unit) =
     item(span = { GridItemSpan(maxLineSpan) }) { content() }
@@ -196,7 +199,6 @@ internal fun AddMenu(add: AddActions, onNewPlaylist: (() -> Unit)? = null) {
 @Composable
 fun LibraryScreen(
     viewModel: PlayerViewModel,
-    onMore: (String) -> Unit,
     add: AddActions,
     openedPlaylist: String?,
     onOpenPlaylist: (String?) -> Unit,
@@ -218,7 +220,7 @@ fun LibraryScreen(
 
     val opened = openedPlaylist?.takeIf { name -> playlists.any { it.name == name } }
     if (opened != null) {
-        PlaylistDetail(viewModel, playlists.first { it.name == opened }, ui.currentTrackId, ui.isPlaying, favorites, query, { query = it }, onOpenPlaylist)
+        PlaylistDetail(viewModel, playlists.first { it.name == opened }, query, { query = it }, onOpenPlaylist)
         return
     }
 
@@ -235,13 +237,13 @@ fun LibraryScreen(
                 AddMenu(add, onNewPlaylist = { showCreate = true })
             }
         }
-        full { SearchField(query, { query = it }, "Search songs, favorites and playlists", Modifier.padding(horizontal = 8.dp)) }
+        full { SearchField(query, { query = it }, "Search songs, liked songs and playlists", Modifier.padding(horizontal = 8.dp)) }
         full {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).selectableGroup(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf("Songs", "Favorites", "Playlists").forEachIndexed { i, label ->
+                listOf("Songs", "Liked songs", "Playlists").forEachIndexed { i, label ->
                     TabChip(label, section == i) { onSection(i) }
                 }
             }
@@ -253,18 +255,11 @@ fun LibraryScreen(
                 if (tracks.isEmpty()) full { EmptyHint("No music yet. Tap + to import a folder or a song.") }
                 else if (shown.isEmpty()) full { EmptyHint("No songs match \"$q\"") }
                 shown.forEach { t ->
-                    full {
-                        TrackRow(
-                            track = t, isCurrent = t.id == ui.currentTrackId,
-                            isPlaying = ui.isPlaying && t.id == ui.currentTrackId, isFavorite = t.id in favorites,
-                            onClick = { viewModel.playQueue(shown, shown.indexOf(t)) },
-                            onToggleFavorite = { viewModel.toggleFavorite(t.id) }, onMore = { onMore(t.id) },
-                        )
-                    }
+                    full { SongRow(t, SongContext.Library, shown, onPlay = { viewModel.playQueue(shown, shown.indexOf(t)) }) }
                 }
             }
             1 -> {
-                val allFavs = viewModel.repository.favoriteTracks()
+                val allFavs = tracks.filter { it.id in favorites }
                 val favs = if (q.isEmpty()) allFavs else allFavs.filter { it.matches(q) }
                 // local files are already on the phone; only YouTube streams need saving
                 val streamed = allFavs.filter { it.isStreamed() }
@@ -283,16 +278,9 @@ fun LibraryScreen(
                     }
                 }
                 if (allFavs.isEmpty()) full { EmptyHint("Tap the heart on a song to save it here.") }
-                else if (favs.isEmpty()) full { EmptyHint("No favorites match \"$q\"") }
+                else if (favs.isEmpty()) full { EmptyHint("No liked songs match \"$q\"") }
                 favs.forEach { t ->
-                    full {
-                        TrackRow(
-                            track = t, isCurrent = t.id == ui.currentTrackId,
-                            isPlaying = ui.isPlaying && t.id == ui.currentTrackId, isFavorite = true,
-                            onClick = { viewModel.playQueue(favs, favs.indexOf(t)) },
-                            onToggleFavorite = { viewModel.toggleFavorite(t.id) }, onMore = { onMore(t.id) },
-                        )
-                    }
+                    full { SongRow(t, SongContext.Favorites, favs, onPlay = { viewModel.playQueue(favs, favs.indexOf(t)) }) }
                 }
             }
             else -> {
@@ -311,10 +299,10 @@ fun LibraryScreen(
         }
     }
 
-    if (showCreate) CreatePlaylistDialog(viewModel, onDismiss = { showCreate = false })
+    if (showCreate) CreatePlaylistDialog(viewModel.repository, onDismiss = { showCreate = false })
     if (showPicker) {
         val streamed = viewModel.repository.favoriteTracks().filter { it.isStreamed() }
-        DownloadPicker("Download favorites", streamed.map { it.pickSong() }, onDismiss = { showPicker = false })
+        DownloadPicker("Download liked songs", streamed.map { it.pickSong() }, onDismiss = { showPicker = false })
     }
 }
 
@@ -342,9 +330,6 @@ private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun PlaylistDetail(
     viewModel: PlayerViewModel,
     playlist: Playlist,
-    currentId: String?,
-    isPlaying: Boolean,
-    favorites: Set<String>,
     query: String,
     onQuery: (String) -> Unit,
     onOpenPlaylist: (String?) -> Unit,
@@ -354,7 +339,6 @@ private fun PlaylistDetail(
     val q = query.trim()
     val shown = if (q.isEmpty()) plTracks else plTracks.filter { it.matches(q) }
     val dlStates = rememberDownloadStates()
-    var moreFor by remember { mutableStateOf<String?>(null) }
     val grid = rememberLazyGridState()
     // the dragged row follows the finger: its top when the drag began plus how far it moved
     var dragKey by remember { mutableStateOf<String?>(null) }
@@ -478,27 +462,10 @@ private fun PlaylistDetail(
                 ) { to -> viewModel.repository.moveInPlaylist(name, indexOf(t.id), to) }
             }
         } else shown.forEach { t ->
-            full {
-                TrackRow(
-                    track = t, isCurrent = t.id == currentId, isPlaying = isPlaying && t.id == currentId,
-                    isFavorite = t.id in favorites,
-                    onClick = { viewModel.playQueue(shown, shown.indexOf(t)) },
-                    onToggleFavorite = { viewModel.toggleFavorite(t.id) },
-                    onRemove = { viewModel.repository.removeFromPlaylist(name, t.id) },
-                    onMore = { moreFor = t.id },
-                    status = ytStatus(t, dlStates)?.first,
-                    statusIcon = ytStatus(t, dlStates)?.second,
-                )
-            }
+            full { SongRow(t, SongContext.Playlist(name), shown, onPlay = { viewModel.playQueue(shown, shown.indexOf(t)) }, status = ytStatus(t, dlStates)) }
         }
     }
 
-    moreFor?.let { id ->
-        AddToPlaylistSheet(
-            viewModel, trackId = id, onDismiss = { moreFor = null },
-            onMoveToTop = { viewModel.repository.moveInPlaylist(name, indexOf(id), 0) }.takeIf { indexOf(id) > 0 },
-        )
-    }
     if (showRename) {
         RenamePlaylistDialog(
             currentName = name,
@@ -516,7 +483,7 @@ private fun PlaylistDetail(
                     Text("\"$name\" will be deleted. The songs stay in your library.", color = TextSecondary)
                     if (online > 0) TextButton(onClick = {
                         showDeleteConfirm = false
-                        viewModel.repository.deletePlaylistWithStreams(name)
+                        Snack.show("Deleted \"$name\" and its saved YouTube songs", viewModel.repository.deletePlaylistWithStreams(name))
                         onOpenPlaylist(null)
                     }) { Text("Delete it and its $online saved YouTube songs", color = MaterialTheme.colorScheme.error) }
                 }
@@ -524,7 +491,7 @@ private fun PlaylistDetail(
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
-                    viewModel.repository.deletePlaylist(name)
+                    Snack.show("Deleted \"$name\"", viewModel.repository.deletePlaylist(name))
                     onOpenPlaylist(null)
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },

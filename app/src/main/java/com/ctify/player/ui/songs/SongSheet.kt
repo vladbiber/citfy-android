@@ -1,0 +1,230 @@
+package com.ctify.player.ui.songs
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Queue
+import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ctify.player.CtifyApp
+import com.ctify.player.data.Track
+import com.ctify.player.genre.Genre
+import com.ctify.player.lastfm.LastFm
+import com.ctify.player.player.PlayerHub
+import com.ctify.player.radio.HeardLikes
+import com.ctify.player.radio.SongLinks
+import com.ctify.player.recommend.SongRadio
+import com.ctify.player.ui.AlbumArt
+import com.ctify.player.ui.PlaylistRows
+import com.ctify.player.ui.home.HomePage
+import com.ctify.player.ui.home.genreLabel
+import com.ctify.player.ui.theme.Accent
+import com.ctify.player.ui.theme.SurfaceDark
+import com.ctify.player.ui.theme.TextMuted
+import com.ctify.player.ui.theme.TextPrimary
+import com.ctify.player.ui.theme.TextSecondary
+import com.ctify.player.ui.youtube.HeardAction
+import com.ctify.player.ui.youtube.HeardYouTube
+import com.ctify.player.ui.youtube.isStreamed
+import com.ctify.player.ui.youtube.ytVideoId
+import kotlinx.coroutines.CancellationException
+
+/**
+ * The one options sheet for a song, opened from ⋮ or a long press anywhere.
+ * [context] picks the single remove action and whether Hide artist shows; [onSelect] adds Select
+ * (multi-select); [extraTop] puts screen-specific rows above the common ones (e.g. the player's own).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SongSheet(
+    target: SongTarget,
+    context: SongContext,
+    onDismiss: () -> Unit,
+    onSelect: (() -> Unit)? = null,
+    extraTop: (@Composable ColumnScope.() -> Unit)? = null,
+) {
+    val ctx = LocalContext.current
+    val app = ctx.applicationContext as CtifyApp
+    val repo = app.repository
+    val favorites by repo.favorites.collectAsStateWithLifecycle()
+    val library by repo.tracks.collectAsStateWithLifecycle()
+    val playlists by repo.playlists.collectAsStateWithLifecycle()
+    val named = target as? SongTarget.Named
+    val heard = named?.heard
+    var finding by remember(target) { mutableStateOf(named != null) }
+    // a song known by name becomes a track once it is found on YouTube
+    val track by produceState((target as? SongTarget.Song)?.track, target) {
+        if (named != null) {
+            value = findTrack(app, named)
+            finding = false
+        }
+    }
+    val title = named?.title ?: track?.title.orEmpty()
+    val artist = (named?.artist ?: track?.artist)?.takeIf { it.isNotBlank() && !it.equals("Unknown artist", true) && it != "Imported" }
+    val genreTag by produceState<String?>(null, artist) {
+        value = heard?.genre?.let { Genre.of(it)?.tags?.firstOrNull() } ?: artist?.takeIf { LastFm.enabled }?.let {
+            try { LastFm.artistTopTag(it) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+        }
+    }
+    var pickPlaylist by remember { mutableStateOf(false) }
+    var ytAction by remember { mutableStateOf<HeardAction?>(null) }
+
+    // the YouTube lookup shows its own dialogs, so the sheet makes way for it
+    ytAction?.let { action -> heard?.let { HeardYouTube(it, action, onDone = onDismiss) }; return }
+
+    val done: (() -> Unit) -> Unit = { action -> action(); onDismiss() }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SurfaceDark) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+            Row(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val cover = track?.coverUri ?: heard?.youtubeVideoId?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }
+                AlbumArt(Track("", title, artist.orEmpty(), title, "", cover, 0L, isDemo = false), 56.dp, shape = MaterialTheme.shapes.small)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(title, color = TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+                    Text(named?.artist ?: track?.artist.orEmpty(), color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (finding) Text("Looking it up on YouTube…", color = TextMuted, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            extraTop?.invoke(this)
+
+            if (heard != null) SheetRow(Icons.Filled.PlayArrow, "Play from YouTube") { ytAction = HeardAction.PLAY }
+            val t = track
+            if (t != null) {
+                SheetRow(Icons.Filled.SkipNext, "Play next") { done { repo.remember(listOf(t)); PlayerHub.playNext(t.id) } }
+                SheetRow(Icons.Filled.Queue, "Add to queue") { done { repo.remember(listOf(t)); PlayerHub.addToQueue(t.id) } }
+            }
+            when {
+                heard != null -> LikeRow(heard.liked) { done { HeardLikes.setLiked(ctx, heard, !heard.liked) } }
+                t != null -> LikeRow(t.id in favorites) { done { SongActions.toggleLike(repo, t) } }
+            }
+            if (t != null) {
+                SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist") { pickPlaylist = !pickPlaylist }
+                if (pickPlaylist) Column(Modifier.padding(start = 24.dp)) { PlaylistRows(listOf(t), onDone = onDismiss) }
+            }
+            if (context is SongContext.Playlist && t != null) {
+                val index = playlists.firstOrNull { it.name == context.name }?.trackIds?.indexOf(t.id) ?: -1
+                if (index > 0) SheetRow(Icons.Filled.VerticalAlignTop, "Move to top") { done { repo.moveInPlaylist(context.name, index, 0) } }
+            }
+            if (t?.ytVideoId() != null) SheetRow(Icons.Filled.Radio, "Start song radio") { done { SongActions.songRadio(repo, t) } }
+            if (t != null && t.isStreamed() && library.none { it.id == t.id }) {
+                SheetRow(Icons.Filled.LibraryAdd, "Save to library", "Streams online, nothing is downloaded") { done { SongActions.save(repo, t) } }
+            }
+            when {
+                heard != null && heard.downloadedTrackId == null ->
+                    SheetRow(Icons.Filled.Download, "Download", "Keeps a copy on the phone") { ytAction = HeardAction.DOWNLOAD }
+                heard == null && t != null && t.isStreamed() ->
+                    SheetRow(Icons.Filled.Download, "Download", "Keeps a copy on the phone, plays offline") { done { SongActions.download(listOf(t)) } }
+            }
+            if (artist != null && LastFm.enabled) SheetRow(Icons.Filled.Person, "Go to artist", artist) {
+                done { SongSheets.goTo.value = HomePage.ArtistPage(LastFm.Artist(artist, null)) }
+            }
+            genreTag?.let { tag -> SheetRow(Icons.Filled.Category, "Go to genre", genreLabel(tag)) { done { SongSheets.goTo.value = HomePage.GenrePage(tag) } } }
+            if (onSelect != null && target is SongTarget.Song) SheetRow(Icons.Filled.CheckCircle, "Select") { done(onSelect) }
+            if (context == SongContext.Recommended && artist != null) {
+                SheetRow(Icons.Filled.PersonOff, "Hide artist", "No more $artist in your recommendations") { done { SongActions.hideArtist(artist) } }
+            }
+            if (heard != null) FindOn(heard)
+
+            val error = MaterialTheme.colorScheme.error
+            if (heard != null && context == SongContext.Heard) {
+                SheetRow(Icons.Filled.Delete, "Remove from heard", color = error, tint = error) { done { HeardLikes.delete(ctx, heard) } }
+            } else if (target is SongTarget.Song) {
+                val ids = listOf(target.track.id)
+                SongActions.removeLabel(repo, context, ids)?.let { label ->
+                    SheetRow(Icons.Filled.Delete, label, color = error, tint = error) { done { SongActions.remove(repo, context, ids) } }
+                }
+            }
+        }
+    }
+}
+
+private suspend fun findTrack(app: CtifyApp, n: SongTarget.Named): Track? {
+    val song = if (n.heard != null) HeardLikes.find(app, n.heard) else SongRadio.find(n.artist, n.title)
+    return song?.let { app.repository.trackById("yt_${it.videoId}") ?: it.toTrack() }
+}
+
+@Composable
+private fun LikeRow(liked: Boolean, onClick: () -> Unit) =
+    SheetRow(if (liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (liked) "Remove from Liked songs" else "Add to Liked songs", onClick = onClick)
+
+/** The heard song's search links, as one row of buttons. */
+@Composable
+private fun FindOn(heard: com.ctify.player.radio.HeardSong) {
+    val ctx = LocalContext.current
+    val open: (String) -> Unit = { url ->
+        runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+    Text("Find on", color = TextMuted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
+        TextButton(onClick = { open(SongLinks.youtube(heard)) }) { Text("YouTube") }
+        TextButton(onClick = { open(SongLinks.youtubeMusic(heard)) }) { Text("YouTube Music") }
+        TextButton(onClick = { open(SongLinks.spotify(heard)) }) { Text("Spotify") }
+        TextButton(onClick = { open(SongLinks.appleMusic(heard)) }) { Text("Apple Music") }
+    }
+}
+
+@Composable
+private fun SheetRow(
+    icon: ImageVector,
+    label: String,
+    sub: String? = null,
+    color: Color = TextPrimary,
+    tint: Color = Accent,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = tint)
+        Spacer(Modifier.width(16.dp))
+        Column {
+            Text(label, color = color, fontWeight = FontWeight.SemiBold)
+            if (sub != null) Text(sub, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}

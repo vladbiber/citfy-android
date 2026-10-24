@@ -47,6 +47,8 @@ object Cmd {
 
     const val ARG_IDS = "ids"
     const val ARG_ID = "id"
+    /** with ADD_TO_QUEUE: right after the current song instead of at the end */
+    const val ARG_NEXT = "next"
     const val ARG_INDEX = "index"
     const val ARG_MS = "ms"
     const val ARG_STATIONS = "stations"
@@ -110,7 +112,7 @@ class PlaybackController(
                 val ids = args.getStringArray(Cmd.ARG_IDS) ?: return false
                 playQueue(ids.mapNotNull(repository::trackById), args.getInt(Cmd.ARG_INDEX))
             }
-            Cmd.ADD_TO_QUEUE -> addToQueue(args.getString(Cmd.ARG_ID) ?: return false)
+            Cmd.ADD_TO_QUEUE -> addToQueue(args.getString(Cmd.ARG_ID) ?: return false, args.getBoolean(Cmd.ARG_NEXT))
             Cmd.PLAY_INDEX -> playQueueIndex(args.getInt(Cmd.ARG_INDEX, -1))
             Cmd.NEXT -> next()
             Cmd.PREVIOUS -> previous()
@@ -258,18 +260,20 @@ class PlaybackController(
         player.play()
     }
 
-    /** Appends a track to the end of the current play queue, starting one if nothing is loaded. */
-    private fun addToQueue(trackId: String) {
+    /** Appends a track to the end of the current play queue (or after the current song), starting one if nothing is loaded. */
+    private fun addToQueue(trackId: String, next: Boolean = false) {
         val track = repository.trackById(trackId) ?: return
         if (radio.active) { radio.stop(); player.clearMediaItems() }
         if (player.mediaItemCount == 0) {
             player.setMediaItem(track.toMediaItem())
             player.prepare()
             player.play()
+        } else if (next) {
+            player.addMediaItem(player.currentMediaItemIndex + 1, track.toMediaItem())
         } else {
             player.addMediaItem(track.toMediaItem())
         }
-        Toast.makeText(context, "Added to queue: ${track.title}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, (if (next) "Plays next: " else "Added to queue: ") + track.title, Toast.LENGTH_SHORT).show()
     }
 
     /** Jumps to a specific song in the current play queue. */

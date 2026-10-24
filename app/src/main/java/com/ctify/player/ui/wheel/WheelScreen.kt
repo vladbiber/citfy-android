@@ -20,7 +20,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.MoreVert
+import com.ctify.player.CtifyApp
+import com.ctify.player.data.Track
+import com.ctify.player.ui.songs.SongActions
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongSheets
+import com.ctify.player.ui.songs.SongTarget
+import com.ctify.player.youtube.YtSong
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
@@ -72,9 +79,11 @@ fun WheelScreen(
     sources: List<WheelSource> = emptyList(),
     title: String = "Spin the wheel",
     notice: String? = null,
-    onAddToPlaylist: (String) -> Unit = {},
 ) {
     val ctx = LocalContext.current
+    val repo = (ctx.applicationContext as CtifyApp).repository
+    // songs share the app's heart and sheet; stations keep their own heart
+    fun songOf(item: WheelItem): Track? = (item.ref as? Track) ?: (item.ref as? YtSong)?.toTrack()
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val picker = remember { WheelPicker(ctx) }
@@ -124,7 +133,7 @@ fun WheelScreen(
             picker.commit(src.poolKey, item.id)
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             src.play(item, w.slices)
-            hearted = src.isFavorite(item)
+            hearted = songOf(item)?.let { repo.isFavorite(it.id) } ?: src.isFavorite(item)
             landed = item
             glow.animateTo(1f, tween(if (reduced) 0 else 520))
         }
@@ -186,7 +195,7 @@ fun WheelScreen(
         if (source is LibrarySource) {
             ChipRow {
                 FilterChip(libScope == LibraryScope.All, { libScope = LibraryScope.All }, { Text("All songs") }, enabled = !busy)
-                FilterChip(libScope == LibraryScope.Favorites, { libScope = LibraryScope.Favorites }, { Text("Favorites") }, enabled = !busy)
+                FilterChip(libScope == LibraryScope.Favorites, { libScope = LibraryScope.Favorites }, { Text("Liked songs") }, enabled = !busy)
                 playlists.forEach { pl ->
                     val sc = LibraryScope.InPlaylist(pl.name)
                     FilterChip(libScope == sc, { libScope = sc }, { Text(pl.name, maxLines = 1) }, enabled = !busy)
@@ -241,16 +250,18 @@ fun WheelScreen(
                 if (item.subtitle.isNotBlank()) Text(item.subtitle, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                    IconButton(onClick = { src.toggleFavorite(item); hearted = !hearted }) {
+                    IconButton(onClick = { songOf(item)?.let { SongActions.toggleLike(repo, it) } ?: src.toggleFavorite(item); hearted = !hearted }) {
                         Icon(
                             if (hearted) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                            if (hearted) "Remove from favorites" else "Add to favorites",
+                            if (hearted) "Unlike" else "Like",
                             tint = if (hearted) Accent else TextSecondary,
                         )
                     }
                     if (src.canDownload) IconButton(onClick = { src.download(item); android.widget.Toast.makeText(ctx, "Added to downloads", android.widget.Toast.LENGTH_SHORT).show() }) { Icon(Icons.Filled.Download, "Download", tint = TextSecondary) }
-                    if (src.canAddToPlaylist) IconButton(onClick = { onAddToPlaylist(item.id) }) {
-                        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", tint = TextSecondary)
+                    songOf(item)?.let { t ->
+                        IconButton(onClick = { SongSheets.show(SongTarget.Song(t), SongContext.Other) }) {
+                            Icon(Icons.Filled.MoreVert, "More options for ${item.title}", tint = TextSecondary)
+                        }
                     }
                     Spacer(Modifier.width(8.dp))
                     SpinButton("Spin again", enabled = !busy) { pendingSpin = 0f; round++ }

@@ -396,12 +396,27 @@ class MusicRepository private constructor(private val appContext: Context, datab
         writer.launch { dao.deleteTrack(id) }
     }
 
-    /** Deletes a playlist and the saved YouTube songs no other playlist or favorite still uses. */
-    fun deletePlaylistWithStreams(name: String) {
+    /** [removeStreamed] for several songs; the returned function puts them back in the library, playlists and favorites. */
+    fun removeStreamed(ids: Collection<String>): () -> Unit {
+        val gone = ids.filter { it.startsWith(STREAM_PREFIX) && isSaved(it) }.mapNotNull { trackById(it) }
+        val goneIds = gone.mapTo(HashSet()) { it.id }
+        val lists = _playlists.value.withIndex().filter { (_, pl) -> pl.trackIds.any { it in goneIds } }
+        val favs = goneIds.filter { it in _favorites.value }
+        goneIds.forEach(::removeStreamed)
+        return {
+            saveStreamed(gone)
+            lists.forEach { (i, pl) -> restorePlaylist(pl, i) }
+            favs.filterNot(::isFavorite).forEach(::toggleFavorite)
+        }
+    }
+
+    /** Deletes a playlist and the saved YouTube songs no other playlist or favorite still uses; returns the undo. */
+    fun deletePlaylistWithStreams(name: String): () -> Unit {
         val ids = _playlists.value.firstOrNull { it.name == name }?.trackIds.orEmpty().filter { it.startsWith(STREAM_PREFIX) }
-        deletePlaylist(name)
+        val undoList = deletePlaylist(name)
         val kept = _playlists.value.flatMapTo(HashSet()) { it.trackIds } + _favorites.value
-        ids.filter { it !in kept }.forEach(::removeStreamed)
+        val undoSongs = removeStreamed(ids.filter { it !in kept })
+        return { undoList(); undoSongs() }
     }
 
     private fun persistStreamed(ids: Collection<String>) {
@@ -445,9 +460,22 @@ class MusicRepository private constructor(private val appContext: Context, datab
         savePlaylist(trimmed)
     }
 
-    fun deletePlaylist(name: String) {
+    /** Returns a function that brings the playlist back where it was. */
+    fun deletePlaylist(name: String): () -> Unit {
+        val index = _playlists.value.indexOfFirst { it.name == name }
+        val pl = _playlists.value.getOrNull(index) ?: return {}
         _playlists.value = _playlists.value.filterNot { it.name == name }
         writer.launch { dao.deletePlaylist(name) }
+        return { restorePlaylist(pl, index) }
+    }
+
+    /** Puts [pl] back at [index] as it was, creating it again if it was deleted; the undo of removals. */
+    fun restorePlaylist(pl: Playlist, index: Int) {
+        persistStreamed(pl.trackIds)
+        val rest = _playlists.value.filterNot { it.name == pl.name }
+        _playlists.value = rest.toMutableList().apply { add(index.coerceIn(0, size), pl) }
+        // positions after it shift too
+        _playlists.value.forEach { savePlaylist(it.name) }
     }
 
     /** Renames a playlist. Returns false if the new name is empty or already taken. */
@@ -508,11 +536,17 @@ class MusicRepository private constructor(private val appContext: Context, datab
         savePlaylist(name)
     }
 
-    fun removeFromPlaylist(name: String, trackId: String) {
+    fun removeFromPlaylist(name: String, trackId: String): () -> Unit = removeFromPlaylist(name, listOf(trackId))
+
+    /** Returns a function that puts the songs back at their old positions. */
+    fun removeFromPlaylist(name: String, trackIds: Collection<String>): () -> Unit {
+        val index = _playlists.value.indexOfFirst { it.name == name }
+        val before = _playlists.value.getOrNull(index) ?: return {}
         _playlists.value = _playlists.value.map {
-            if (it.name == name) it.copy(trackIds = it.trackIds.filterNot { id -> id == trackId }) else it
+            if (it.name == name) it.copy(trackIds = it.trackIds.filterNot { id -> id in trackIds }) else it
         }
         savePlaylist(name)
+        return { restorePlaylist(before, index) }
     }
 
     /** Queues a write of the in-memory state of one playlist. */
@@ -559,7 +593,14 @@ class MusicRepository private constructor(private val appContext: Context, datab
 
     suspend fun hasPlays(id: String): Boolean = dao.hasPlays(historyIds(id))
 
-    fun removeFromHistory(id: String) { writer.launch { dao.deletePlays(historyIds(id)) } }
+    /** Returns a function that puts the deleted plays back. */
+    fun removeFromHistory(ids: Collection<String>): () -> Unit {
+        val all = ids.flatMap(::historyIds).distinct()
+        var rows = emptyList<PlayEntity>()
+        // the undo runs on the same writer, so rows are read by then
+        writer.launch { rows = dao.plays(all); dao.deletePlays(all) }
+        return { writer.launch { dao.insertPlays(rows) } }
+    }
 
     fun clearHistory() { writer.launch { dao.clearPlays() } }
 

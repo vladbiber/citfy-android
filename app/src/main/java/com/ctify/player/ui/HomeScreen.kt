@@ -72,12 +72,16 @@ import com.ctify.player.ui.radio.HeardSection
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import com.ctify.player.ui.radio.HomeStationRows
+import com.ctify.player.radio.HeardLikes
+import com.ctify.player.ui.songs.SelectedMark
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongSheets
+import com.ctify.player.ui.songs.songClicks
 
 @Composable
 fun HomeScreen(
     viewModel: PlayerViewModel,
     onOpenNowPlaying: () -> Unit,
-    onMore: (String) -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onSpinWheel: () -> Unit = {},
     add: AddActions,
@@ -94,11 +98,15 @@ fun HomeScreen(
     val shelves by Recommendations.shelves.collectAsStateWithLifecycle()
     val shelf = remember(shelves) { shelves.mapValues { (_, songs) -> songs.map { it.toTrack() } } }
     // waits for the library so liked and downloaded seeds exist
-    LaunchedEffect(tracks.isNotEmpty()) { if (tracks.isNotEmpty()) Recommendations.refresh(ctx, viewModel.repository) }
+    LaunchedEffect(tracks.isNotEmpty()) {
+        if (tracks.isNotEmpty()) { Recommendations.refresh(ctx, viewModel.repository); HeardLikes.sync(ctx) }
+    }
     remember { LastFm.init(ctx) }
     val genres = rememberGenres(viewModel.repository, radioRepo())
     val creators = rememberCreators(viewModel.repository, genres.firstOrNull())
     val pages = remember { mutableStateListOf<HomePage>() }
+    val goTo by SongSheets.goTo.collectAsStateWithLifecycle()
+    LaunchedEffect(goTo) { goTo?.let { pages += it; SongSheets.goTo.value = null } }
     pages.lastOrNull()?.let { page ->
         val back: () -> Unit = { pages.removeAt(pages.lastIndex) }
         val open: (LastFm.Artist) -> Unit = { pages += HomePage.ArtistPage(it) }
@@ -128,7 +136,7 @@ fun HomeScreen(
             AddMenu(add)
         }
         if (query.isNotBlank()) {
-            SearchResults(viewModel, query, onMore, HOME_SCOPES)
+            SearchResults(viewModel, query, HOME_SCOPES)
             return@Column
         }
         LazyVerticalGrid(
@@ -147,12 +155,12 @@ fun HomeScreen(
                     onClick = onSpinWheel,
                 )
             }
-            if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, ui.currentTrackId, viewModel, onOpenNowPlaying) }
-            if (most.isNotEmpty()) full { TrackCarousel("Most played", most, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+            if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+            if (most.isNotEmpty()) full { TrackCarousel("Most played", most, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             listOf(Shelf.PLAYED, Shelf.LIKED, Shelf.DOWNLOADS).forEach { s ->
-                shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+                shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
             }
-            if (downloaded.isNotEmpty()) full { TrackCarousel("Downloaded", downloaded, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+            if (downloaded.isNotEmpty()) full { TrackCarousel("Downloaded", downloaded, SongContext.Library, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             if (genres.isNotEmpty()) full { GenresRow(genres) { pages += HomePage.GenrePage(it) } }
             if (creators.isNotEmpty()) full { CreatorsRow(creators, onOpen = { pages += HomePage.ArtistPage(it) }, onSeeAll = { pages += HomePage.Creators }) }
             full { HomeStationRows() }
@@ -172,7 +180,7 @@ fun HomeScreen(
 
 /** A titled row of song covers, like Home's station row; a tap plays the row from that song. */
 @Composable
-private fun TrackCarousel(title: String, list: List<Track>, current: String?, viewModel: PlayerViewModel, onOpenNowPlaying: () -> Unit) {
+private fun TrackCarousel(title: String, list: List<Track>, context: SongContext, current: String?, viewModel: PlayerViewModel, onOpenNowPlaying: () -> Unit) {
     Column {
         SectionHeader(title, Modifier.padding(top = 10.dp, start = 4.dp))
         Spacer(Modifier.height(8.dp))
@@ -183,7 +191,7 @@ private fun TrackCarousel(title: String, list: List<Track>, current: String?, vi
                     Modifier
                         .width(140.dp)
                         .clip(MaterialTheme.shapes.small)
-                        .clickable(onClickLabel = "play") {
+                        .songClicks(t, context, list) {
                             // streamed songs from history may not be loaded this session
                             viewModel.repository.remember(list)
                             viewModel.playQueue(list, i)
@@ -194,7 +202,10 @@ private fun TrackCarousel(title: String, list: List<Track>, current: String?, vi
                             if (on) stateDescription = "now playing"
                         },
                 ) {
-                    AlbumArt(t, 140.dp, shape = MaterialTheme.shapes.small)
+                    Box(Modifier.clip(MaterialTheme.shapes.small)) {
+                        AlbumArt(t, 140.dp, shape = MaterialTheme.shapes.small)
+                        SelectedMark(t, context)
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text(t.title, color = if (on) Accent else TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(t.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

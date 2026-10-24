@@ -75,12 +75,6 @@ fun ytStatus(track: Track, states: Map<String, DownloadState>): Pair<String, Ima
     }
 }
 
-/** Queues one streamed song for download and says what happened. */
-suspend fun downloadOne(ctx: android.content.Context, track: Track) {
-    val n = Downloads.enqueue(listOf(track.toYtSong()))
-    Toast.makeText(ctx, if (n == 0) "Already saved or in the queue" else "Added to downloads", Toast.LENGTH_SHORT).show()
-}
-
 /** Under a playlist's title: how much of it is on the phone, and a button for the rest. */
 @Composable
 fun PlaylistDownloadBar(playlist: Playlist, tracks: List<Track>, states: Map<String, DownloadState>) {

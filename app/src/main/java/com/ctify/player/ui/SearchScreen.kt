@@ -1,6 +1,5 @@
 package com.ctify.player.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +56,8 @@ import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.youtube.CardRow
 import com.ctify.player.ui.youtube.rememberDownloadStates
 import com.ctify.player.ui.youtube.ytStatus
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongRow
 import com.ctify.player.youtube.YouTubeSource
 import com.ctify.player.youtube.YtIntake
 import com.ctify.player.youtube.YtPlaylistRef
@@ -104,10 +105,8 @@ internal fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: 
 
 /** Results for [query] from the [scopes] sources, with chips to narrow them: your songs or heard ones first, then YouTube, then radio. */
 @Composable
-internal fun SearchResults(viewModel: PlayerViewModel, query: String, onMore: (String) -> Unit, scopes: List<Scope>) {
+internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: List<Scope>) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
-    val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
-    val ui by viewModel.ui.collectAsStateWithLifecycle()
     val radioUi = rememberRadioUi()
     val dlStates = rememberDownloadStates()
     val radio = radioRepo()
@@ -117,7 +116,6 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, onMore: (S
     var ytSongs by remember { mutableStateOf<List<YtSong>>(emptyList()) }
     val yt = remember(ytSongs) { ytSongs.map { it.toTrack() } }
     var ytAlbums by remember { mutableStateOf<List<YtPlaylistRef>>(emptyList()) }
-    var menuFor by remember { mutableStateOf<YtSong?>(null) }
     var stations by remember { mutableStateOf<List<Station>>(emptyList()) }
     var ytState by remember { mutableStateOf<String?>(null) }
     var radioState by remember { mutableStateOf<String?>(null) }
@@ -193,17 +191,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, onMore: (S
             header("Your library")
             if (local.isEmpty()) note("Nothing in your library matches \"$q\"")
             items(local, key = { "l" + it.id }) { track ->
-                TrackRow(
-                    track = track,
-                    isCurrent = track.id == ui.currentTrackId,
-                    isPlaying = ui.isPlaying && track.id == ui.currentTrackId,
-                    isFavorite = track.id in favorites,
-                    onClick = { viewModel.playQueue(local, local.indexOf(track)) },
-                    onToggleFavorite = { viewModel.toggleFavorite(track.id) },
-                    onMore = { onMore(track.id) },
-                    status = ytStatus(track, dlStates)?.first,
-                    statusIcon = ytStatus(track, dlStates)?.second,
-                )
+                SongRow(track, SongContext.Search, local, onPlay = { viewModel.playQueue(local, local.indexOf(track)) }, status = ytStatus(track, dlStates))
             }
         }
 
@@ -226,15 +214,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, onMore: (S
             header(if (kind == Kind.VIDEOS) "All YouTube videos" else "YouTube")
             status(ytState, yt.isEmpty() && q.length >= 2, "No songs found on YouTube")
             items(yt, key = { "y" + it.id }) { track ->
-                TrackRow(
-                    track = track,
-                    isCurrent = track.id == ui.currentTrackId,
-                    isPlaying = ui.isPlaying && track.id == ui.currentTrackId,
-                    isFavorite = track.id in favorites,
-                    onClick = { viewModel.repository.remember(yt); viewModel.playQueue(yt, yt.indexOf(track)) },
-                    onToggleFavorite = { viewModel.repository.remember(listOf(track)); viewModel.toggleFavorite(track.id) },
-                    onMore = { menuFor = ytSongs.getOrNull(yt.indexOf(track)) },
-                )
+                SongRow(track, SongContext.Search, yt, onPlay = { viewModel.repository.remember(yt); viewModel.playQueue(yt, yt.indexOf(track)) })
             }
         }
 
@@ -244,37 +224,6 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, onMore: (S
             stationRows(stations, radioUi, keyPrefix = "r")
         }
     }
-
-    menuFor?.let { YtSongMenu(it, viewModel, onMore, onDismiss = { menuFor = null }) }
-}
-
-@Composable
-private fun YtSongMenu(song: YtSong, viewModel: PlayerViewModel, onAddToPlaylist: (String) -> Unit, onDismiss: () -> Unit) {
-    val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val track = song.toTrack()
-    fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(song.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-        text = {
-            Column {
-                MenuLine("Download") {
-                    onDismiss()
-                    scope.launch { toast(if (Downloads.enqueue(listOf(song)) == 0) "Already saved or in the queue" else "Added to downloads") }
-                }
-                MenuLine("Save to library (streams, no download)") { onDismiss(); viewModel.repository.saveStreamed(listOf(track)); toast("Saved to your library") }
-                MenuLine("Add to playlist") { onDismiss(); viewModel.repository.remember(listOf(track)); onAddToPlaylist(track.id) }
-                MenuLine("Add to queue") { onDismiss(); viewModel.repository.remember(listOf(track)); viewModel.addToQueue(track.id) }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
-}
-
-@Composable
-private fun MenuLine(label: String, onClick: () -> Unit) {
-    Text(label, color = TextPrimary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp))
 }
 
 private const val LOADING = "\u0000loading"

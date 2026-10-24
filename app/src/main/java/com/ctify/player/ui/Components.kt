@@ -25,6 +25,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -182,11 +184,15 @@ fun TrackRow(
     isFavorite: Boolean,
     onClick: () -> Unit,
     onToggleFavorite: (() -> Unit)?,
+    /** the ⋮ button; a long press does the same */
     onMore: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     /** small line before the artist, e.g. "Online" or "Downloaded" */
     status: String? = null,
     statusIcon: ImageVector? = null,
+    /** a tap on the cover picks the song for multi-select */
+    onCoverClick: (() -> Unit)? = null,
+    selected: Boolean = false,
 ) {
     val titleColor by animateColorAsState(if (isCurrent) Accent else TextPrimary, label = "title")
     Row(
@@ -195,8 +201,8 @@ fun TrackRow(
             .heightIn(min = 64.dp)
             .padding(horizontal = 8.dp)
             .clip(MaterialTheme.shapes.small)
-            .background(if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(onClickLabel = "play", onClick = onClick)
+            .background(if (selected) Accent.copy(alpha = 0.18f) else if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
+            .combinedClickable(onClickLabel = "play", onLongClickLabel = "more options", onLongClick = onMore, onClick = onClick)
             .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -204,18 +210,22 @@ fun TrackRow(
             Modifier.semantics(mergeDescendants = true) {
                 contentDescription = "${track.title}, by ${track.artist}, ${formatTime(track.durationMs)}"
                 if (isCurrent) stateDescription = if (isPlaying) "now playing" else "paused"
+                if (selected) stateDescription = "selected"
             }.weight(1f),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(contentAlignment = Alignment.Center) {
+                Box(
+                    if (onCoverClick != null) Modifier.clip(MaterialTheme.shapes.small).clickable(onClickLabel = if (selected) "unselect" else "select", onClick = onCoverClick) else Modifier,
+                    contentAlignment = Alignment.Center,
+                ) {
                     AlbumArt(track, 50.dp, shape = MaterialTheme.shapes.small)
-                    if (isCurrent) {
+                    if (selected || isCurrent) {
                         Box(
                             Modifier.size(50.dp).clip(MaterialTheme.shapes.small).background(Color.Black.copy(alpha = 0.45f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                if (isPlaying) Icons.Filled.GraphicEq else Icons.Filled.Pause,
+                                if (selected) Icons.Filled.CheckCircle else if (isPlaying) Icons.Filled.GraphicEq else Icons.Filled.Pause,
                                 null, tint = Accent, modifier = Modifier.size(22.dp),
                             )
                         }
@@ -240,7 +250,7 @@ fun TrackRow(
             IconButton(onClick = onToggleFavorite) {
                 Icon(
                     if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    if (isFavorite) "Remove ${track.title} from favorites" else "Add ${track.title} to favorites",
+                    if (isFavorite) "Unlike ${track.title}" else "Like ${track.title}",
                     tint = if (isFavorite) Accent else TextSecondary,
                     modifier = Modifier.size(20.dp),
                 )
