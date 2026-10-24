@@ -4,6 +4,8 @@ import androidx.media3.common.PlaybackException
 import com.ctify.player.radio.RadioUrlPolicy
 import com.ctify.player.radio.StreamError
 import com.ctify.player.radio.StreamErrors
+import com.ctify.player.radio.StreamProbe
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -52,5 +54,18 @@ class RadioPolicyTest {
         assertEquals(StreamError.TRANSIENT, StreamErrors.classify(SocketTimeoutException(), null))
         assertEquals(StreamError.TRANSIENT, StreamErrors.classify(InterruptedIOException("Stream stalled for 20 s"), null))
         assertEquals(StreamError.TRANSIENT, StreamErrors.classify(java.net.SocketException("Connection reset"), null))
+    }
+
+    @Test
+    fun probeKnowsAStreamFromAPage() {
+        assertTrue(StreamProbe.isStream(200, "audio/mpeg", false))
+        assertTrue(StreamProbe.isStream(200, "application/vnd.apple.mpegurl", false))
+        assertTrue(StreamProbe.isStream(200, "text/html", hasIcyHeaders = true))
+        assertTrue(StreamProbe.isStream(206, null, false))
+        assertFalse(StreamProbe.isStream(200, "text/html; charset=utf-8", false))
+        assertFalse(StreamProbe.isStream(404, "audio/mpeg", true))
+        assertEquals(true, StreamProbe.verdict(listOf(false, true)))
+        assertEquals(false, StreamProbe.verdict(listOf(null, false)))
+        assertNull(StreamProbe.verdict(listOf(null, null)))
     }
 }

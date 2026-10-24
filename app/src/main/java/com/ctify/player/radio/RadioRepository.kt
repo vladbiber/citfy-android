@@ -3,6 +3,21 @@ package com.ctify.player.radio
 import com.ctify.player.genre.Genre
 import com.ctify.player.integration.Provider
 import com.ctify.player.integration.ProviderChain
+import com.ctify.player.net.Feature
+import com.ctify.player.net.NetworkGate
+import com.ctify.player.net.Traffic
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
+import java.io.IOException
+import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -104,6 +119,54 @@ class RadioRepository(private val dao: RadioDao, private val heardDao: HeardSong
         if (off) fresh + (uuid to now) else fresh - uuid
     }
 
+    // ---- probing ----
+
+    /** uuid -> when a probe last heard the station answer */
+    private val aliveAt = ConcurrentHashMap<String, Long>()
+    private val probeSlots = Semaphore(4)
+    private val probeClient by lazy { NetworkGate.client.newBuilder().callTimeout(PROBE_MS, TimeUnit.MILLISECONDS).build() }
+
+    /**
+     * Checks that a station shown on screen still answers like a stream; a dead one goes off
+     * air for an hour, a live one is not asked again for an hour. Cancelling stops the request.
+     */
+    suspend fun probe(station: Station) {
+        val now = System.currentTimeMillis()
+        if (isOffAir(station.uuid) || aliveAt[station.uuid]?.let { now - it < OFF_AIR_MS } == true) return
+        if (!RadioUrlPolicy.isAllowed(station.streamUrl) || probeBlocked()) return
+        probeSlots.withPermit {
+            val answers = mutableListOf<Boolean?>()
+            val done = withTimeoutOrNull(PROBE_MS) {
+                for (url in RadioUrlPolicy.streamCandidates(station.streamUrl)) {
+                    answers += answers(url)
+                    if (answers.last() == true) break
+                }
+            }
+            // no answer within the limit counts as dead
+            val alive = if (done == null) false else StreamProbe.verdict(answers)
+            // a request the switches refused says nothing about the station
+            if (alive == null || probeBlocked()) return
+            if (alive) aliveAt[station.uuid] = System.currentTimeMillis() else setOffAir(station.uuid, true)
+        }
+    }
+
+    private fun probeBlocked() = NetworkGate.blockReason(Feature.RADIO, Traffic.STREAM) != null
+
+    /** One GET for the headers only: true stream, false dead, null no answer (no DNS, so likely no network). */
+    private suspend fun answers(url: String): Boolean? = suspendCancellableCoroutine { cont ->
+        val call = probeClient.newCall(NetworkGate.request(url, Feature.RADIO, Traffic.STREAM).header("Icy-MetaData", "1").build())
+        cont.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // old Shoutcast servers answer "ICY 200 OK", which OkHttp rejects but is a live stream
+                cont.resume(if (e is UnknownHostException) null else e.message?.contains("ICY 200") == true)
+            }
+            override fun onResponse(call: Call, response: Response) = response.use { r ->
+                cont.resume(StreamProbe.isStream(r.code, r.header("Content-Type"), r.headers.names().any { it.startsWith("icy-", true) }))
+            }
+        })
+    }
+
     // ---- user state ----
 
     fun toggleFavorite(station: Station, isFavorite: Boolean) = scope.launch {
@@ -201,5 +264,6 @@ class RadioRepository(private val dao: RadioDao, private val heardDao: HeardSong
         const val CLIAMP_KEY = "cliamp"
         const val FOR_YOU_KEY = "for_you"
         const val OFF_AIR_MS = 60 * 60_000L
+        const val PROBE_MS = 5_000L
     }
 }

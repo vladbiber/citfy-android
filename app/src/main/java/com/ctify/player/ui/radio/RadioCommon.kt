@@ -202,6 +202,9 @@ internal fun LazyListScope.stationRows(
     onDelete: ((Station) -> Unit)? = null,
 ) {
     itemsIndexed(list, key = { _, s -> keyPrefix + s.uuid }) { i, s ->
+        // lazy rows exist only while on screen, so only those are checked; scrolling away cancels the check
+        val radio = radioRepo()
+        LaunchedEffect(s.uuid) { if (s.uuid != PlayerHub.playback.value?.station?.uuid) radio.probe(s) }
         StationRow(
             station = s,
             isCurrent = s.uuid == ui.currentUuid,

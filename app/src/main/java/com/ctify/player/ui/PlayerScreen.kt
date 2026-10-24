@@ -109,7 +109,12 @@ import com.ctify.player.ui.theme.accentBrush
 import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
-import com.ctify.player.ui.radio.RewindRow
+import com.ctify.player.radio.Station
+import com.ctify.player.ui.radio.RadioUi
+import com.ctify.player.ui.radio.rememberRadioUi
+import com.ctify.player.ui.radio.stationRows
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.lazy.LazyListScope
 import com.ctify.player.ui.skins.CdSkin
 import com.ctify.player.ui.skins.CoverSkin
 import com.ctify.player.ui.skins.LiveProgress
@@ -189,7 +194,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
         Modifier
             .fillMaxSize()
             // drag down where no skin, slider or scroll claims the touch: follows the finger, then the usual slide-out
-            // shortcut: the compact (scrolling) layout's scroll takes vertical drags, so there only the arrow and Back close
+            // shortcut: the compact layout's and the radio side's scroll take vertical drags, so there only the arrow and Back close
             .draggable(
                 rememberDraggableState { d -> scope.launch { drop.snapTo((drop.value + d).coerceAtLeast(0f)) } },
                 Orientation.Vertical,
@@ -203,13 +208,8 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
             // very short screens (or huge fonts) scroll; otherwise the stage takes what is left
             val compact = maxHeight < 560.dp
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .then(if (compact) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
+            val screenHeight = maxHeight
+            val main: @Composable ColumnScope.() -> Unit = {
                 TopPill(
                     onRadio, onClose,
                     onSource = { toRadio ->
@@ -252,6 +252,27 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                 ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true }, onSleep = { sleep = true })
                 SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
+            val pad = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            if (state?.station != null) {
+                // radio: the player fills the first screen, the stations to switch to scroll up below it
+                val ui = rememberRadioUi()
+                LazyColumn(Modifier.fillMaxSize()) {
+                    item(key = "player") {
+                        Column(
+                            Modifier.fillMaxWidth().then(if (compact) Modifier else Modifier.height(screenHeight)).then(pad),
+                            horizontalAlignment = Alignment.CenterHorizontally, content = main,
+                        )
+                    }
+                    playerStations(favStations, recents, ui)
+                }
+            } else Column(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (compact) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .then(pad),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                content = main,
+            )
         }
     }
     }
@@ -301,6 +322,20 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             QueueSheet()
         }
     }
+}
+
+/** Favorite stations, then recent ones not already listed; a tap switches straight to it. */
+private fun LazyListScope.playerStations(favorites: List<Station>, recents: List<Station>, ui: RadioUi) {
+    val rest = recents.filter { r -> favorites.none { it.uuid == r.uuid } }
+    if (favorites.isNotEmpty()) {
+        item(key = "fav-title") { SectionHeader("Favorite stations", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }
+        stationRows(favorites, ui, keyPrefix = "pf")
+    }
+    if (rest.isNotEmpty()) {
+        item(key = "recent-title") { SectionHeader("Recent stations", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }
+        stationRows(rest, ui, keyPrefix = "pr")
+    }
+    item(key = "end") { Spacer(Modifier.height(24.dp)) }
 }
 
 /** Pastel cover accents are too light on a light background; keep the hue, lower the lightness. */
@@ -537,8 +572,8 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (station == null) Toggle(Icons.Default.Shuffle, "Shuffle", state?.shuffle == true, accent) { PlayerHub.toggleShuffle() }
-                        IconButton(onClick = { PlayerHub.previous() }) {
-                            Icon(Icons.Default.SkipPrevious, contentDescription = if (station != null) "Previous station" else "Previous track", tint = Ink)
+                        if (station == null) IconButton(onClick = { PlayerHub.previous() }) {
+                            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous track", tint = Ink)
                         }
                         Box(
                             Modifier
@@ -553,25 +588,21 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                                 contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = if (fill != null) MaterialTheme.colorScheme.onPrimary else if (accent.luminance() > 0.4f) Color(0xFF1A1719) else Color.White,
                             )
                         }
-                        IconButton(onClick = { PlayerHub.next() }) {
-                            Icon(Icons.Default.SkipNext, contentDescription = if (station != null) "Next station" else "Next track", tint = Ink)
+                        if (station == null) IconButton(onClick = { PlayerHub.next() }) {
+                            Icon(Icons.Default.SkipNext, contentDescription = "Next track", tint = Ink)
                         }
                         val repeat = state?.repeat ?: "off"
                         if (station == null) Toggle(
                             if (repeat == "track") Icons.Default.RepeatOne else Icons.Default.Repeat,
                             if (repeat == "track") "Repeat one" else "Repeat", repeat != "off", accent,
                         ) { PlayerHub.cycleRepeat() }
-                    }
-                    val bufferStart = state?.bufferStartMs
-                    val edge = state?.durationMs ?: 0L
-                    if (station != null && bufferStart != null && edge > bufferStart + 5_000) {
-                        RewindRow(live, bufferStart, edge, accent)
-                    } else if (station != null) {
-                        Row(Modifier.heightIn(min = 32.dp).padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            LiveBadge(accent)
-                            Text(station.name, style = MaterialTheme.typography.labelSmall, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+                        if (station != null) {
+                            LiveBadge(accent, Modifier.padding(start = 12.dp))
+                            Text(station.name, style = MaterialTheme.typography.labelSmall, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp))
                         }
-                    } else if (seekBar) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
+                    }
+                    if (station != null) Spacer(Modifier.height(8.dp))
+                    else if (seekBar) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
                         Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
                         PillSlider(
                             value = live.fraction,

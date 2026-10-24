@@ -46,6 +46,26 @@ object RadioUrlPolicy {
     }
 }
 
+/** What a short check of a station's stream address says. */
+object StreamProbe {
+    private val streamTypes = listOf("audio/", "mpegurl", "ogg", "aac", "flac", "video/mp2t", "scpls", "dash+xml", "octet-stream")
+
+    /** A 2xx that looks like audio, a playlist or an ICY server; a missing type is given the benefit of the doubt. */
+    fun isStream(code: Int, contentType: String?, hasIcyHeaders: Boolean): Boolean {
+        if (code !in 200..299) return false
+        if (hasIcyHeaders || contentType.isNullOrBlank()) return true
+        val ct = contentType.lowercase()
+        return streamTypes.any { it in ct }
+    }
+
+    /** Alive if any address answered like a stream; null when none gave a real answer (no network, timeouts aside). */
+    fun verdict(answers: List<Boolean?>): Boolean? = when {
+        answers.any { it == true } -> true
+        answers.any { it == false } -> false
+        else -> null
+    }
+}
+
 enum class StreamError { PERMANENT, TRANSIENT, DNS }
 
 /** Sorts stream failures into ones worth waiting out and ones that will fail the same way again. */
