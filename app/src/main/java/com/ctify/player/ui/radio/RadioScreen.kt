@@ -151,7 +151,9 @@ private fun stationWheelSources(radio: RadioRepository, page: Int, tabs: List<Ra
         }
         else -> null
     }
-    return listOfNotNull(here, favorites)
+    // recent stations used to come with the Heard page, which moved to Discover
+    val recent = StationListSource("recent", "Recent", radio) { radio.recents.first() }
+    return listOfNotNull(here, favorites, recent)
 }
 
 private fun pageKey(page: Int, tabs: List<RadioTab>): Any =

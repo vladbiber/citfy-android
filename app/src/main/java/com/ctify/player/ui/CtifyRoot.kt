@@ -49,6 +49,14 @@ import com.ctify.player.ui.youtube.DownloadsSheet
 import com.ctify.player.ui.youtube.YouTubeScreen
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.Accent
+import com.ctify.player.ui.theme.Appearance
+import androidx.compose.ui.Alignment
+import com.ctify.player.ui.theme.ThemeSource
+import com.ctify.player.ui.theme.accentBrush
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.collectAsState
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.youtube.SpotifyImportDialog
 import com.ctify.player.youtube.YtIntake
@@ -112,19 +120,27 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                         status = now?.radioStatus.takeIf { station != null },
                     )
                 }
+                val duo = Appearance.source.collectAsState().value == ThemeSource.DUO
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                     Tab.entries.forEachIndexed { index, t ->
                         NavigationBarItem(
                             selected = tab == index,
                             onClick = { tab = index },
-                            icon = { Icon(t.icon, t.label) },
+                            icon = {
+                                // M3 indicators take one color, so Two colors draws its own fade pill (64x32 like the stock one)
+                                if (duo && tab == index) Box(
+                                    Modifier.size(64.dp, 32.dp).background(accentBrush(), CircleShape, alpha = 0.35f),
+                                    contentAlignment = Alignment.Center,
+                                ) { Icon(t.icon, t.label) }
+                                else Icon(t.icon, t.label)
+                            },
                             label = { Text(t.label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Accent,
                                 selectedTextColor = Accent,
                                 unselectedIconColor = TextSecondary,
                                 unselectedTextColor = TextSecondary,
-                                indicatorColor = Accent.copy(alpha = 0.16f),
+                                indicatorColor = if (duo) Color.Transparent else Accent.copy(alpha = 0.16f),
                             ),
                         )
                     }
@@ -153,7 +169,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                     onSection = { librarySection = it },
                 )
                 3 -> RadioScreen()
-                else -> SettingsScreen(onClose = { tab = 0 })
+                else -> SettingsScreen()
             }
         }
     }
@@ -212,7 +228,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                 .fillMaxSize()
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
         ) {
-            PlayerContent(onClose = { showNowPlaying = false })
+            PlayerContent(onClose = { showNowPlaying = false }, onOpenRadio = { showNowPlaying = false; tab = Tab.Radio.ordinal })
         }
     }
 }

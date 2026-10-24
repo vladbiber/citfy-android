@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.StrokeCap
@@ -250,6 +251,7 @@ fun PillSlider(
     label: String = "",
     stateText: String? = null,
     marks: List<Float> = emptyList(),
+    brush: Brush? = null,
 ) {
     val latest by rememberUpdatedState(value)
     var drag by remember { mutableFloatStateOf(0f) }
@@ -285,15 +287,15 @@ fun PillSlider(
         val v = value.coerceIn(0f, 1f)
         val x = v * size.width
         drawLine(track, Offset(0f, y), Offset(size.width, y), 2.dp.toPx(), StrokeCap.Round)
-        drawLine(accent, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
+        if (brush != null) drawLine(brush, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
+        else drawLine(accent, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
         val mh = 8.dp.toPx(); val mw = 2.dp.toPx()
         marks.forEach { m ->
             if (m > 0.001f && m < 0.999f) drawRoundRect(ChapterMark, Offset(m * size.width - mw / 2, y - mh / 2), Size(mw, mh), CornerRadius(mw / 2))
         }
         val tw = 4.dp.toPx(); val th = 14.dp.toPx()
-        drawRoundRect(
-            accent, Offset(x - tw / 2, y - th / 2), Size(tw, th), CornerRadius(tw / 2)
-        )
+        if (brush != null) drawRoundRect(brush, Offset(x - tw / 2, y - th / 2), Size(tw, th), CornerRadius(tw / 2))
+        else drawRoundRect(accent, Offset(x - tw / 2, y - th / 2), Size(tw, th), CornerRadius(tw / 2))
     }
 }
 

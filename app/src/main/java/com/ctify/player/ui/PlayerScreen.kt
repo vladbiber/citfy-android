@@ -91,6 +91,10 @@ import coil.compose.AsyncImage
 import com.ctify.player.CtifyApp
 import com.ctify.player.ui.theme.isAppInDarkTheme
 import com.ctify.player.ui.theme.Appearance
+import com.ctify.player.ui.theme.LiquidBackground
+import com.ctify.player.ui.theme.ThemeSource
+import com.ctify.player.ui.theme.accentBrush
+import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.ui.radio.RewindRow
@@ -160,11 +164,15 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
         .let { if (dark) it else it.darkened() }
     val art = rememberArtPainter(track?.coverUri)
     val live = rememberLiveProgress()
+    val source by Appearance.source.collectAsState()
+    // two-color fade on the small spots; cover colors win when they are on
+    val fill: Brush? = if (source == ThemeSource.DUO && !coverColors) accentBrush() else null
 
     // not inside a Surface, so set the text color here or bare Text turns black
     CompositionLocalProvider(LocalContentColor provides Ink) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Backdrop(track?.coverUri, accent)
+        if (!coverColors) LiquidBackground(Modifier.fillMaxSize())
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
             // very short screens (or huge fonts) scroll; otherwise the stage takes what is left
             val compact = maxHeight < 560.dp
@@ -202,10 +210,10 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                         transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
                         label = "skin",
                     ) { s ->
-                        SkinView(s, live, art, accent, track, skinSide(s, maxWidth, maxHeight), seek = state?.station == null)
+                        SkinView(s, live, art, accent, track, skinSide(s, maxWidth, maxHeight), seek = state?.station == null, fill = fill)
                     }
                 }
-                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, onQueue = { queue = true })
+                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true })
                 SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
         }
@@ -268,7 +276,7 @@ internal fun skinSide(skin: Skin, maxWidth: Dp, h: Dp): Dp = when (skin) {
 
 /** One skin drawn for [track]; [seek] adds the cover's own seek row. */
 @Composable
-internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, track: Track?, side: Dp, seek: Boolean) {
+internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, track: Track?, side: Dp, seek: Boolean, fill: Brush? = null) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         val m = Modifier.width(side)
         val title = track?.title ?: "Nothing playing"
@@ -279,7 +287,7 @@ internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, 
             Skin.TP7 -> Tp7Skin(live, art, accent, track?.let { "${it.title} · ${it.artist}" } ?: "ctify", m)
             Skin.COVER -> {
                 CoverSkin(live, art, accent, m)
-                if (seek) SeekRow(live, accent, Modifier.width(side * 0.86f))
+                if (seek) SeekRow(live, accent, Modifier.width(side * 0.86f), fill)
             }
         }
     }
@@ -417,7 +425,7 @@ private fun StripChip(
 }
 
 @Composable
-private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier) {
+private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill: Brush? = null) {
     Column(modifier) {
         PillSlider(
             value = live.fraction,
@@ -427,6 +435,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier) {
             label = "Position",
             stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
             marks = chapterMarks(live),
+            brush = fill,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(formatMs(live.positionMs.toInt()), fontSize = 11.sp, color = InkDim)
@@ -436,7 +445,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier) {
 }
 
 @Composable
-private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, onQueue: () -> Unit) {
+private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onQueue: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     val station = state?.station
@@ -485,13 +494,13 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, onQ
                             Modifier
                                 .size(width = 60.dp, height = 48.dp)
                                 .clip(CircleShape)
-                                .background(accent)
+                                .background(fill ?: SolidColor(accent))
                                 .clickable(role = Role.Button) { PlayerHub.togglePlay() },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = if (accent.luminance() > 0.4f) Color(0xFF1A1719) else Color.White,
+                                contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = if (fill != null) MaterialTheme.colorScheme.onPrimary else if (accent.luminance() > 0.4f) Color(0xFF1A1719) else Color.White,
                             )
                         }
                         IconButton(onClick = { PlayerHub.next() }) {
@@ -523,6 +532,7 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, onQ
                             stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
                             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
                             marks = chapterMarks(live),
+                            brush = fill,
                         )
                         Text(formatMs(live.durationMs.toInt()), fontSize = 11.sp, color = InkDim)
                     }

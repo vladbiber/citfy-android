@@ -1,5 +1,11 @@
 package com.ctify.player.ui
 
+import androidx.compose.foundation.progressSemantics
+import androidx.compose.ui.draw.drawBehind
+import com.ctify.player.ui.theme.Appearance
+import com.ctify.player.ui.theme.ThemeSource
+import com.ctify.player.ui.theme.accentBrush
+import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -282,7 +288,18 @@ fun MiniPlayer(
             }
         }
         if (isLive) Spacer(Modifier.height(2.dp))
-        else LinearProgressIndicator(
+        else if (Appearance.source.collectAsState().value == ThemeSource.DUO) {
+            val fill = accentBrush()
+            val track = TextPrimary.copy(alpha = 0.15f)
+            Box(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp).height(2.dp)
+                    .progressSemantics(progress.coerceIn(0f, 1f))
+                    .drawBehind {
+                        drawRect(track)
+                        drawRect(fill, size = size.copy(width = size.width * progress.coerceIn(0f, 1f)))
+                    },
+            )
+        } else LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).height(2.dp),
             color = Accent,

@@ -1,5 +1,11 @@
 package com.ctify.player.ui
 
+import com.ctify.player.ui.theme.LiquidBackground
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +64,16 @@ fun HomeScreen(
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
 
+    Box(Modifier.fillMaxSize()) {
+    // Two colors: the liquid wash sits behind the header and fades out downward
+    LiquidBackground(
+        Modifier.fillMaxWidth().height(280.dp)
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent)), blendMode = BlendMode.DstIn)
+            },
+    )
     Column(Modifier.fillMaxSize()) {
         // the box stays put above both views, so typing never loses focus when results replace Home
         SearchField(query, { query = it }, "Songs, artists, albums, stations", Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
@@ -126,6 +142,7 @@ fun HomeScreen(
                 }
             }
         }
+    }
     }
 }
 
