@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.materialkolor.material3.rememberDynamicColorScheme
 
 // Old fixed palette names, now read from the active color scheme.
 val Accent: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
@@ -104,16 +105,33 @@ fun isAppInDarkTheme(): Boolean {
 @Composable
 fun CtifyTheme(content: @Composable () -> Unit) {
     val dark = isAppInDarkTheme()
-    val dynamic by Appearance.dynamic.collectAsState()
+    val source by Appearance.source.collectAsState()
     val pureBlack by Appearance.pureBlack.collectAsState()
     val ctx = LocalContext.current
     var scheme = when {
-        dynamic && Appearance.dynamicSupported -> if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+        source == ThemeSource.DUO -> duoScheme(dark)
+        source == ThemeSource.WALLPAPER && Appearance.dynamicSupported ->
+            if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         dark -> CtifyDark
         else -> CtifyLight
     }
     if (dark && pureBlack) scheme = scheme.pureBlack()
     MaterialTheme(colorScheme = scheme, typography = CtifyType, content = content)
+}
+
+/** Color 1 drives primary, color 2 secondary + tertiary; MaterialKolor keeps the tones contrast-safe. */
+@Composable
+private fun duoScheme(dark: Boolean): ColorScheme {
+    val c1 by Appearance.color1.collectAsState()
+    val c2 by Appearance.color2.collectAsState()
+    val s = rememberDynamicColorScheme(
+        seedColor = c1.color, isDark = dark,
+        primary = c1.color, secondary = c2.color, tertiary = c2.color,
+    )
+    if (c1 != c2) return s
+    // Same swatch twice: color 2 becomes a darker shade, taken from the primary palette's own contrast-safe pair.
+    return if (dark) s.copy(tertiary = s.primaryContainer, onTertiary = s.onPrimaryContainer)
+    else s.copy(tertiary = s.onPrimaryContainer, onTertiary = s.primaryContainer)
 }
 
 private fun ColorScheme.pureBlack() = copy(
