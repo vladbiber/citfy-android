@@ -55,6 +55,7 @@ import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.player.PlayerViewModel
+import com.ctify.player.ui.radio.HeardSection
 import com.ctify.player.ui.radio.HomeStationRows
 
 @Composable
@@ -65,6 +66,7 @@ fun HomeScreen(
     onOpenPlaylist: (String) -> Unit,
     onOpenFavorites: () -> Unit = {},
     onSpinWheel: () -> Unit = {},
+    add: AddActions,
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
@@ -73,6 +75,8 @@ fun HomeScreen(
     val recent by remember { viewModel.repository.recentlyPlayed(20) }.collectAsStateWithLifecycle(emptyList())
     val most by remember { viewModel.repository.mostPlayed(20) }.collectAsStateWithLifecycle(emptyList())
     var query by rememberSaveable { mutableStateOf("") }
+    // saved YouTube songs load in addedAt order
+    val downloaded = remember(tracks) { tracks.filter { it.id.startsWith("yt_") }.asReversed() }
 
     Box(Modifier.fillMaxSize()) {
     // Two colors: the liquid wash sits behind the header and fades out downward
@@ -86,7 +90,10 @@ fun HomeScreen(
     )
     Column(Modifier.fillMaxSize()) {
         // the box stays put above both views, so typing never loses focus when results replace Home
-        SearchField(query, { query = it }, "Songs, artists, albums, stations", Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            SearchField(query, { query = it }, "Songs, artists, heard songs, stations", Modifier.weight(1f))
+            AddMenu(add)
+        }
         if (query.isNotBlank()) {
             SearchResults(viewModel, query, onMore, HOME_SCOPES)
             return@Column
@@ -98,14 +105,9 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            full {
-                Row(Modifier.padding(start = 8.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CtifyLogo(size = 40.dp)
-                    Spacer(Modifier.width(12.dp))
-                    ScreenTitle("ctify")
-                }
-            }
+            if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder or add songs from YouTube.") }
             if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+            if (most.isNotEmpty()) full { TrackCarousel("Most played", most, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             full {
                 HeroCard(
                     "Shuffle everything", "${tracks.size} songs on this phone", Icons.Filled.Shuffle,
@@ -129,7 +131,6 @@ fun HomeScreen(
                 )
             }
             full { HomeStationRows() }
-            if (most.isNotEmpty()) full { TrackCarousel("Most played", most, ui.currentTrackId, viewModel, onOpenNowPlaying) }
             if (playlists.isNotEmpty()) {
                 full { SectionHeader("Playlists", Modifier.padding(top = 10.dp, start = 4.dp)) }
                 items(playlists, key = { it.name }) { pl ->
@@ -138,21 +139,8 @@ fun HomeScreen(
                     }
                 }
             }
-            full { SectionHeader("All songs", Modifier.padding(top = 10.dp, start = 4.dp)) }
-            if (tracks.isEmpty()) full { EmptyHint("Import a folder from the Library tab to get started.") }
-            tracks.forEach { track ->
-                full {
-                    TrackRow(
-                        track = track,
-                        isCurrent = track.id == ui.currentTrackId,
-                        isPlaying = ui.isPlaying && track.id == ui.currentTrackId,
-                        isFavorite = track.id in favorites,
-                        onClick = { viewModel.playQueue(tracks, tracks.indexOf(track)) },
-                        onToggleFavorite = { viewModel.toggleFavorite(track.id) },
-                        onMore = { onMore(track.id) },
-                    )
-                }
-            }
+            if (downloaded.isNotEmpty()) full { TrackCarousel("Downloaded", downloaded, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+            full { HeardSection() }
         }
     }
     }
@@ -169,7 +157,7 @@ private fun TrackCarousel(title: String, list: List<Track>, current: String?, vi
                 val on = t.id == current
                 Column(
                     Modifier
-                        .width(112.dp)
+                        .width(140.dp)
                         .clip(MaterialTheme.shapes.small)
                         .clickable(onClickLabel = "play") {
                             // streamed songs from history may not be loaded this session
@@ -182,7 +170,7 @@ private fun TrackCarousel(title: String, list: List<Track>, current: String?, vi
                             if (on) stateDescription = "now playing"
                         },
                 ) {
-                    AlbumArt(t, 112.dp, shape = MaterialTheme.shapes.small)
+                    AlbumArt(t, 140.dp, shape = MaterialTheme.shapes.small)
                     Spacer(Modifier.height(6.dp))
                     Text(t.title, color = if (on) Accent else TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(t.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
