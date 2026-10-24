@@ -3,6 +3,11 @@ package com.ctify.player.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
@@ -67,8 +72,9 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     Settings("Settings", Icons.Filled.Settings),
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun CtifyRoot(viewModel: PlayerViewModel) {
+fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { CompositionLocalProvider(LocalSharedCover provides this) {
     var tab by remember { mutableIntStateOf(0) }
     var showNowPlaying by remember { mutableStateOf(false) }
     var showWheel by remember { mutableStateOf(false) }
@@ -85,6 +91,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     // radio items aren't in the library, so fall back to what the player publishes
     val current = viewModel.repository.trackById(ui.currentTrackId) ?: now?.track
     val station = now?.station
+    val playerOpen = showNowPlaying && current != null
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -117,6 +124,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                         onPrevious = PlayerHub::previous,
                         isLive = station != null,
                         status = now?.radioStatus.takeIf { station != null },
+                        playerOpen = playerOpen,
                     )
                 }
                 val duo = Appearance.source.collectAsState().value == ThemeSource.DUO
@@ -215,9 +223,9 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
     }
 
     AnimatedVisibility(
-        visible = showNowPlaying && current != null,
-        enter = slideInVertically(initialOffsetY = { it }),
-        exit = slideOutVertically(targetOffsetY = { it }),
+        visible = playerOpen,
+        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
     ) {
         // an in-window overlay, not a Dialog, so system bar insets and Back work
         BackHandler { showNowPlaying = false }
@@ -226,9 +234,11 @@ fun CtifyRoot(viewModel: PlayerViewModel) {
                 .fillMaxSize()
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
         ) {
-            PlayerContent(onClose = { showNowPlaying = false }, onOpenRadio = { showNowPlaying = false; tab = Tab.Radio.ordinal })
+            CompositionLocalProvider(LocalPlayerVisibility provides this@AnimatedVisibility) {
+                PlayerContent(onClose = { showNowPlaying = false }, onOpenRadio = { showNowPlaying = false; tab = Tab.Radio.ordinal })
+            }
         }
     }
-}
+} } // SharedTransitionLayout, LocalSharedCover: the mini player's cover grows into the player
 
 internal fun contentPadding() = PaddingValues(bottom = 12.dp)

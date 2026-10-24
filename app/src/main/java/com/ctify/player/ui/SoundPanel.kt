@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -204,7 +203,7 @@ internal fun VinylSection() {
 
 @Composable
 internal fun ResetFxButton() {
-    OutlinedButton(onClick = { PlayerHub.resetFx() }, modifier = Modifier.fillMaxWidth()) {
+    CtButton(onClick = { PlayerHub.resetFx() }, modifier = Modifier.fillMaxWidth()) {
         Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text("Reset everything")

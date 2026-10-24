@@ -6,6 +6,15 @@ import com.ctify.player.ui.skins.radio.aspectRatio
 import androidx.compose.foundation.layout.aspectRatio
 import android.os.Build
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -36,8 +45,6 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -51,7 +58,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -86,7 +92,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
@@ -109,7 +114,6 @@ import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.LiquidBackground
 import com.ctify.player.ui.theme.ThemeSource
 import com.ctify.player.ui.theme.accentBrush
-import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.radio.Station
@@ -145,7 +149,6 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material.icons.filled.Lyrics
-import androidx.compose.material3.IconToggleButton
 import androidx.compose.runtime.produceState
 import com.ctify.player.ui.radio.RadioUi
 import com.ctify.player.ui.radio.rememberRadioUi
@@ -167,7 +170,6 @@ import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.WaterDrop
@@ -293,7 +295,6 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     Modifier
                         .fillMaxWidth()
                         .then(if (compact) Modifier.height(340.dp) else Modifier.weight(1f))
-                        .padding(vertical = 6.dp)
                         // the stage belongs to the skins (scratch, shuttle, tap to play), so drags here never close the player
                         .pointerInput(Unit) {
                             awaitEachGesture {
@@ -305,7 +306,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (pickStation) FilledTonalButton(onClick = onOpenRadio) { Text("Pick a station") }
+                    if (pickStation) CtButton(onClick = onOpenRadio) { Text("Pick a station") }
                     else {
                     val stageMax = maxWidth
                     val stageHeight = maxHeight
@@ -316,18 +317,27 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                             lyrics?.let { LyricsView(it, live, Ink, InkDim, Modifier.fillMaxSize().padding(end = 8.dp)) }
                         }
                         val stageWidth by animateDpAsState(if (lyricsOn) stageMax * 0.42f else stageMax, label = "stage")
-                        Box(Modifier.width(stageWidth), contentAlignment = Alignment.Center) {
+                        Box(Modifier.width(stageWidth).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                            val visibility = LocalPlayerVisibility.current
                             AnimatedContent(
                                 targetState = visualizer ?: if (state?.station != null) radioSkin else skin,
-                                transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
+                                // fills the stage, so a smaller or larger skin never moves what is around it
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                                transitionSpec = {
+                                    val fade = spring<Float>(stiffness = Spring.StiffnessMediumLow)
+                                    (fadeIn(fade) + scaleIn(fade, initialScale = 0.96f)) togetherWith
+                                        (fadeOut(fade) + scaleOut(fade, targetScale = 1.02f)) using SizeTransform(clip = false)
+                                },
                                 label = "skin",
                             ) { s ->
-                                if (s is Visualizer) VisualizerView(s, art, live.playing, still = false, side = minOf(stageWidth, stageHeight))
-                                else if (s is Skin) SkinView(s, live, art, accent, track, skinSide(s, stageWidth, stageHeight), seek = state?.station == null, fill = fill)
+                                val shared = Modifier.sharedCover(visibility)
+                                if (s is Visualizer) Box(shared) { VisualizerView(s, art, live.playing, still = false, side = minOf(stageWidth, stageHeight)) }
+                                else if (s is Skin) SkinView(s, live, art, accent, track, skinSide(s, stageWidth, stageHeight), seek = state?.station == null, fill = fill, modifier = shared)
                                 else if (s is RadioSkin) state?.station?.let { st ->
                                     RadioSkinView(
                                         s, st.name, track?.title?.takeIf { it != st.name }, art, accent, live.playing, still = false,
-                                        onTogglePlay = { PlayerHub.togglePlay() }, modifier = radioSkinSize(s, stageWidth, stageHeight),
+                                        onTogglePlay = { PlayerHub.togglePlay() }, modifier = shared.then(radioSkinSize(s, stageWidth, stageHeight)),
                                     )
                                 }
                             }
@@ -339,6 +349,8 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                 SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
             val pad = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            // one rhythm between pill, stage, controls and strip
+            val rhythm = Arrangement.spacedBy(12.dp)
             if (state?.station != null) {
                 // radio: the player fills the first screen, the stations to switch to scroll up below it
                 val ui = rememberRadioUi()
@@ -346,7 +358,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     item(key = "player") {
                         Column(
                             Modifier.fillMaxWidth().then(if (compact) Modifier else Modifier.height(screenHeight)).then(pad),
-                            horizontalAlignment = Alignment.CenterHorizontally, content = main,
+                            verticalArrangement = rhythm, horizontalAlignment = Alignment.CenterHorizontally, content = main,
                         )
                     }
                     playerStations(favStations, recents, ui)
@@ -356,6 +368,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     .fillMaxSize()
                     .then(if (compact) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                     .then(pad),
+                verticalArrangement = rhythm,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 content = main,
             )
@@ -450,11 +463,11 @@ internal fun skinSide(skin: Skin, maxWidth: Dp, h: Dp): Dp = when (skin) {
     else -> minOf(maxWidth, h)
 }.coerceIn(120.dp, 480.dp)
 
-/** One skin drawn for [track]; [seek] adds the cover's own seek row. */
+/** One skin drawn for [track]; [seek] adds the cover's own seek row; [modifier] goes on the skin itself. */
 @Composable
-internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, track: Track?, side: Dp, seek: Boolean, fill: Brush? = null) {
+internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, track: Track?, side: Dp, seek: Boolean, fill: Brush? = null, modifier: Modifier = Modifier) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        val m = Modifier.width(side)
+        val m = modifier.width(side)
         val title = track?.title ?: "Nothing playing"
         when (s) {
             Skin.VINYL -> VinylSkin(live, art, accent, m, title)
@@ -505,18 +518,15 @@ private fun Backdrop(art: String?, accent: Color, pulse: State<Float>? = null) {
 @Composable
 private fun LyricsButton(lyrics: Lyrics?, on: Boolean, accent: Color, onToggle: (Boolean) -> Unit) {
     val found = lyrics?.found == true
-    Surface(color = if (on) accent.copy(alpha = 0.3f) else Glass, shape = CircleShape, modifier = Modifier.size(48.dp)) {
-        IconToggleButton(checked = on, onCheckedChange = onToggle, enabled = found) {
-            Icon(
-                Icons.Default.Lyrics,
-                contentDescription = when {
-                    lyrics == null -> "Lyrics, looking for them"
-                    !found -> "Lyrics, none found for this song"
-                    else -> "Lyrics"
-                },
-                tint = if (found) Ink else InkDim.copy(alpha = 0.45f),
-            )
-        }
+    Surface(color = Glass, shape = CircleShape) {
+        CtToggleIconButton(
+            checked = on, onCheckedChange = onToggle, icon = Icons.Default.Lyrics, accent = accent, enabled = found,
+            contentDescription = when {
+                lyrics == null -> "Lyrics, looking for them"
+                !found -> "Lyrics, none found for this song"
+                else -> "Lyrics"
+            },
+        )
     }
 }
 
@@ -524,9 +534,7 @@ private fun LyricsButton(lyrics: Lyrics?, on: Boolean, accent: Color, onToggle: 
 private fun TopPill(onRadio: Boolean, onClose: () -> Unit, onSource: (radio: Boolean) -> Unit, onSound: () -> Unit) {
     Surface(color = Glass, shape = CircleShape) {
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close player", tint = Ink)
-            }
+            CtIconButton(Icons.Default.KeyboardArrowDown, "Close player", onClose)
             Row(Modifier.selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
                 listOf(false to "Now Playing", true to "Radio").forEach { (radio, label) ->
                     val on = radio == onRadio
@@ -544,14 +552,12 @@ private fun TopPill(onRadio: Boolean, onClose: () -> Unit, onSource: (radio: Boo
                             modifier = Modifier
                                 .clip(CircleShape)
                                 .background(if (on) Ink.copy(alpha = 0.12f) else Color.Transparent)
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                         )
                     }
                 }
             }
-            IconButton(onClick = onSound, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.Tune, contentDescription = "Sound settings", tint = Ink)
-            }
+            CtIconButton(Icons.Default.Tune, "Sound settings", onSound)
         }
     }
 }
@@ -573,8 +579,8 @@ private fun SoundStrip(accent: Color, onSkin: () -> Unit, onPanel: (ChipPanel) -
     val genre by SoundSettings.genreKey.collectAsState()
     val space = spaceSummary(width, pan, muffle)
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StripChip("Skin", Icons.Default.Palette, false, accent, description = "Player look", onClick = onSkin)
@@ -607,19 +613,19 @@ private fun StripChip(
                 if (toggle) stateDescription = if (on) "on" else "off"
                 description?.let { contentDescription = it }
             }
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             Modifier
                 .clip(CircleShape)
                 .background(if (on) accent.copy(alpha = 0.24f) else Glass)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (icon != null) {
-                Icon(icon, contentDescription = null, tint = if (on) accent else Ink, modifier = Modifier.size(15.dp))
-                Spacer(Modifier.width(5.dp))
+                Icon(icon, contentDescription = null, tint = if (on) accent else Ink, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
             }
             Text(label, style = MaterialTheme.typography.labelSmall, color = if (on) Ink else InkDim, maxLines = 1)
         }
@@ -638,6 +644,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill:
             stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
             marks = chapterMarks(live),
             brush = fill,
+            wave = rememberWave(live.playing && live.preview == null),
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
@@ -658,100 +665,86 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
     val fav = if (station != null) station.uuid in stationFavs else track != null && track.id in favorites
 
     Surface(color = Glass, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
-        Column(Modifier.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 4.dp)) {
+        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        track?.title ?: "Nothing playing", color = Ink, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        track?.title ?: "Nothing playing", color = Ink, style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.marquee(),
                     )
                     Text(
                         state?.radioStatus.takeIf { station != null } ?: track?.artist ?: "pick something in Library",
                         color = InkDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.marquee(),
                     )
                 }
-                IconButton(onClick = {
-                    if (station != null) app.radio.toggleFavorite(station, fav)
-                    else track?.let { repository.toggleFavorite(it.id) }
-                }) {
-                    Icon(
-                        if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
-                        tint = if (fav) accent else Ink,
-                    )
-                }
+                CtToggleIconButton(
+                    checked = fav,
+                    onCheckedChange = {
+                        if (station != null) app.radio.toggleFavorite(station, fav)
+                        else track?.let { repository.toggleFavorite(it.id) }
+                    },
+                    icon = Icons.Default.FavoriteBorder, checkedIcon = Icons.Default.Favorite,
+                    contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
+                    accent = accent, pop = true,
+                )
                 if (station == null && track?.isStreamed() == true) DownloadButton(track, accent)
                 val sleepLeft = sleepLeft()
-                IconButton(onClick = onSleep) {
-                    Icon(
-                        Icons.Default.Bedtime,
-                        contentDescription = sleepLeft?.let { "Sleep timer, pausing $it" } ?: "Sleep timer",
-                        tint = if (sleepLeft != null) accent else Ink,
+                CtIconButton(
+                    Icons.Default.Bedtime, sleepLeft?.let { "Sleep timer, pausing $it" } ?: "Sleep timer", onSleep,
+                    tint = if (sleepLeft != null) accent else Ink,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (station == null) CtToggleIconButton(state?.shuffle == true, { PlayerHub.toggleShuffle() }, Icons.Default.Shuffle, "Shuffle", accent, dense = true)
+                if (station == null) CtIconButton(Icons.Default.SkipPrevious, "Previous track", { PlayerHub.previous() })
+                PlayPauseButton(
+                    state?.isPlaying == true, { PlayerHub.togglePlay() }, accent,
+                    Modifier.size(width = 64.dp, height = 56.dp), brush = fill,
+                )
+                if (station == null) CtIconButton(Icons.Default.SkipNext, "Next track", { PlayerHub.next() })
+                val repeat = state?.repeat ?: "off"
+                if (station == null) CtToggleIconButton(
+                    repeat != "off", { PlayerHub.cycleRepeat() },
+                    if (repeat == "track") Icons.Default.RepeatOne else Icons.Default.Repeat,
+                    if (repeat == "track") "Repeat one" else "Repeat", accent, dense = true,
+                )
+                if (station != null) {
+                    LiveBadge(accent, Modifier.padding(start = 12.dp))
+                    Text(
+                        station.name, style = MaterialTheme.typography.labelSmall, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 8.dp).marquee(),
                     )
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            run {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (station == null) Toggle(Icons.Default.Shuffle, "Shuffle", state?.shuffle == true, accent) { PlayerHub.toggleShuffle() }
-                        if (station == null) IconButton(onClick = { PlayerHub.previous() }) {
-                            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous track", tint = Ink)
-                        }
-                        Box(
-                            Modifier
-                                .size(width = 60.dp, height = 48.dp)
-                                .clip(CircleShape)
-                                .background(fill ?: SolidColor(accent))
-                                .clickable(role = Role.Button) { PlayerHub.togglePlay() },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (state?.isPlaying == true) "Pause" else "Play", tint = if (fill != null) MaterialTheme.colorScheme.onPrimary else if (accent.luminance() > 0.4f) Color(0xFF1A1719) else Color.White,
-                            )
-                        }
-                        if (station == null) IconButton(onClick = { PlayerHub.next() }) {
-                            Icon(Icons.Default.SkipNext, contentDescription = "Next track", tint = Ink)
-                        }
-                        val repeat = state?.repeat ?: "off"
-                        if (station == null) Toggle(
-                            if (repeat == "track") Icons.Default.RepeatOne else Icons.Default.Repeat,
-                            if (repeat == "track") "Repeat one" else "Repeat", repeat != "off", accent,
-                        ) { PlayerHub.cycleRepeat() }
-                        if (station != null) {
-                            LiveBadge(accent, Modifier.padding(start = 12.dp))
-                            Text(station.name, style = MaterialTheme.typography.labelSmall, color = InkDim, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp))
-                        }
-                    }
-                    if (station != null) Spacer(Modifier.height(8.dp))
-                    else if (seekBar) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
-                        Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
-                        PillSlider(
-                            value = live.fraction,
-                            onChange = { live.preview = (it * live.durationMs).toLong() },
-                            onDone = { live.seekTo((it * live.durationMs).toLong()) },
-                            accent = accent,
-                            label = "Position",
-                            stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
-                            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                            marks = chapterMarks(live),
-                            brush = fill,
-                        )
-                        Text(formatMs(live.durationMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
-                    }
-                    if (station == null) ChapterRow(live, Ink)
-                    if (station == null) {
-                        var upNext by rememberSaveable { mutableStateOf(false) }
-                        IconButton(onClick = { upNext = !upNext }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                            Icon(
-                                if (upNext) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = if (upNext) "Hide up next" else "Show up next", tint = InkDim,
-                            )
-                        }
-                        AnimatedVisibility(upNext, enter = expandVertically(), exit = shrinkVertically()) {
-                            Column(Modifier.padding(end = 10.dp)) { QueueSheet(maxHeight = 260.dp) }
-                        }
-                    }
+            if (station != null) Spacer(Modifier.height(8.dp))
+            else if (seekBar) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
+                Text(formatMs(live.positionMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
+                PillSlider(
+                    value = live.fraction,
+                    onChange = { live.preview = (it * live.durationMs).toLong() },
+                    onDone = { live.seekTo((it * live.durationMs).toLong()) },
+                    accent = accent,
+                    label = "Position",
+                    stateText = "${formatMs(live.positionMs.toInt())} of ${formatMs(live.durationMs.toInt())}",
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    marks = chapterMarks(live),
+                    brush = fill,
+                    wave = rememberWave(live.playing && live.preview == null),
+                )
+                Text(formatMs(live.durationMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
+            }
+            if (station == null) ChapterRow(live, Ink)
+            if (station == null) {
+                var upNext by rememberSaveable { mutableStateOf(false) }
+                CtIconButton(
+                    if (upNext) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    if (upNext) "Hide up next" else "Show up next", { upNext = !upNext },
+                    Modifier.align(Alignment.CenterHorizontally), tint = InkDim,
+                )
+                AnimatedVisibility(upNext, enter = expandVertically(), exit = shrinkVertically()) {
+                    Column(Modifier.padding(end = 8.dp)) { QueueSheet(maxHeight = 260.dp) }
                 }
             }
         }
@@ -787,6 +780,7 @@ private fun DownloadButton(track: Track, accent: Color) {
     IconButton(
         enabled = !done,
         onClick = { if (pending) Downloads.cancel(vid) else scope.launch { Downloads.enqueue(listOf(track.toYtSong())) } },
+        modifier = Modifier.size(48.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
             when {
@@ -810,27 +804,22 @@ private fun DownloadButton(track: Track, accent: Color) {
     }
 }
 
-@Composable
-private fun Toggle(icon: ImageVector, label: String, on: Boolean, accent: Color, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(44.dp)
-            .toggleable(value = on, role = Role.Switch, onValueChange = { onClick() })
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier.size(36.dp).clip(CircleShape).background(if (on) accent.copy(alpha = 0.2f) else Color.Transparent),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = if (on) accent else Ink, modifier = Modifier.size(20.dp))
-        }
-    }
-}
-
 /** Fits a radio skin into the stage at its own width/height ratio. */
 private fun radioSkinSize(s: RadioSkin, maxW: Dp, maxH: Dp): Modifier {
     val r = s.aspectRatio()
     val w = minOf(maxW, maxH * r)
     return Modifier.width(w).aspectRatio(r)
+}
+
+/** Set by CtifyRoot: the layout the cover is shared across, and the player overlay's visibility. */
+internal val LocalSharedCover = compositionLocalOf<SharedTransitionScope?> { null }
+internal val LocalPlayerVisibility = compositionLocalOf<AnimatedVisibilityScope?> { null }
+
+/** The mini player's cover and the player stage share these bounds, so one grows out of the other. */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+internal fun Modifier.sharedCover(visibility: AnimatedVisibilityScope?): Modifier {
+    val shared = LocalSharedCover.current
+    if (shared == null || visibility == null) return this
+    return with(shared) { sharedBounds(rememberSharedContentState("cover"), visibility) }
 }
