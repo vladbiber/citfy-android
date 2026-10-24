@@ -68,6 +68,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -169,9 +180,25 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     // two-color fade on the small spots; cover colors win when they are on
     val fill: Brush? = if (source == ThemeSource.DUO && !coverColors) accentBrush() else null
 
+    val scope = rememberCoroutineScope()
+    val drop = remember { Animatable(0f) }
+    val closeAt = with(LocalDensity.current) { 120.dp.toPx() }
+
     // not inside a Surface, so set the text color here or bare Text turns black
     CompositionLocalProvider(LocalContentColor provides Ink) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            // drag down where no skin, slider or scroll claims the touch: follows the finger, then the usual slide-out
+            // shortcut: the compact (scrolling) layout's scroll takes vertical drags, so there only the arrow and Back close
+            .draggable(
+                rememberDraggableState { d -> scope.launch { drop.snapTo((drop.value + d).coerceAtLeast(0f)) } },
+                Orientation.Vertical,
+                onDragStopped = { v -> if (drop.value > closeAt || v > 2_000f) onClose() else drop.animateTo(0f) },
+            )
+            .graphicsLayer { translationY = drop.value }
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         Backdrop(track?.coverUri, accent)
         if (!coverColors) LiquidBackground(Modifier.fillMaxSize())
         BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -202,7 +229,16 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     Modifier
                         .fillMaxWidth()
                         .then(if (compact) Modifier.height(340.dp) else Modifier.weight(1f))
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 6.dp)
+                        // the stage belongs to the skins (scratch, shuttle, tap to play), so drags here never close the player
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                do {
+                                    val e = awaitPointerEvent()
+                                    e.changes.forEach { if (it.positionChange() != Offset.Zero) it.consume() }
+                                } while (e.changes.any { it.pressed })
+                            }
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     if (pickStation) FilledTonalButton(onClick = onOpenRadio) { Text("Pick a station") }
