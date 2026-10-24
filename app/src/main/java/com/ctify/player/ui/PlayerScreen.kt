@@ -54,7 +54,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Favorite
 import com.ctify.player.ui.player.SleepSheet
@@ -110,6 +109,24 @@ import androidx.compose.ui.graphics.SolidColor
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.radio.Station
+import com.ctify.player.net.Feature
+import com.ctify.player.net.NetworkGate
+import com.ctify.player.net.Traffic
+import com.ctify.player.ui.youtube.isStreamed
+import com.ctify.player.ui.youtube.toYtSong
+import com.ctify.player.ui.youtube.ytVideoId
+import com.ctify.player.youtube.download.DownloadState
+import com.ctify.player.youtube.download.Downloads
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.delay
 import com.ctify.player.lyrics.Lyrics
 import com.ctify.player.lyrics.LyricsRepository
 import com.ctify.player.ui.player.LyricsView
@@ -173,7 +190,6 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     val track = state?.track
     var skin by remember { mutableStateOf(Skin.load(ctx)) }
     var sheet by remember { mutableStateOf(false) }
-    var queue by remember { mutableStateOf(false) }
     var sleep by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
@@ -285,7 +301,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
                     }
                     }
                 }
-                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onQueue = { queue = true }, onSleep = { sleep = true })
+                ControlCard(live, accent, seekBar = skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onSleep = { sleep = true })
                 SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
             }
             val pad = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -347,15 +363,6 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
             SleepSheet(live = state?.station != null, onDone = { sleep = false })
-        }
-    }
-    if (queue) {
-        ModalBottomSheet(
-            onDismissRequest = { queue = false },
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ) {
-            QueueSheet()
         }
     }
 }
@@ -578,7 +585,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill:
 }
 
 @Composable
-private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onQueue: () -> Unit, onSleep: () -> Unit) {
+private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onSleep: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     val station = state?.station
@@ -610,6 +617,7 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                         tint = if (fav) accent else Ink,
                     )
                 }
+                if (station == null && track?.isStreamed() == true) DownloadButton(track, accent)
                 val sleepLeft = sleepLeft()
                 IconButton(onClick = onSleep) {
                     Icon(
@@ -617,9 +625,6 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                         contentDescription = sleepLeft?.let { "Sleep timer, pausing $it" } ?: "Sleep timer",
                         tint = if (sleepLeft != null) accent else Ink,
                     )
-                }
-                if (station == null) IconButton(onClick = onQueue) {
-                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Up next", tint = Ink)
                 }
             }
             Spacer(Modifier.height(4.dp))
@@ -673,8 +678,72 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                         Text(formatMs(live.durationMs.toInt()), style = MaterialTheme.typography.labelSmall, color = InkDim)
                     }
                     if (station == null) ChapterRow(live, Ink)
+                    if (station == null) {
+                        var upNext by rememberSaveable { mutableStateOf(false) }
+                        IconButton(onClick = { upNext = !upNext }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                            Icon(
+                                if (upNext) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (upNext) "Hide up next" else "Show up next", tint = InkDim,
+                            )
+                        }
+                        AnimatedVisibility(upNext, enter = expandVertically(), exit = shrinkVertically()) {
+                            Column(Modifier.padding(end = 10.dp)) { QueueSheet(maxHeight = 260.dp) }
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+/** Saves the streamed song: progress while it runs, a check when it is on the phone; a tap while pending cancels. */
+@Composable
+private fun DownloadButton(track: Track, accent: Color) {
+    val vid = track.ytVideoId() ?: return
+    val scope = rememberCoroutineScope()
+    val flow = remember { Downloads.all() }
+    val all by flow.collectAsState(initial = emptyList())
+    val d = all.firstOrNull { it.videoId == vid }
+    // isMetered() can't be observed, so look again every few seconds while a download waits
+    val blocked by produceState<String?>(null, d?.state) {
+        while (d?.state == DownloadState.QUEUED) {
+            value = NetworkGate.blockReason(Feature.YOUTUBE, Traffic.DOWNLOAD)
+            delay(2_000)
+        }
+    }
+    val pending = d?.state == DownloadState.QUEUED || d?.state == DownloadState.RUNNING
+    val done = d?.state == DownloadState.DONE || d?.state == DownloadState.SKIPPED
+    val label = when {
+        done -> "Downloaded"
+        d?.state == DownloadState.RUNNING && d.bytesTotal > 0 -> "Downloading, ${d.bytesDone * 100 / d.bytesTotal}%, tap to cancel"
+        d?.state == DownloadState.RUNNING -> "Downloading, tap to cancel"
+        pending && blocked != null && NetworkGate.blockReason(Feature.YOUTUBE) == null -> "Waiting for Wi-Fi, tap to cancel"
+        pending -> "Waiting to download, tap to cancel"
+        d?.state == DownloadState.FAILED -> "Download failed, tap to retry"
+        else -> "Download"
+    }
+    IconButton(
+        enabled = !done,
+        onClick = { if (pending) Downloads.cancel(vid) else scope.launch { Downloads.enqueue(listOf(track.toYtSong())) } },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            when {
+                d?.state == DownloadState.RUNNING && d.bytesTotal > 0 -> CircularProgressIndicator(
+                    progress = { d.bytesDone.toFloat() / d.bytesTotal }, modifier = Modifier.size(26.dp), color = accent, strokeWidth = 2.dp,
+                )
+                d?.state == DownloadState.RUNNING -> CircularProgressIndicator(Modifier.size(26.dp), color = accent, strokeWidth = 2.dp)
+            }
+            Icon(
+                when {
+                    done -> Icons.Default.DownloadDone
+                    d?.state == DownloadState.QUEUED -> Icons.Default.Schedule
+                    d?.state == DownloadState.FAILED -> Icons.Default.ErrorOutline
+                    else -> Icons.Default.Download
+                },
+                contentDescription = label,
+                tint = if (done || pending) accent else Ink,
+                modifier = Modifier.size(if (d?.state == DownloadState.RUNNING) 16.dp else 24.dp),
+            )
         }
     }
 }
