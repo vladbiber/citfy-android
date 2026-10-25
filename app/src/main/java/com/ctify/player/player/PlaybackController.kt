@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -12,6 +13,8 @@ import com.ctify.player.data.PlaybackState
 import com.ctify.player.data.Track
 import com.ctify.player.radio.RadioRepository
 import com.ctify.player.radio.Station
+import com.ctify.player.recommend.UpNext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -72,6 +75,10 @@ class PlaybackController(
     /** the track queue radio replaced, so the player's Now Playing switch can resume it */
     private var parked: Parked? = null
     private class Parked(val items: List<MediaItem>, val index: Int, val positionMs: Long)
+    /** the library songs a Recommended up next replaced, in play order; null while the library queue plays */
+    private var libraryUpcoming: List<MediaItem>? = null
+    private var mixJob: Job? = null
+    private var mixFor: String? = null
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = sync()
@@ -79,11 +86,14 @@ class PlaybackController(
             if (state == Player.STATE_ENDED && PlayerHub.reverseOn.value) reverseStep(+1)
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) = radio.onIsPlayingChanged(isPlaying)
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = upNext()
         override fun onMetadata(metadata: androidx.media3.common.Metadata) = radio.onMetadata(metadata)
     }
 
     init {
         player.addListener(listener)
+        UpNext.init(context)
+        scope.launch { UpNext.recommended.collect { upNext() } }
         scope.launch {
             if (repository.tracks.value.isEmpty()) repository.load(includeDevice = false)
             restoreSnapshot()
@@ -249,6 +259,8 @@ class PlaybackController(
     private fun playQueue(tracks: List<Track>, startIndex: Int) {
         if (tracks.isEmpty()) return
         radio.stop()
+        // a new queue: Recommended mixes from its first song again
+        libraryUpcoming = null
         if (PlayerHub.reverseOn.value) {
             reverseQueue = tracks
             reverseIndex = startIndex.coerceIn(0, tracks.lastIndex)
@@ -265,6 +277,7 @@ class PlaybackController(
         val track = repository.trackById(trackId) ?: return
         if (radio.active) { radio.stop(); player.clearMediaItems() }
         if (player.mediaItemCount == 0) {
+            libraryUpcoming = null
             player.setMediaItem(track.toMediaItem())
             player.prepare()
             player.play()
@@ -365,6 +378,60 @@ class PlaybackController(
         if (wasPlaying) player.play()
     }
 
+    /**
+     * Keeps Up next on what its switch says: the queue the listener started, or the mix of the song playing
+     * now (fetched once on the switch, then topped up when fewer than [LOW] songs are left).
+     */
+    private fun upNext() {
+        // radio has no up next, and reverse walks its own copy of the queue
+        if (radio.active || PlayerHub.reverseOn.value) return
+        if (!UpNext.recommended.value) {
+            mixJob?.cancel()
+            UpNext.loading.value = false
+            val saved = libraryUpcoming ?: return
+            libraryUpcoming = null
+            replaceUpcoming(saved)
+            return
+        }
+        val seed = repository.trackById(player.currentMediaItem?.mediaId) ?: return
+        val left = player.mediaItemCount - 1 - player.currentMediaItemIndex
+        val first = libraryUpcoming == null
+        if (!first && left >= LOW) return
+        if (mixJob?.isActive == true && mixFor == seed.id) return
+        mixJob?.cancel()
+        mixFor = seed.id
+        mixJob = scope.launch {
+            UpNext.loading.value = first
+            val queued = (0 until player.mediaItemCount).mapNotNull { repository.trackById(player.getMediaItemAt(it).mediaId) }
+            val songs = try {
+                UpNext.fetch(context, repository, seed, queued)
+            } catch (e: UpNext.Unavailable) {
+                // a failed top-up keeps what is queued; a failed switch falls back to Library
+                if (first) UpNext.fail(e.message.orEmpty())
+                return@launch
+            } finally {
+                if (mixFor == seed.id) UpNext.loading.value = false
+            }
+            if (player.currentMediaItem?.mediaId != seed.id || !UpNext.recommended.value || radio.active || PlayerHub.reverseOn.value) return@launch
+            val items = songs.map { it.toMediaItem() }
+            if (libraryUpcoming != null) { player.addMediaItems(items); return@launch }
+            // saved in the order they would have played, so a shuffled queue comes back as it was
+            libraryUpcoming = generateSequence(player.currentMediaItemIndex) {
+                player.currentTimeline.getNextWindowIndex(it, Player.REPEAT_MODE_OFF, player.shuffleModeEnabled).takeIf { i -> i != C.INDEX_UNSET }
+            }.drop(1).map(player::getMediaItemAt).toList()
+            if (player.shuffleModeEnabled) {
+                // shuffled songs sit on both sides of the current one: keep only it, so the mix plays in order right after it
+                // shortcut: shuffle stays off after Library comes back (its songs return in their shuffled order)
+                player.shuffleModeEnabled = false
+                player.removeMediaItems(0, player.currentMediaItemIndex)
+            }
+            replaceUpcoming(items)
+        }
+    }
+
+    private fun replaceUpcoming(items: List<MediaItem>) =
+        player.replaceMediaItems(player.currentMediaItemIndex + 1, player.mediaItemCount, items)
+
     /** Radio reconnects instead of skipping; local files keep the skip in the service. */
     fun onPlayerError(error: androidx.media3.common.PlaybackException): Boolean = radio.onPlayerError(error)
 
@@ -376,3 +443,5 @@ class PlaybackController(
 }
 
 private const val REV = "rev:"
+/** songs left in a Recommended up next before it is topped up */
+private const val LOW = 5
