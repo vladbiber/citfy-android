@@ -44,4 +44,11 @@ class ContinentsTest {
         val merged = WorldCharts.mergeArtists(listOf(listOf(a("Drake"), a("Asake")), listOf(a("drake"), a("Rema"), a("Wegz"))), setOf("Drake"))
         assertEquals(listOf("Asake", "Rema", "Wegz", "Drake"), merged.map { it.name })
     }
+
+    @Test
+    fun regionalArtistsOutrankWorldwideStars() {
+        val chart = listOf(LastFm.Song("Global hit", "Star") to 1000L, LastFm.Song("Local hit", "Hometown Band") to 600L, LastFm.Song("Other", "Someone") to 500L)
+        val merged = WorldCharts.mergeCharts(listOf(chart), emptySet(), local = setOf("Hometown Band"), global = setOf("Star"))
+        assertEquals(listOf("Local hit", "Other", "Global hit"), merged.map { it.title })
+    }
 }

@@ -117,7 +117,7 @@ private fun Top100Card(c: Continent, onClick: () -> Unit) {
         Spacer(Modifier.width(14.dp))
         Column {
             Text(top100Name(c), style = MaterialTheme.typography.titleMedium, color = ink)
-            Text("Most played in ${c.countries.take(3).joinToString(", ")} and more", style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.85f))
+            Text("Most played in ${c.countries.take(3).joinToString(", ") { it.substringBefore(",").replace("Korea", "South Korea") }} and more", style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.85f))
         }
     }
 }

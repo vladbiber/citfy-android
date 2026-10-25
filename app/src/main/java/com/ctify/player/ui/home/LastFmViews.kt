@@ -89,7 +89,7 @@ internal fun <T> rememberLoad(key: Any, empty: T, initial: T = empty, load: susp
         value = try { load() } catch (e: CancellationException) { throw e } catch (_: Exception) { empty }
     }.value
 
-internal fun genreLabel(tag: String) = tag.split(' ', '-').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
+internal fun genreLabel(tag: String) = tag.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }  // "k-pop" -> "K-pop"
 
 /** Home's Genres row: a card with four album covers per genre. */
 @Composable

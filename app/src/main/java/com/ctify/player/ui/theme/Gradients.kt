@@ -55,7 +55,9 @@ fun LiquidBackground(modifier: Modifier = Modifier, pulse: State<Float>? = null)
     if (source != ThemeSource.DUO) return
     val s = MaterialTheme.colorScheme
     // Toned down so text on top stays readable; light mode gets pastel washes.
-    val alpha = if (isAppInDarkTheme()) 0.38f else 0.24f
+    val oilStyle = style == GradientStyle.OIL && Build.VERSION.SDK_INT >= 33
+    // oil is a picture, not a wash: it needs more body than Liquid to read as a slick
+    val alpha = if (isAppInDarkTheme()) (if (oilStyle) 0.72f else 0.38f) else (if (oilStyle) 0.42f else 0.24f)
     val one = if (pulse != null) s.primary.boosted() else s.primary
     val two = if (pulse != null) s.tertiary.boosted() else s.tertiary
     // a bad shader must not crash the app: it just falls back to Liquid
@@ -67,7 +69,7 @@ fun LiquidBackground(modifier: Modifier = Modifier, pulse: State<Float>? = null)
     Canvas(modifier) {
         // read here, in the draw phase, so each beat redraws without recomposing
         val e = pulse?.value ?: 0f
-        val al = if (pulse != null) (alpha * 1.4f + 0.18f * e).coerceAtMost(0.75f) else alpha
+        val al = if (pulse != null) (alpha * 1.4f + 0.18f * e).coerceAtMost(if (oilStyle) 0.92f else 0.75f) else alpha
         if (oil != null && Build.VERSION.SDK_INT >= 33) {
             drawRect(oil.at(size.width, size.height, flow?.value ?: 0.3f, e, al, one, two))
             return@Canvas

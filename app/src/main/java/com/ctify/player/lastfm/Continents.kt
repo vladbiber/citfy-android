@@ -49,15 +49,24 @@ object WorldCharts {
     /**
      * One chart from several: a song scores its listeners over its country's top song's, summed over
      * countries, so a big country can't drown the rest and hits shared across countries rise.
+     * Songs by the region's own artists ([local]) count triple and worldwide stars ([global]) a third,
+     * otherwise every continent's list opens with the same global hits.
      */
-    fun mergeCharts(charts: List<List<Pair<LastFm.Song, Long>>>, hidden: Set<String>, max: Int = 100): List<LastFm.Song> {
+    fun mergeCharts(
+        charts: List<List<Pair<LastFm.Song, Long>>>, hidden: Set<String>, max: Int = 100,
+        local: Set<String> = emptySet(), global: Set<String> = emptySet(),
+    ): List<LastFm.Song> {
+        val localKeys = local.mapTo(HashSet()) { RadioMixer.artistKey(it) }
+        val globalKeys = global.mapTo(HashSet()) { RadioMixer.artistKey(it) }
         val scores = LinkedHashMap<String, Pair<LastFm.Song, Double>>()
         for (chart in charts) {
             val top = (chart.maxOfOrNull { it.second } ?: continue).coerceAtLeast(1)
             for ((song, listeners) in chart) {
                 val key = RadioMixer.artistKey(song.artist) + "|" + RadioMixer.work(song.title).ifEmpty { song.title.lowercase() }
                 val old = scores[key]
-                scores[key] = (old?.first ?: song) to (old?.second ?: 0.0) + listeners.toDouble() / top
+                val a = RadioMixer.artistKey(song.artist)
+                val weight = if (a in globalKeys) 1 / 3.0 else if (a in localKeys) 3.0 else 1.0
+                scores[key] = (old?.first ?: song) to (old?.second ?: 0.0) + weight * listeners / top
             }
         }
         return HiddenArtists.filter(scores.values.sortedByDescending { it.second }.map { it.first }, hidden) { it.artist }.take(max)
@@ -76,7 +85,7 @@ object WorldCharts {
         mergeArtists(lists, global.await().mapTo(HashSet()) { it.name })
     }
 
-    private fun file(dir: File, c: Continent) = File(dir, "top100_${c.name.lowercase()}.txt")
+    private fun file(dir: File, c: Continent) = File(dir, "top100v2_${c.name.lowercase()}.txt")  // v2: regional weighting
 
     /** The saved Top 100 and whether it is over a week old; null when none is saved. */
     suspend fun cached(dir: File, c: Continent): Pair<List<LastFm.Song>, Boolean>? = withContext(Dispatchers.IO) {
@@ -88,8 +97,12 @@ object WorldCharts {
 
     /** A fresh Top 100, saved only when every country answered so an offline moment can't stick for a week. */
     suspend fun fetch(dir: File, c: Continent, hidden: Set<String>): List<LastFm.Song> = coroutineScope {
+        val global = async { orEmpty { LastFm.globalArtists() }.mapTo(HashSet()) { it.name } }
+        val local = c.countries.map { async { orEmpty { LastFm.countryArtists(it) } } }
         val charts = c.countries.map { async { orEmpty { LastFm.countryTracks(it) } } }.awaitAll()
-        val top = mergeCharts(charts, hidden)
+        val everywhere = global.await()
+        val own = local.awaitAll().flatten().map { it.name }.filterNot { it in everywhere }.toSet()
+        val top = mergeCharts(charts, hidden, local = own, global = everywhere)
         if (charts.none { it.isEmpty() }) withContext(Dispatchers.IO) {
             runCatching { file(dir, c).writeText(top.joinToString("\n") { "${it.title.oneLine()}\t${it.artist.oneLine()}" }) }
         }
