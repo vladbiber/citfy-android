@@ -74,6 +74,14 @@ import com.ctify.player.ui.home.CreatorsRow
 import com.ctify.player.ui.home.ForYouPager
 import com.ctify.player.ui.home.StarsShelf
 import com.ctify.player.ui.home.ForYouPlaceholder
+import com.ctify.player.ui.home.ContinueCard
+import com.ctify.player.ui.home.LiveRadioRow
+import com.ctify.player.ui.home.QuickPick
+import com.ctify.player.ui.home.QuickPicks
+import com.ctify.player.ui.home.RankedSongs
+import com.ctify.player.ui.home.greeting
+import com.ctify.player.ui.home.tileShape
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.shape.CircleShape
@@ -108,7 +116,10 @@ fun HomeScreen(
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val playlists by viewModel.repository.playlists.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    val recent by remember { viewModel.repository.recentlyPlayed(20) }.collectAsStateWithLifecycle(emptyList())
+    // a longer history than the shelf shows, so Rediscover can tell what wasn't played lately
+    val history by remember { viewModel.repository.recentlyPlayed(60) }.collectAsStateWithLifecycle(emptyList())
+    val recent = remember(history) { history.take(20) }
+    val liked by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val showRecent by HistoryPrefs.flow(HistoryPrefs.Key.SHOW_RECENT).collectAsStateWithLifecycle()
     val showMost by HistoryPrefs.flow(HistoryPrefs.Key.SHOW_MOST).collectAsStateWithLifecycle()
     val most by remember { viewModel.repository.mostPlayed(20) }.collectAsStateWithLifecycle(emptyList())
@@ -125,6 +136,11 @@ fun HomeScreen(
     val creators = rememberCreators(viewModel.repository, genres?.firstOrNull())
     val building by Recommendations.building.collectAsStateWithLifecycle()
     val recentPlaylists = remember(playlists) { PlaylistRecency.order(playlists) }
+    val likedTracks = remember(tracks, liked) { tracks.filter { it.id in liked } }
+    val rediscover = remember(likedTracks, history) { rediscover(likedTracks, history) }
+    val picks = quickPicks(likedTracks, recentPlaylists, history, viewModel, onOpenPage, onOpenNowPlaying)
+    // the song the player stopped on, or the last one played; hidden while something plays
+    val last = viewModel.repository.trackById(ui.currentTrackId) ?: history.firstOrNull()
 
     Box(Modifier.fillMaxSize()) {
     // Two colors: the liquid wash sits behind the header and fades out downward
@@ -150,8 +166,7 @@ fun HomeScreen(
             item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.enterStagger(i)) { content() } }
         }
         full {
-            Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                ScreenTitle("Home", Modifier.weight(1f))
+            TabTopBar(greeting()) {
                 IconButton(onClick = onSpinWheel) { Icon(Icons.Filled.Casino, "Spin the wheel", tint = TextPrimary) }
                 AddMenu(add)
                 SettingsButton(onOpenSettings)
@@ -159,15 +174,32 @@ fun HomeScreen(
         }
         full { SearchPill(onOpenSearch) }
         if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder, or search YouTube to add songs.") }
+        if (picks.size >= 2) full { QuickPicks(picks) }
+        if (last != null && !ui.isPlaying) full {
+            val mine = last.id == ui.currentTrackId
+            ContinueCard(
+                last, progress = if (mine && ui.durationMs > 0) ui.positionMs.toFloat() / ui.durationMs else 0f,
+                onResume = { if (mine) viewModel.togglePlay() else { viewModel.repository.remember(history); viewModel.playQueue(history, 0) } },
+                onOpen = { if (!mine) { viewModel.repository.remember(history); viewModel.playQueue(history, 0) }; onOpenNowPlaying() },
+            )
+        }
         if (building && shelf[Shelf.FOR_YOU].isNullOrEmpty()) full { ForYouPlaceholder() }
         shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
         if (showRecent && recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
         if (recentPlaylists.isNotEmpty()) full { PlaylistsRow(recentPlaylists, viewModel) { onOpenPage(HomePage.Playlist(it)) } }
+        full { LiveRadioRow() }
         stars.forEachIndexed { i, g -> full { StarsShelf(g, i == 0, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
-        listOf(Shelf.PLAYED, Shelf.DOWNLOADS).forEach { s ->
-            shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+        // tile sizes vary from shelf to shelf, so the page doesn't read as one long strip
+        shelf[Shelf.PLAYED]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(Shelf.PLAYED.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, tile = 168.dp) } }
+        if (rediscover.size >= 3) full {
+            TrackCarousel("Rediscover", rediscover, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, subtitle = "Songs you love that you haven't played lately")
         }
-        if (showMost && most.isNotEmpty()) full { TrackCarousel("Most played", most, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+        shelf[Shelf.DOWNLOADS]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(Shelf.DOWNLOADS.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, tile = 112.dp) } }
+        if (showMost && most.isNotEmpty()) full {
+            RankedSongs("Most played", most, ui.currentTrackId) { i ->
+                viewModel.repository.remember(most); viewModel.playQueue(most, i); onOpenNowPlaying()
+            }
+        }
         full { HeardSection() }
         if (genres == null) full { ShelfPlaceholder("Genres", 150.dp) }
         if (!genres.isNullOrEmpty()) full { GenresRow(genres) { onOpenPage(HomePage.GenrePage(it)) } }
@@ -185,7 +217,7 @@ fun HomeScreen(
     }
 }
 
-/** Looks like a search box; a tap goes to the Search tab. */
+/** Looks like a search box; a tap opens the search over Home. */
 @Composable
 private fun SearchPill(onClick: () -> Unit) {
     Row(
@@ -203,13 +235,11 @@ private fun SearchPill(onClick: () -> Unit) {
 @Composable
 private fun PlaylistsRow(playlists: List<Playlist>, viewModel: PlayerViewModel, onOpen: (String) -> Unit) {
     Column {
-        SectionHeader("Your playlists", Modifier.padding(top = 10.dp, start = 4.dp))
+        SectionHeader("Your playlists", Modifier.padding(top = 14.dp, start = 4.dp))
         Spacer(Modifier.height(8.dp))
         LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(playlists, key = { it.name }) { pl ->
-                Box(Modifier.width(140.dp)) {
-                    PlaylistCard(pl, pl.trackIds.firstNotNullOfOrNull { viewModel.repository.trackById(it) }) { onOpen(pl.name) }
-                }
+                ShapedPlaylistTile(pl, pl.trackIds.firstNotNullOfOrNull { viewModel.repository.trackById(it) }) { onOpen(pl.name) }
             }
         }
     }
@@ -217,16 +247,20 @@ private fun PlaylistsRow(playlists: List<Playlist>, viewModel: PlayerViewModel, 
 
 /** A titled row of song covers, like Home's station row; a tap plays the row from that song. */
 @Composable
-private fun TrackCarousel(title: String, list: List<Track>, context: SongContext, current: String?, viewModel: PlayerViewModel, onOpenNowPlaying: () -> Unit) {
+private fun TrackCarousel(
+    title: String, list: List<Track>, context: SongContext, current: String?, viewModel: PlayerViewModel, onOpenNowPlaying: () -> Unit,
+    tile: androidx.compose.ui.unit.Dp = 140.dp, subtitle: String? = null,
+) {
     Column {
-        SectionHeader(title, Modifier.padding(top = 10.dp, start = 4.dp))
+        SectionHeader(title, Modifier.padding(top = 14.dp, start = 4.dp))
+        subtitle?.let { Text(it, color = TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 4.dp)) }
         Spacer(Modifier.height(8.dp))
         LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             itemsIndexed(list, key = { _, t -> t.id }) { i, t ->
                 val on = t.id == current
                 Column(
                     Modifier
-                        .width(140.dp)
+                        .width(tile)
                         .clip(MaterialTheme.shapes.small)
                         .songClicks(t, context, list) {
                             // streamed songs from history may not be loaded this session
@@ -240,7 +274,7 @@ private fun TrackCarousel(title: String, list: List<Track>, context: SongContext
                         },
                 ) {
                     Box(Modifier.clip(MaterialTheme.shapes.small)) {
-                        AlbumArt(t, 140.dp, shape = MaterialTheme.shapes.small)
+                        AlbumArt(t, tile, shape = MaterialTheme.shapes.small)
                         SelectedMark(t, context)
                     }
                     Spacer(Modifier.height(6.dp))
@@ -250,4 +284,55 @@ private fun TrackCarousel(title: String, list: List<Track>, context: SongContext
             }
         }
     }
+}
+
+
+/** A playlist as a star, clover or cookie cut cover, under its name. */
+@Composable
+private fun ShapedPlaylistTile(pl: Playlist, first: Track?, onClick: () -> Unit) {
+    val shape = tileShape(pl.name)
+    Column(
+        Modifier.width(140.dp).clip(MaterialTheme.shapes.medium)
+            .clickable(role = Role.Button, onClickLabel = "open", onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = "Playlist ${pl.name}, ${songCount(pl.trackIds.size)}" }
+            .padding(4.dp),
+    ) {
+        if (pl.coverUri != null || first != null) PlaylistArt(pl, first, 132.dp, shape = shape)
+        else Box(Modifier.size(132.dp).clip(shape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(36.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(pl.name, color = TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(songCount(pl.trackIds.size), color = TextSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+    }
+}
+
+/** Liked songs missing from recent history first, then the ones played longest ago; the order changes daily. */
+private fun rediscover(liked: List<Track>, history: List<Track>): List<Track> {
+    val pos = history.withIndex().associate { it.value.id to it.index }
+    val day = java.time.LocalDate.now().toEpochDay().toInt()
+    // the ten newest plays don't count as forgotten
+    return liked.filter { (pos[it.id] ?: Int.MAX_VALUE) >= 10 }
+        .sortedWith(compareByDescending<Track> { pos[it.id] ?: Int.MAX_VALUE }.thenBy { it.id.hashCode() xor day })
+        .take(20)
+}
+
+/** Up to six tiles: liked songs, recent playlists, albums you played, then songs you played. */
+@Composable
+private fun quickPicks(
+    liked: List<Track>, playlists: List<Playlist>, history: List<Track>, viewModel: PlayerViewModel,
+    onOpenPage: (HomePage) -> Unit, onOpenNowPlaying: () -> Unit,
+): List<QuickPick> = remember(liked, playlists, history) {
+    val repo = viewModel.repository
+    fun play(list: List<Track>, i: Int) { repo.remember(list); viewModel.playQueue(list, i); onOpenNowPlaying() }
+    buildList {
+        if (liked.isNotEmpty()) add(QuickPick("Liked songs", null, liked = true) { play(liked.shuffled(), 0) })
+        playlists.take(3).forEach { pl ->
+            add(QuickPick(pl.name, pl.trackIds.firstNotNullOfOrNull { repo.trackById(it) }, playlist = pl) { onOpenPage(HomePage.Playlist(pl.name)) })
+        }
+        history.filter { it.album.isNotBlank() && it.album != "YouTube" }.distinctBy { it.album }.take(3).forEach { t ->
+            add(QuickPick(t.album, t) { onOpenPage(HomePage.Album(t.album, t.artist)) })
+        }
+        history.forEachIndexed { i, t -> if (size < 6) add(QuickPick(t.title, t) { play(history, i) }) }
+    }.take(6).let { if (it.size > 2 && it.size % 2 == 1) it.dropLast(1) else it }
 }
