@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -49,6 +50,9 @@ object Recommendations {
     val shelves: StateFlow<Map<Shelf, List<YtSong>>> = combine(_shelves, HiddenArtists.names) { all, hidden ->
         all.mapValues { (_, songs) -> HiddenArtists.filter(songs, hidden) { it.artist }.take(PER_SHELF) }
     }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
+    private val _building = MutableStateFlow(false)
+    /** True while shelves are fetched from the network, so Home can show placeholders. */
+    val building: StateFlow<Boolean> = _building.asStateFlow()
     private var savedAt = 0L
     private var triedAt = 0L
     private var loaded = false
@@ -66,7 +70,8 @@ object Recommendations {
             // offline or YouTube switched off: keep whatever is cached
             if (NetworkGate.blockReason(Feature.YOUTUBE) != null) return@launch
             triedAt = now
-            val fresh = build(repo)
+            _building.value = true
+            val fresh = try { build(repo) } finally { _building.value = false }
             if (fresh.values.any { it.isNotEmpty() }) {
                 _shelves.value = fresh
                 savedAt = now

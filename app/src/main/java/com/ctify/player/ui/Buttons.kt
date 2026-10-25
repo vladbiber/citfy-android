@@ -1,6 +1,5 @@
 package com.ctify.player.ui
 
-import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -44,7 +43,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -221,13 +219,6 @@ private fun pressMorph(src: InteractionSource, rest: Int = 50, pressed: Int = 28
     val corner by animateFloatAsState(if (down) pressed.toFloat() else rest.toFloat(), spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow), label = "corner")
     val scale by animateFloatAsState(if (down) pressedScale else 1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium), label = "scale")
     return RoundedCornerShape(corner.roundToInt()) to scale
-}
-
-/** True when the system "Remove animations" setting is on (animator duration scale 0). */
-@Composable
-fun reducedMotion(): Boolean {
-    val ctx = LocalContext.current
-    return remember { Settings.Global.getFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
 }
 
 /** Scrolls one-line text that does not fit; with animations off it stays put (keep an ellipsis overflow). */

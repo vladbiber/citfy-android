@@ -2,11 +2,17 @@ package com.ctify.player.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -169,24 +175,33 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
         },
     ) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
-            when (tab) {
-                0 -> HomeScreen(
-                    viewModel,
-                    onOpenNowPlaying = { showNowPlaying = true },
-                    onOpenPlaylist = { name -> openedPlaylist = name; tab = Tab.Library.ordinal },
-                    onSpinWheel = { showWheel = true },
-                    add = add,
-                )
-                Tab.Library.ordinal -> LibraryScreen(
-                    viewModel,
-                    add = add,
-                    openedPlaylist = openedPlaylist,
-                    onOpenPlaylist = { openedPlaylist = it },
-                    section = librarySection,
-                    onSection = { librarySection = it },
-                )
-                Tab.Radio.ordinal -> RadioScreen()
-                else -> SettingsScreen()
+            val still = reducedMotion()
+            AnimatedContent(tab, transitionSpec = {
+                // the new tab comes in from the side it sits on in the bar
+                val dir = if (targetState > initialState) 1 else -1
+                if (still) EnterTransition.None togetherWith ExitTransition.None
+                else (slideInHorizontally(standardSpring()) { dir * it / 5 } + fadeIn(fastSpring())) togetherWith
+                    (slideOutHorizontally(standardSpring()) { -dir * it / 5 } + fadeOut(fastSpring()))
+            }, label = "tab") { page ->
+                when (page) {
+                    0 -> HomeScreen(
+                        viewModel,
+                        onOpenNowPlaying = { showNowPlaying = true },
+                        onOpenPlaylist = { name -> openedPlaylist = name; tab = Tab.Library.ordinal },
+                        onSpinWheel = { showWheel = true },
+                        add = add,
+                    )
+                    Tab.Library.ordinal -> LibraryScreen(
+                        viewModel,
+                        add = add,
+                        openedPlaylist = openedPlaylist,
+                        onOpenPlaylist = { openedPlaylist = it },
+                        section = librarySection,
+                        onSection = { librarySection = it },
+                    )
+                    Tab.Radio.ordinal -> RadioScreen()
+                    else -> SettingsScreen()
+                }
             }
         }
     }

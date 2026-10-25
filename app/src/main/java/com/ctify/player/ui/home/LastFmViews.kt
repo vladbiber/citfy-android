@@ -63,6 +63,7 @@ import com.ctify.player.ui.songs.SongTarget
 import androidx.compose.foundation.combinedClickable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.ui.EmptyHint
+import com.ctify.player.ui.RowPlaceholders
 import com.ctify.player.ui.ScreenTitle
 import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.theme.Accent
@@ -78,10 +79,10 @@ sealed interface HomePage {
     data class ArtistPage(val artist: LastFm.Artist) : HomePage
 }
 
-/** Runs [load] once per [key]; failures (offline, no key) give [empty]. */
+/** Runs [load] once per [key]; [initial] until it finishes, failures (offline, no key) give [empty]. */
 @Composable
-private fun <T> rememberLoad(key: Any, empty: T, load: suspend () -> T): T =
-    produceState(empty, key) {
+private fun <T> rememberLoad(key: Any, empty: T, initial: T = empty, load: suspend () -> T): T =
+    produceState(initial, key) {
         value = try { load() } catch (e: CancellationException) { throw e } catch (_: Exception) { empty }
     }.value
 
@@ -223,7 +224,7 @@ private fun SongsPage(
         item { footer() }
         item { SectionHeader("Top songs", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }
         when {
-            songs == null -> item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Accent) } }
+            songs == null -> item { RowPlaceholders() }
             songs.isEmpty() -> item { EmptyHint("Couldn't load songs. Check the connection and try again.") }
         }
         itemsIndexed(songs.orEmpty(), key = { i, s -> "$i${s.title}" }) { i, s ->
@@ -258,21 +259,21 @@ private fun SongsPage(
 private suspend fun <T> orEmpty(load: suspend () -> List<T>): List<T> =
     try { load() } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
 
-/** Your genres first, then popular Last.fm tags; empty without a Last.fm key. */
+/** Your genres first, then popular Last.fm tags; empty without a Last.fm key, null while loading. */
 @Composable
-internal fun rememberGenres(repo: MusicRepository, radio: RadioRepository): List<String> =
+internal fun rememberGenres(repo: MusicRepository, radio: RadioRepository): List<String>? =
     if (!LastFm.enabled) emptyList()
-    else rememberLoad("genres", emptyList()) { Taste.genreRow(Taste.myGenres(repo, radio), orEmpty { LastFm.topTags() }) }
+    else rememberLoad("genres", emptyList(), initial = null) { Taste.genreRow(Taste.myGenres(repo, radio), orEmpty { LastFm.topTags() }) }
 
-/** Your most played artists, then artists similar to the top three (or a genre's top artists with no history yet). */
+/** Your most played artists, then artists similar to the top three (or a genre's top artists with no history yet); null while loading. */
 @Composable
-internal fun rememberCreators(repo: MusicRepository, firstGenre: String?): List<LastFm.Artist> {
+internal fun rememberCreators(repo: MusicRepository, firstGenre: String?): List<LastFm.Artist>? {
     if (!LastFm.enabled) return emptyList()
     val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
-    val all = rememberLoad("creators$firstGenre", emptyList()) {
+    val all = rememberLoad("creators$firstGenre", emptyList(), initial = null) {
         val mine = Taste.artists(Taste.plays(repo))
         val more = if (mine.isEmpty()) orEmpty { LastFm.tagArtists(firstGenre ?: "pop") } else mine.take(3).flatMap { a -> orEmpty { LastFm.similar(a.name) } }
         (mine + more).distinctBy { it.name.lowercase() }
     }
-    return remember(all, hidden) { HiddenArtists.filter(all, hidden) { it.name }.take(60) }
+    return remember(all, hidden) { all?.let { HiddenArtists.filter(it, hidden) { a -> a.name }.take(60) } }
 }

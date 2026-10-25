@@ -62,6 +62,10 @@ import com.ctify.player.ui.home.ArtistPage
 import com.ctify.player.ui.home.CreatorsPage
 import com.ctify.player.ui.home.CreatorsRow
 import com.ctify.player.ui.home.ForYouPager
+import com.ctify.player.ui.home.ForYouPlaceholder
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.shape.CircleShape
 import com.ctify.player.ui.home.GenrePage
 import com.ctify.player.ui.home.GenresRow
 import com.ctify.player.ui.home.HomePage
@@ -103,7 +107,8 @@ fun HomeScreen(
     }
     remember { LastFm.init(ctx) }
     val genres = rememberGenres(viewModel.repository, radioRepo())
-    val creators = rememberCreators(viewModel.repository, genres.firstOrNull())
+    val creators = rememberCreators(viewModel.repository, genres?.firstOrNull())
+    val building by Recommendations.building.collectAsStateWithLifecycle()
     val pages = remember { mutableStateListOf<HomePage>() }
     val goTo by SongSheets.goTo.collectAsStateWithLifecycle()
     LaunchedEffect(goTo) { goTo?.let { pages += it; SongSheets.goTo.value = null } }
@@ -113,7 +118,7 @@ fun HomeScreen(
         BackHandler(onBack = back)
         when (page) {
             is HomePage.GenrePage -> GenrePage(page.tag, viewModel.repository, back)
-            HomePage.Creators -> CreatorsPage(creators, open, back)
+            HomePage.Creators -> CreatorsPage(creators.orEmpty(), open, back)
             is HomePage.ArtistPage -> ArtistPage(page.artist, viewModel.repository, open, back)
         }
         return
@@ -146,7 +151,14 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            var shown = 0
+            // Home's own full(): shadows the shared one so every shelf below staggers in on first show
+            fun LazyGridScope.full(content: @Composable () -> Unit) {
+                val i = shown++
+                item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.enterStagger(i)) { content() } }
+            }
             if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder or add songs from YouTube.") }
+            if (building && shelf[Shelf.FOR_YOU].isNullOrEmpty()) full { ForYouPlaceholder() }
             shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
             full {
                 HeroCard(
@@ -161,8 +173,10 @@ fun HomeScreen(
                 shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
             }
             if (downloaded.isNotEmpty()) full { TrackCarousel("Downloaded", downloaded, SongContext.Library, ui.currentTrackId, viewModel, onOpenNowPlaying) }
-            if (genres.isNotEmpty()) full { GenresRow(genres) { pages += HomePage.GenrePage(it) } }
-            if (creators.isNotEmpty()) full { CreatorsRow(creators, onOpen = { pages += HomePage.ArtistPage(it) }, onSeeAll = { pages += HomePage.Creators }) }
+            if (genres == null) full { ShelfPlaceholder("Genres", 150.dp) }
+            if (!genres.isNullOrEmpty()) full { GenresRow(genres) { pages += HomePage.GenrePage(it) } }
+            if (creators == null) full { ShelfPlaceholder("Creators", 104.dp, CircleShape) }
+            if (!creators.isNullOrEmpty()) full { CreatorsRow(creators, onOpen = { pages += HomePage.ArtistPage(it) }, onSeeAll = { pages += HomePage.Creators }) }
             full { HomeStationRows() }
             if (playlists.isNotEmpty()) {
                 full { SectionHeader("Playlists", Modifier.padding(top = 10.dp, start = 4.dp)) }
