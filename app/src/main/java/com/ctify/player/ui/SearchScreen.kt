@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.data.Track
+import com.ctify.player.keys.typingField
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.player.PlayerViewModel
@@ -113,7 +114,7 @@ internal fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: 
     OutlinedTextField(
         value = query,
         onValueChange = onQuery,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.typingField().fillMaxWidth(),
         placeholder = { Text(placeholder, color = TextMuted) },
         leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
         trailingIcon = {

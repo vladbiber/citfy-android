@@ -68,6 +68,8 @@ import com.ctify.player.data.Backup
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.radio.RadioPrefs
+import com.ctify.player.ui.settings.KeyboardSettingsRow
+import com.ctify.player.ui.settings.KeyboardSettingsScreen
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.GradientStyle
 import com.ctify.player.ui.theme.Swatch
@@ -125,6 +127,9 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> pendingRestore = uri }
+
+    var showKeys by remember { mutableStateOf(false) }
+    if (showKeys) { KeyboardSettingsScreen(onBack = { showKeys = false }); return }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -240,6 +245,9 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
             }
 
             Column(Modifier.enterStagger(3)) {
+                SectionHeader("Keyboard", Modifier.padding(top = 24.dp, bottom = 4.dp))
+                KeyboardSettingsRow(onOpen = { showKeys = true })
+
                 SectionHeader("History", Modifier.padding(top = 24.dp, bottom = 4.dp))
                 Text(
                     "Songs you played, used for Recently played and Most played.",

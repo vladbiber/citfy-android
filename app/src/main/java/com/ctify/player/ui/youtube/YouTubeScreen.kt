@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.ctify.player.keys.typingField
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
 import com.ctify.player.player.PlayerViewModel
@@ -177,7 +178,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier.typingField().fillMaxWidth().padding(horizontal = 16.dp),
                 placeholder = { Text("Search, or paste a YouTube link") },
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 trailingIcon = {

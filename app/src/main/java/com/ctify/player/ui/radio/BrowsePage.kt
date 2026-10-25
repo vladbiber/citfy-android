@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.genre.Genre
+import com.ctify.player.keys.typingField
 import com.ctify.player.radio.CountryCount
 import com.ctify.player.radio.RadioTab
 import com.ctify.player.radio.Station
@@ -130,7 +131,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, onSubmit: () 
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.typingField().fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         placeholder = { Text("Station name", color = TextMuted) },
         leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
         trailingIcon = {
