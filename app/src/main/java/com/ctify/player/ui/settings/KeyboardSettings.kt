@@ -78,7 +78,7 @@ fun KeyboardSettingsRow(onOpen: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Keyboard", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text("Keyboard shortcuts", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Text(
                 if (on) "Shortcuts on. Change keys and screen shape" else "Shortcuts off. Physical keyboard keys and screen shape",
                 style = MaterialTheme.typography.bodyMedium,

@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -121,7 +122,8 @@ fun SelectionBar() {
     val ids = sel.tracks.map { it.id }
     val done: (() -> Unit) -> Unit = { action -> action(); Selecting.clear() }
     Surface(Modifier.fillMaxWidth(), color = SurfaceElevated, shadowElevation = 4.dp) {
-        Row(Modifier.navigationBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // as tall as the tab bar it covers
+        Row(Modifier.navigationBarsPadding().heightIn(min = 80.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = Selecting::clear) { Icon(Icons.Filled.Close, "Stop selecting", tint = TextPrimary) }
             Text("${sel.tracks.size} selected", color = TextPrimary, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
             if (sel.tracks.size < sel.pool.size) IconButton(onClick = Selecting::selectAll) { Icon(Icons.Filled.SelectAll, "Select all", tint = TextPrimary) }

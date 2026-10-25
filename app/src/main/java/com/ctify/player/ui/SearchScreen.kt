@@ -9,6 +9,8 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -293,6 +295,10 @@ internal fun SearchTab(viewModel: PlayerViewModel, add: AddActions, onOpenSettin
     val recent = remember { RecentSearches(ctx) }
     var recentList by remember { mutableStateOf(recent.all()) }
     val focus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    var fieldFocused by remember { mutableStateOf(false) }
+    // Back first leaves the box, so keyboard shortcuts work again on phones with a keyboard
+    androidx.activity.compose.BackHandler(enabled = fieldFocused) { focusManager.clearFocus() }
     var focusedOnce by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { if (!focusedOnce) { focusedOnce = true; runCatching { focus.requestFocus() } } }
     // a search counts once the user stopped typing for a while
@@ -309,7 +315,7 @@ internal fun SearchTab(viewModel: PlayerViewModel, add: AddActions, onOpenSettin
             SettingsButton(onOpenSettings)
         }
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            SearchField(query, { query = it }, "Songs, artists, albums, stations", Modifier.weight(1f).focusRequester(focus))
+            SearchField(query, { query = it }, "Songs, artists, albums, stations", Modifier.weight(1f).focusRequester(focus).onFocusChanged { fieldFocused = it.isFocused })
             SearchFilterButton(searchFilter, HOME_SCOPES) { searchFilter = it }
         }
         val q = query.trim()
