@@ -1,6 +1,7 @@
 package com.ctify.player.ui.radio
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 
 // Deep enough that a big white letter stays readable on every one.
 private val StationPalette = listOf(
@@ -9,6 +10,11 @@ private val StationPalette = listOf(
     Color(0xFF00796B), Color(0xFF2E7D32), Color(0xFF827717), Color(0xFFD84315),
 )
 
+private val TintBase = Color(0xFF26262C)
+
 /** The color a station without a picture wears, always the same for the same name. */
 fun stationColor(name: String): Color =
     StationPalette[Math.floorMod(name.trim().lowercase().hashCode(), StationPalette.size)]
+
+/** The station's color pulled toward dark grey, for list tiles; the skins keep [stationColor]. */
+fun stationTint(name: String): Color = lerp(stationColor(name), TintBase, 0.62f)

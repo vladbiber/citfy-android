@@ -16,15 +16,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryScrollableTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,10 +41,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.radio.RadioRepository
 import com.ctify.player.radio.RadioTab
 import com.ctify.player.radio.Station
-import com.ctify.player.ui.ScreenTitle
-import com.ctify.player.ui.theme.Accent
-import com.ctify.player.ui.theme.BgBlack
+import com.ctify.player.ui.PillTabs
+import com.ctify.player.ui.SettingsButton
+import com.ctify.player.ui.TabTopBar
 import com.ctify.player.ui.theme.TextMuted
+import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.wheel.StationListSource
 import com.ctify.player.ui.wheel.WheelScreen
@@ -52,9 +55,8 @@ import kotlinx.coroutines.launch
 
 private const val FIXED_PAGES = 3
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RadioScreen() {
+fun RadioScreen(onOpenWheel: () -> Unit = {}, onOpenSettings: () -> Unit = {}) {
     val radio = radioRepo()
     val tabs by radio.tabs.collectAsStateWithLifecycle(initialValue = emptyList())
     val titles = listOf("For you", "Favorites", "Browse") + tabs.map { it.title }
@@ -63,32 +65,34 @@ fun RadioScreen() {
     var editing by remember { mutableStateOf(false) }
     var settingsFor by remember { mutableStateOf<RadioTab?>(null) }
     var wheelPage by remember { mutableStateOf<Int?>(null) }
+    var menu by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ScreenTitle("Radio", Modifier.weight(1f))
-            IconButton(onClick = { wheelPage = pager.currentPage }) {
-                Icon(Icons.Filled.Casino, contentDescription = "Station wheel", tint = TextSecondary)
-            }
-            IconButton(onClick = { editing = true }) {
-                Icon(Icons.Filled.Edit, contentDescription = "Add or edit tabs", tint = TextSecondary)
-            }
-        }
-        PrimaryScrollableTabRow(
-            selectedTabIndex = pager.currentPage.coerceAtMost(titles.lastIndex),
-            containerColor = BgBlack,
-            edgePadding = 12.dp,
-        ) {
-            titles.forEachIndexed { i, t ->
-                Tab(
-                    selected = pager.currentPage == i,
-                    onClick = { scope.launch { pager.animateScrollToPage(i) } },
-                    text = { Text(t, maxLines = 1) },
-                    selectedContentColor = Accent,
-                    unselectedContentColor = TextSecondary,
-                )
+        TabTopBar("Radio", Modifier.padding(start = 8.dp, end = 4.dp, top = 12.dp)) {
+            IconButton(onClick = onOpenWheel) { Icon(Icons.Filled.Casino, "Spin the wheel", tint = TextPrimary) }
+            IconButton(onClick = { adding = true }) { Icon(Icons.Filled.Add, "Add station", tint = TextPrimary) }
+            SettingsButton(onOpenSettings)
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More radio options", tint = TextPrimary) }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Station wheel") },
+                        leadingIcon = { Icon(Icons.Filled.Radio, null) },
+                        onClick = { menu = false; wheelPage = pager.currentPage },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Add or edit tabs") },
+                        leadingIcon = { Icon(Icons.Filled.Edit, null) },
+                        onClick = { menu = false; editing = true },
+                    )
+                }
             }
         }
+        PillTabs(
+            titles, selected = pager.currentPage.coerceAtMost(titles.lastIndex),
+            onSelect = { i -> scope.launch { pager.animateScrollToPage(i) } },
+        )
         HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().weight(1f), key = { pageKey(it, tabs) }) { page ->
             when (page) {
                 0 -> ForYouPage()
@@ -98,6 +102,8 @@ fun RadioScreen() {
             }
         }
     }
+
+    if (adding) AddStationDialog(onDismiss = { adding = false })
 
     settingsFor?.let { tab ->
         TabSettingsSheet(tab, onDismiss = { settingsFor = null }, onSave = { radio.updateTab(it); settingsFor = null })
@@ -177,7 +183,7 @@ private fun ForYouPage() {
     LazyColumn(Modifier.fillMaxSize()) {
         item(key = "intro") {
             Text(
-                "The cliamp channels, then stations like the ones you play and heart.",
+                "Live channels picked for you, then stations like the ones you play and heart.",
                 color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }

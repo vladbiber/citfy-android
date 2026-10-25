@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.material3.FilterChip
+import com.ctify.player.ui.PillTabs
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -46,13 +44,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.CtifyApp
 import com.ctify.player.radio.HeardSong
-import com.ctify.player.radio.HeardLikes
 import com.ctify.player.ui.songs.SongContext
 import com.ctify.player.ui.songs.SongSheets
 import com.ctify.player.ui.songs.SongTarget
 import com.ctify.player.ui.EmptyHint
 import com.ctify.player.ui.SectionHeader
-import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import com.ctify.player.ui.youtube.HeardAction
@@ -62,8 +58,6 @@ import com.ctify.player.ui.youtube.PickSong
 import com.ctify.player.youtube.SongMatcher
 import com.ctify.player.youtube.YtSong
 import com.ctify.player.youtube.download.Downloads
-import java.text.DateFormat
-import java.util.Date
 
 /**
  * Home's "Heard on the radio": Liked / Listened tabs over a row of cover cards, with the download
@@ -87,12 +81,9 @@ internal fun HeardSection() {
             IconButton(onClick = { picking = true }) { Icon(Icons.Filled.Download, contentDescription = "Download heard songs", tint = TextSecondary) }
             TextButton(onClick = { confirmClear = true }) { Text("Clear history") }
         }
-        Row(Modifier.padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = liked, onClick = { likedTab = true }, label = { Text("Liked") })
-            FilterChip(selected = !liked, onClick = { likedTab = false }, label = { Text("Listened") })
-        }
-        Spacer(Modifier.height(8.dp))
-        if (shown.isEmpty()) EmptyHint("Tap the heart on a heard song to keep it here.")
+        PillTabs(listOf("Liked", "Listened"), if (liked) 0 else 1, onSelect = { likedTab = it == 0 })
+        Spacer(Modifier.height(4.dp))
+        if (shown.isEmpty()) EmptyHint("Open ⋮ on a heard song and add it to Liked songs to keep it here.")
         LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(shown, key = { it.id }) { HeardCard(it) }
         }
@@ -133,58 +124,67 @@ internal fun HeardSection() {
 internal fun HeardRow(song: HeardSong) {
     var play by remember { mutableStateOf(false) }
     if (play) HeardYouTube(song, HeardAction.PLAY) { play = false }
+    // same shape as a song row: cover, title, artist, ⋮
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp)
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp)
+            .clip(MaterialTheme.shapes.small)
             .combinedClickable(onClickLabel = "play from YouTube", onLongClickLabel = "more options", onLongClick = { showSheet(song) }) { play = true }
-            .padding(start = 16.dp, end = 4.dp),
+            .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(song.title, color = TextPrimary, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                listOfNotNull(song.artist, song.stationName, timeLabel(song.startedAt)).joinToString(" · "),
-                color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+        Row(
+            Modifier.weight(1f).semantics(mergeDescendants = true) {},
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AlbumArt(song.asTrack(), 50.dp, shape = MaterialTheme.shapes.small)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(song.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    song.artist ?: song.stationName,
+                    color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        HeardActions(song)
+        MoreButton(song)
     }
+}
+
+private fun HeardSong.asTrack(): Track {
+    val cover = youtubeVideoId?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }
+    return Track("h$id", title, artist.orEmpty(), title, "", cover, 0L, isDemo = false)
 }
 
 /** A heard song as a cover card; a tap plays it from YouTube. */
 @Composable
 private fun HeardCard(song: HeardSong) {
     var play by remember { mutableStateOf(false) }
-    val cover = song.youtubeVideoId?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }
     Column(Modifier.width(140.dp)) {
         Box(
             Modifier.clip(MaterialTheme.shapes.small)
                 .combinedClickable(onClickLabel = "play from YouTube", onLongClickLabel = "more options", onLongClick = { showSheet(song) }) { play = true }
                 .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(song.title, song.artist).joinToString(", by ") },
         ) {
-            AlbumArt(Track("h${song.id}", song.title, song.artist.orEmpty(), song.title, "", cover, 0L, isDemo = false), 140.dp, shape = MaterialTheme.shapes.small)
+            AlbumArt(song.asTrack(), 140.dp, shape = MaterialTheme.shapes.small)
         }
         Spacer(Modifier.height(6.dp))
-        Text(song.title, color = TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(song.artist ?: song.stationName, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Row(Modifier.align(Alignment.End)) { HeardActions(song) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(song.title, color = TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.artist ?: song.stationName, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            MoreButton(song)
+        }
     }
     if (play) HeardYouTube(song, HeardAction.PLAY) { play = false }
 }
 
-/** The heart (Liked songs) and the ⋮ that opens the song sheet. */
+/** The ⋮ that opens the song sheet, where Like lives too. */
 @Composable
-private fun HeardActions(song: HeardSong) {
-    val ctx = LocalContext.current
-    IconButton(onClick = { HeardLikes.setLiked(ctx, song, !song.liked) }) {
-        Icon(
-            if (song.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            contentDescription = if (song.liked) "Unlike" else "Like",
-            tint = if (song.liked) Accent else TextSecondary,
-        )
-    }
+private fun MoreButton(song: HeardSong) {
     IconButton(onClick = { showSheet(song) }) { Icon(Icons.Filled.MoreVert, contentDescription = "More for ${song.title}", tint = TextSecondary) }
 }
 
 private fun showSheet(song: HeardSong) = SongSheets.show(SongTarget.of(song), SongContext.Heard)
 
-private fun timeLabel(at: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(at))

@@ -59,6 +59,7 @@ import com.ctify.player.radio.StationQuery
 import com.ctify.player.radio.StationSort
 import com.ctify.player.radio.TabKind
 import com.ctify.player.radio.TagCount
+import com.ctify.player.ui.PillTabs
 import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.enterStagger
 import com.ctify.player.ui.pressFeedback
@@ -172,13 +173,7 @@ private fun BrowseHome(
 
     LazyColumn(Modifier.fillMaxSize()) {
         item(key = "sections") {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp).selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilterChip(selected = section == 0, onClick = { onSection(0) }, label = { Text("Genres") })
-                FilterChip(selected = section == 1, onClick = { onSection(1) }, label = { Text("Countries") })
-            }
+            PillTabs(listOf("Genres", "Countries"), section, onSection, Modifier.padding(horizontal = 8.dp))
         }
         if (section == 0) {
             item(key = "families") { SectionHeader("Genre families", Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp)) }
