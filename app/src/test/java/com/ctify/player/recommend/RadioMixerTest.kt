@@ -79,4 +79,12 @@ class RadioMixerTest {
         assertEquals("Band", RadioMixer.tidy(s("r", "Song - Remastered", "Band - Topic")).artist)
         assertEquals("Hello", RadioMixer.tidy(s("l", "Hello [Lyrics]", "Adele")).title)
     }
+
+    @Test
+    fun leadArtistKeepsTheFirstCredit() {
+        assertEquals("The Weeknd", RadioMixer.leadArtist("The Weeknd, Playboi Carti"))
+        assertEquals("Daft Punk", RadioMixer.leadArtist("Daft Punk feat. Pharrell"))
+        assertEquals("Adele", RadioMixer.leadArtist("Adele - Topic"))
+        assertEquals("the weeknd", RadioMixer.artistKey("The Weeknd & Ariana Grande"))
+    }
 }

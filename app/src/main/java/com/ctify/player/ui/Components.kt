@@ -26,6 +26,7 @@ import com.ctify.player.ui.theme.accentBrush
 import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.filled.CheckCircle
@@ -78,6 +79,8 @@ import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
+
+fun songCount(n: Int) = if (n == 1) "1 song" else "$n songs"
 
 fun formatMs(ms: Int): String = formatTime(ms.toLong())
 
@@ -202,7 +205,8 @@ fun TrackRow(
             .heightIn(min = 64.dp)
             .padding(horizontal = 8.dp)
             .clip(MaterialTheme.shapes.small)
-            .background(if (selected) Accent.copy(alpha = 0.18f) else if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
+            .then(if (selected) Modifier.border(1.5.dp, Accent, MaterialTheme.shapes.small) else Modifier)
             .combinedClickable(onClickLabel = "play", onLongClickLabel = "more options", onLongClick = onMore, onClick = onClick)
             .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

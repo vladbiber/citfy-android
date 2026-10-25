@@ -44,6 +44,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import com.ctify.player.ui.player.SongPlayerMenu
+import com.ctify.player.ui.player.StationPlayerMenu
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
@@ -196,7 +199,7 @@ private val InkDim: Color @Composable @ReadOnlyComposable get() = MaterialTheme.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
+fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}, onOpenPlaylist: (String) -> Unit = {}) {
     val ctx = LocalContext.current
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
@@ -208,6 +211,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
     var sleep by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
     // null while looking; fetched for the Now Playing side only, so the button can grey out early
     val lyrics by produceState<Lyrics?>(null, track?.id, state?.station == null) {
         value = track?.let(LyricsRepository::cached)
@@ -273,7 +277,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             val main: @Composable ColumnScope.() -> Unit = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                 TopPill(
-                    onRadio, onClose,
+                    onRadio, onMenu = { menu = true },
                     onSource = { toRadio ->
                         if (toRadio && !onRadio) {
                             // the most recent station first, so next/previous walk the history
@@ -422,6 +426,11 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}) {
             onDismiss = { picker = false },
         )
     }
+    if (menu) {
+        val station = state?.station
+        if (station != null) StationPlayerMenu(station, onDismiss = { menu = false })
+        else track?.let { SongPlayerMenu(it, onOpenPlaylist = { name -> onClose(); onOpenPlaylist(name) }, onDismiss = { menu = false }) } ?: run { menu = false }
+    }
     if (sleep) {
         ModalBottomSheet(
             onDismissRequest = { sleep = false },
@@ -531,10 +540,10 @@ private fun LyricsButton(lyrics: Lyrics?, on: Boolean, accent: Color, onToggle: 
 }
 
 @Composable
-private fun TopPill(onRadio: Boolean, onClose: () -> Unit, onSource: (radio: Boolean) -> Unit, onSound: () -> Unit) {
+private fun TopPill(onRadio: Boolean, onMenu: () -> Unit, onSource: (radio: Boolean) -> Unit, onSound: () -> Unit) {
     Surface(color = Glass, shape = CircleShape) {
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            CtIconButton(Icons.Default.KeyboardArrowDown, "Close player", onClose)
+            CtIconButton(Icons.Default.MoreVert, if (onRadio) "Station menu" else "Song menu", onMenu)
             Row(Modifier.selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
                 listOf(false to "Now Playing", true to "Radio").forEach { (radio, label) ->
                     val on = radio == onRadio

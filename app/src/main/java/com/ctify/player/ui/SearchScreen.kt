@@ -181,7 +181,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
             header("Your albums")
             if (localAlbums.isEmpty()) note("No albums in your library match \"$q\"")
             items(localAlbums, key = { "la" + it.first().album }) { list ->
-                CardRow(list.firstNotNullOfOrNull { it.coverUri }, list.first().album, "${list.first().artist} · ${list.size} songs") {
+                CardRow(list.firstNotNullOfOrNull { it.coverUri }, list.first().album, "${list.first().artist} · ${songCount(list.size)}") {
                     viewModel.playQueue(list, 0)
                 }
             }

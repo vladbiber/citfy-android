@@ -1,5 +1,7 @@
 package com.ctify.player.ui.songs
 
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import com.ctify.player.recommend.RadioMixer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
@@ -23,7 +25,6 @@ import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Queue
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.VerticalAlignTop
@@ -135,7 +136,7 @@ fun SongSheet(
             val t = track
             if (t != null) {
                 SheetRow(Icons.Filled.SkipNext, "Play next") { done { repo.remember(listOf(t)); PlayerHub.playNext(t.id) } }
-                SheetRow(Icons.Filled.Queue, "Add to queue") { done { repo.remember(listOf(t)); PlayerHub.addToQueue(t.id) } }
+                SheetRow(Icons.AutoMirrored.Filled.PlaylistPlay, "Add to queue") { done { repo.remember(listOf(t)); PlayerHub.addToQueue(t.id) } }
             }
             when {
                 heard != null -> LikeRow(heard.liked) { done { HeardLikes.setLiked(ctx, heard, !heard.liked) } }
@@ -165,7 +166,8 @@ fun SongSheet(
             genreTag?.let { tag -> SheetRow(Icons.Filled.Category, "Go to genre", genreLabel(tag)) { done { SongSheets.goTo.value = HomePage.GenrePage(tag) } } }
             if (onSelect != null && target is SongTarget.Song) SheetRow(Icons.Filled.CheckCircle, "Select") { done(onSelect) }
             if (context == SongContext.Recommended && artist != null) {
-                SheetRow(Icons.Filled.PersonOff, "Hide artist", "No more $artist in your recommendations") { done { SongActions.hideArtist(artist) } }
+                val lead = RadioMixer.leadArtist(artist)
+                SheetRow(Icons.Filled.PersonOff, "Hide $lead", "No more $lead in your recommendations") { done { SongActions.hideArtist(lead) } }
             }
             if (heard != null) FindOn(heard)
 
@@ -208,7 +210,7 @@ private fun FindOn(heard: com.ctify.player.radio.HeardSong) {
 }
 
 @Composable
-private fun SheetRow(
+internal fun SheetRow(
     icon: ImageVector,
     label: String,
     sub: String? = null,
@@ -223,7 +225,7 @@ private fun SheetRow(
         Icon(icon, null, tint = tint)
         Spacer(Modifier.width(16.dp))
         Column {
-            Text(label, color = color, fontWeight = FontWeight.SemiBold)
+            Text(label, color = color, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (sub != null) Text(sub, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }

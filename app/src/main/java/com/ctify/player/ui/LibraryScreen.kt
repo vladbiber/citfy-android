@@ -119,7 +119,7 @@ internal fun PlaylistCard(playlist: Playlist, firstTrack: Track?, onClick: () ->
             .clip(MaterialTheme.shapes.medium)
             .clickable(role = Role.Button, onClickLabel = "open", onClick = onClick)
             .semantics(mergeDescendants = true) {
-                contentDescription = "Playlist ${playlist.name}, ${playlist.trackIds.size} songs"
+                contentDescription = "Playlist ${playlist.name}, ${songCount(playlist.trackIds.size)}"
             }
             .padding(4.dp),
     ) {
@@ -133,7 +133,7 @@ internal fun PlaylistCard(playlist: Playlist, firstTrack: Track?, onClick: () ->
         }
         Spacer(Modifier.height(8.dp))
         Text(playlist.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text("${playlist.trackIds.size} songs", color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        Text("${songCount(playlist.trackIds.size)}", color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
 
@@ -404,7 +404,7 @@ private fun PlaylistDetail(
                     name, color = TextPrimary, style = MaterialTheme.typography.headlineMedium, maxLines = 2,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() },
                 )
-                Text("Playlist · ${plTracks.size} songs", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
+                Text("Playlist · ${songCount(plTracks.size)}", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = { viewModel.playQueue(plTracks, 0) }, enabled = plTracks.isNotEmpty()) {

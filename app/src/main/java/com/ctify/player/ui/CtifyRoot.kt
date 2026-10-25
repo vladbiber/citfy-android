@@ -257,7 +257,11 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
         ) {
             CompositionLocalProvider(LocalPlayerVisibility provides this@AnimatedVisibility) {
-                PlayerContent(onClose = { showNowPlaying = false }, onOpenRadio = { showNowPlaying = false; tab = Tab.Radio.ordinal })
+                PlayerContent(
+                    onClose = { showNowPlaying = false },
+                    onOpenRadio = { showNowPlaying = false; tab = Tab.Radio.ordinal },
+                    onOpenPlaylist = { name -> openedPlaylist = name; tab = Tab.Library.ordinal },
+                )
             }
         }
     }

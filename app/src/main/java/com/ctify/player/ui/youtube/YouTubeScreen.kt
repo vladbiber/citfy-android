@@ -1,5 +1,6 @@
 package com.ctify.player.ui.youtube
 
+import com.ctify.player.ui.songCount
 import android.content.ClipboardManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -148,7 +149,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
     fun save(list: List<YtSong>) {
         val tracks = list.map { it.toTrack() }
         viewModel.repository.saveStreamed(tracks)
-        Snack.show(if (list.size == 1) "Saved to your library · plays online" else "${list.size} songs saved to your library · they play online") {
+        Snack.show(if (list.size == 1) "Saved to your library · plays online" else "${songCount(list.size)} saved to your library · they play online") {
             viewModel.repository.removeStreamed(tracks.map { it.id })
         }
     }
@@ -247,7 +248,7 @@ private fun AlbumDetail(album: YtAlbum, onPlay: (Int) -> Unit, onDownload: () ->
                 Column(Modifier.weight(1f)) {
                     Text(album.title, color = TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(album.artist, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
-                    Text("${album.songs.size} songs", color = TextMuted, style = MaterialTheme.typography.labelSmall)
+                    Text("${songCount(album.songs.size)}", color = TextMuted, style = MaterialTheme.typography.labelSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                         FilledTonalButton(onClick = { onPlay(0) }, enabled = album.songs.isNotEmpty()) { Text("Play") }
                         FilledTonalButton(onClick = onSave, enabled = album.songs.isNotEmpty()) { Text("Save") }

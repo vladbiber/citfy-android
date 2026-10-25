@@ -30,9 +30,12 @@ object RadioMixer {
 
     fun isVersion(title: String) = VERSION.containsMatchIn(title)
 
-    /** First credited artist, lower case: "A feat. B", "A & B" and "A, B" all give "a". */
-    fun artistKey(artist: String): String =
-        artist.lowercase().split(Regex(",|&| x | feat\\.? | ft\\.? | and ")).first().removeSuffix(" - topic").trim()
+    /** First credited artist as written: "A feat. B", "A & B" and "A, B" all give "A". */
+    fun leadArtist(artist: String): String =
+        artist.split(Regex(",|&| x | feat\\.? | ft\\.? | and ", RegexOption.IGNORE_CASE)).first().trim().removeSuffix(" - Topic").trim()
+
+    /** [leadArtist], lower case, for matching. */
+    fun artistKey(artist: String): String = leadArtist(artist).lowercase().removeSuffix(" - topic").trim()
 
     /** Same title and artist, or the same title where one of them is a cover, live, remix... */
     fun sameWork(a: YtSong, b: YtSong): Boolean {
