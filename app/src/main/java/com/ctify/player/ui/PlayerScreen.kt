@@ -60,6 +60,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -349,8 +350,11 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}, onOpenPlayl
                     }
                     }
                 }
-                ControlCard(live, accent, seekBar = visualizer != null || skin != Skin.TAPE && skin != Skin.COVER, fill = fill, onSleep = { sleep = true })
-                SoundStrip(accent, onSkin = { picker = true }, onPanel = { panel = it })
+                ControlCard(
+                    live, accent, seekBar = visualizer != null || skin != Skin.TAPE && skin != Skin.COVER, fill = fill,
+                    onSleep = { sleep = true }, onMore = { panel = ChipPanel.MORE },
+                )
+                SoundStrip(accent, radio = state?.station != null, onSkin = { picker = true }, onPanel = { panel = it })
             }
             val pad = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             // one rhythm between pill, stage, controls and strip
@@ -384,10 +388,12 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}, onOpenPlayl
     if (sheet) {
         ModalBottomSheet(
             onDismissRequest = { sheet = false },
+            // every sound setting is a long scroll, so it opens tall
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
-            SoundSheet()
+            SoundSheet(radio = state?.station != null)
         }
     }
     panel?.let { p ->
@@ -396,7 +402,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}, onOpenPlayl
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
-            ChipPanelSheet(p)
+            ChipPanelSheet(p, radio = state?.station != null, onEqualizer = { panel = null; sheet = true })
         }
     }
     if (picker) {
@@ -573,7 +579,7 @@ private fun TopPill(onRadio: Boolean, onMenu: () -> Unit, onSource: (radio: Bool
 
 /** What the sound is doing right now; each chip opens only its own control. */
 @Composable
-private fun SoundStrip(accent: Color, onSkin: () -> Unit, onPanel: (ChipPanel) -> Unit) {
+private fun SoundStrip(accent: Color, radio: Boolean, onSkin: () -> Unit, onPanel: (ChipPanel) -> Unit) {
     val rate by PlayerHub.rate.collectAsState()
     val reverb by PlayerHub.reverb.collectAsState()
     val bass by PlayerHub.bassGain.collectAsState()
@@ -603,7 +609,8 @@ private fun SoundStrip(accent: Color, onSkin: () -> Unit, onPanel: (ChipPanel) -
         StripChip(if (space == "off") "Space" else "Space · $space", null, space != "off", accent) { onPanel(ChipPanel.SPACE) }
         StripChip(
             if (preparing) "Reverse: decoding…" else "More", Icons.Default.MoreHoriz,
-            v.on || rain != RainPreset.OFF || reversed, accent, description = "Rain, vinyl and reverse",
+            !radio && (v.on || reversed) || rain != RainPreset.OFF, accent,
+            description = if (radio) "Equalizer and rain" else "Equalizer, rain, vinyl and reverse",
         ) { onPanel(ChipPanel.MORE) }
     }
 }
@@ -663,7 +670,7 @@ private fun SeekRow(live: LiveProgress, accent: Color, modifier: Modifier, fill:
 }
 
 @Composable
-private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onSleep: () -> Unit) {
+private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fill: Brush?, onSleep: () -> Unit, onMore: () -> Unit) {
     val state by PlayerHub.playback.collectAsState()
     val track = state?.track
     val station = state?.station
@@ -703,6 +710,8 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                     Icons.Default.Bedtime, sleepLeft?.let { "Sleep timer, pausing $it" } ?: "Sleep timer", onSleep,
                     tint = if (sleepLeft != null) accent else Ink,
                 )
+                // the radio card has room, and the strip's More chip is easy to miss at the end of its scroll
+                if (station != null) CtIconButton(Icons.Default.MoreHoriz, "More sound settings", onMore)
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

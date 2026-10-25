@@ -25,12 +25,12 @@ import com.ctify.player.ui.TuningSection
 import com.ctify.player.ui.VinylSection
 import com.ctify.player.ui.enterStagger
 
-/** Every sound setting, top to bottom: suggestion, genre presets, effects, then headphones, hi-fi, EQ. */
+/** Every sound setting, top to bottom: suggestion, genre presets, effects, then headphones, hi-fi, EQ; [radio] leaves out vinyl and reverse. */
 @Composable
-fun SoundTab(modifier: Modifier = Modifier) {
+fun SoundTab(modifier: Modifier = Modifier, radio: Boolean = false) {
     val context = LocalContext.current
     remember { SoundEngine.init(context) }
-    val sections = listOf<@Composable () -> Unit>(
+    val sections = listOfNotNull<@Composable () -> Unit>(
         { SuggestionCard() },
         { GenrePresetsRow() },
         { SectionHeader("Effects", Modifier.padding(top = 4.dp)) },
@@ -40,8 +40,8 @@ fun SoundTab(modifier: Modifier = Modifier) {
         { TuningSection() },
         { SpaceSection() },
         { RainSection() },
-        { VinylSection() },
-        { ReverseSection() },
+        if (radio) null else { { VinylSection() } },
+        if (radio) null else { { ReverseSection() } },
         { EffectRangeSection() },
         { ResetFxButton() },
         { HorizontalDivider() },
