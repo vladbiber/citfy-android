@@ -1,6 +1,16 @@
 package com.ctify.player.ui.home
 
+import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.ctify.player.ui.art.ArtistArt
+import com.ctify.player.ui.art.coverTones
+import com.ctify.player.ui.art.rememberArtistPhoto
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,15 +67,15 @@ import kotlinx.coroutines.launch
 internal fun ArtistPage(artist: LastFm.Artist, repo: MusicRepository, onOpen: (HomePage) -> Unit, onBack: () -> Unit) {
     val tracks by repo.tracks.collectAsStateWithLifecycle()
     val mine = remember(tracks, artist.name) { tracks.filter { artistMatches(it.artist, artist.name) } }
+    val covers = remember(mine) { mine.mapNotNull { it.coverUri }.distinct().take(4) }
     val albums = remember(mine) { mine.groupBy { it.album }.filterKeys { it.isNotBlank() && it != "YouTube" && it != "Imported" } }
     val top = if (LastFm.enabled) rememberLoad(artist.name, null as List<LastFm.Song>?) { LastFm.artistTracks(artist.name) } else emptyList()
     val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
     val similar = if (LastFm.enabled) HiddenArtists.filter(rememberLoad(artist.name, emptyList()) { LastFm.similar(artist.name) }, hidden) { it.name } else emptyList()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-        item { PageTop(artist.name, onBack) }
         item {
-            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Avatar(artist, 140.dp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                ArtistHeader(artist, covers, onBack)
                 Spacer(Modifier.height(12.dp))
                 PlayShuffleRow(mine, repo)
                 if (mine.isEmpty()) Text("None of your songs are by ${artist.name} yet", color = TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
@@ -91,6 +101,30 @@ internal fun ArtistPage(artist: LastFm.Artist, repo: MusicRepository, onOpen: (H
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(similar, key = { it.name }) { ArtistTile(it, 96.dp) { a -> onOpen(HomePage.ArtistPage(a)) } }
                 }
+            }
+        }
+    }
+}
+
+/** The artist big in a cookie over a blurred copy of the same picture, with Back and the name on top. */
+@Composable
+private fun ArtistHeader(artist: LastFm.Artist, covers: List<String>, onBack: () -> Unit) {
+    val photo = rememberArtistPhoto(artist.name)
+    val backdrop = photo ?: covers.firstOrNull() ?: artist.image
+    val bg = MaterialTheme.colorScheme.background
+    val blurry = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    Box(Modifier.fillMaxWidth().height(320.dp)) {
+        if (backdrop != null) AsyncImage(
+            backdrop, null, contentScale = ContentScale.Crop,
+            modifier = Modifier.matchParentSize()
+                .then(if (blurry) Modifier.blur(48.dp) else Modifier)
+                .graphicsLayer { alpha = if (blurry) 0.75f else 0.35f },
+        ) else Box(Modifier.matchParentSize().background(coverTones(artist.name).paper.copy(alpha = 0.6f)))
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(bg.copy(alpha = 0.35f), bg.copy(alpha = 0.55f), bg))))
+        Column(Modifier.fillMaxWidth()) {
+            PageTop(artist.name, onBack)
+            Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                ArtistArt(artist.name, photo, covers.ifEmpty { listOfNotNull(artist.image) }, size = 200.dp, lookUp = false)
             }
         }
     }
