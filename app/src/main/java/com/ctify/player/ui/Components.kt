@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import com.ctify.player.data.Track
 import com.ctify.player.ui.radio.LiveBadge
+import com.ctify.player.ui.radio.StationArt
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
@@ -337,7 +338,9 @@ fun MiniPlayer(
             // a fixed slot, so the row keeps its layout while the cover is away in the player
             Box(Modifier.size(44.dp)) {
                 androidx.compose.animation.AnimatedVisibility(!playerOpen, enter = fadeIn(), exit = fadeOut()) {
-                    AlbumArt(track, 44.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.sharedCover(this).size(44.dp))
+                    // radio: the Track's album is the station name
+                    if (isLive) StationArt(track.album, track.coverUri, 44.dp, MaterialTheme.shapes.small, Modifier.sharedCover(this).size(44.dp))
+                    else AlbumArt(track, 44.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.sharedCover(this).size(44.dp))
                 }
             }
             Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {

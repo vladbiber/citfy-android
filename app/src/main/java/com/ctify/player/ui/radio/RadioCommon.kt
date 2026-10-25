@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -299,17 +300,27 @@ internal fun StationRow(
 
 /** The station logo, or a radio icon when there is none or it fails to load. */
 @Composable
-internal fun StationArt(station: Station, size: Dp, shape: Shape = MaterialTheme.shapes.small) {
+internal fun StationArt(station: Station, size: Dp, shape: Shape = MaterialTheme.shapes.small) =
+    StationArt(station.name, station.favicon, size, shape)
+
+/** The station's favicon; without one (or while it loads or fails) a color from the name with its first letter. */
+@Composable
+internal fun StationArt(name: String, favicon: String?, size: Dp, shape: Shape = MaterialTheme.shapes.small, modifier: Modifier = Modifier.size(size)) {
     Box(
-        Modifier.size(size).clip(shape).background(SurfaceElevated),
+        modifier.clip(shape).background(SurfaceElevated),
         contentAlignment = Alignment.Center,
     ) {
         val fallback = @Composable {
-            Icon(Icons.Filled.Radio, null, tint = TextSecondary, modifier = Modifier.size(size / 2.4f))
+            Box(Modifier.fillMaxSize().background(stationColor(name)), contentAlignment = Alignment.Center) {
+                Text(
+                    name.trim().take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold,
+                    fontSize = with(LocalDensity.current) { (size * 0.42f).toSp() },
+                )
+            }
         }
-        if (station.favicon != null) {
+        if (favicon != null) {
             SubcomposeAsyncImage(
-                model = station.favicon,
+                model = favicon,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

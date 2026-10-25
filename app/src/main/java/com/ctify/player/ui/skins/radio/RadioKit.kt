@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -30,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.ctify.player.ui.radio.stationColor
 import com.ctify.player.ui.skins.TAU
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -56,6 +56,7 @@ internal class RadioScene(
     /** a stable dial spot (and preset) per station, so the needle doesn't wander between visits */
     val tuning = (station.hashCode() and 0x7fffffff) % 1000 / 1000f
     val initial = station.trim().take(1).uppercase()
+    val color = stationColor(station)
 }
 
 /**
@@ -199,23 +200,14 @@ internal fun DrawScope.playGlyph(c: Offset, s: Float, playing: Boolean, color: C
 internal fun DrawScope.centered(t: TextLayoutResult, c: Offset) =
     drawText(t, topLeft = Offset(c.x - t.size.width / 2f, c.y - t.size.height / 2f))
 
-/** The accent's hue turned a third of the way round, for the two-colour fallback cover. */
-private fun turned(c: Color): Color {
-    val hsv = FloatArray(3)
-    android.graphics.Color.colorToHSV(c.toArgb(), hsv)
-    hsv[0] = (hsv[0] + 120f) % 360f
-    hsv[1] = hsv[1].coerceAtLeast(0.45f); hsv[2] = hsv[2].coerceAtLeast(0.7f)
-    return Color(android.graphics.Color.HSVToColor(hsv))
-}
-
 /**
- * Station art filling [r] (cropped to fill, like the cover skin). With no art it's a two-colour
- * gradient from the accent with the station's initial, the way songs without covers look.
+ * Station art filling [r] (cropped to fill, like the cover skin). With no art it's the station's
+ * color ([RadioScene.color]) with its initial, the way stations look everywhere else.
  */
-internal fun DrawScope.art(r: Rect, art: Painter?, initial: TextLayoutResult?, accent: Color, round: Boolean = false, initialAt: Offset = r.center) {
+internal fun DrawScope.art(r: Rect, art: Painter?, initial: TextLayoutResult?, fill: Color, round: Boolean = false, initialAt: Offset = r.center) {
     val shape = Path().apply { if (round) addOval(r) else addRoundRect(androidx.compose.ui.geometry.RoundRect(r, CornerRadius(r.width * 0.04f))) }
     clipPath(shape) {
-        drawRect(Brush.linearGradient(listOf(accent, turned(accent)), r.topLeft, r.bottomRight), r.topLeft, r.size)
+        drawRect(fill, r.topLeft, r.size)
         if (art != null) {
             val i = art.intrinsicSize
             val k = if (i.isSpecified && i.width > 0f && i.height > 0f) maxOf(r.width / i.width, r.height / i.height) else 0f

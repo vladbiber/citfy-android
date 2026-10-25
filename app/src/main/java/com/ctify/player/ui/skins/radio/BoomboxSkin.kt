@@ -65,7 +65,7 @@ internal fun CacheDrawScope.boombox(s: RadioScene): DrawResult {
         screen.draw(this, s.playing, t)
         // the station's art sits where the cassette door would be, with the cover skin's shadow
         drawRoundRect(Color.Black.copy(alpha = 0.3f), cover.topLeft + Offset(0f, side * 0.03f), cover.size, CornerRadius(side * 0.04f))
-        art(cover, s.art, initial, s.accent)
+        art(cover, s.art, initial, s.color)
         val face = flatKey(key, s.pressed)
         playGlyph(face.center, face.height * 0.2f, s.playing)
     }

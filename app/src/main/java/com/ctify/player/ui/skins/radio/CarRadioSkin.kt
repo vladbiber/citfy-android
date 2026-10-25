@@ -48,7 +48,7 @@ internal fun CacheDrawScope.carRadio(s: RadioScene): DrawResult {
     return onDrawBehind {
         drawLayer(back)
         screen.draw(this, s.playing, s.t())
-        art(cover, s.art, initial, s.accent)
+        art(cover, s.art, initial, s.color)
         val cap = flatKey(key, s.pressed)
         playGlyph(cap.center, cap.height * 0.2f, s.playing)
     }

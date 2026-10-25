@@ -50,7 +50,7 @@ internal fun CacheDrawScope.miniDisc(s: RadioScene): DrawResult {
         val t = s.t()
         rotate(if (s.playing) t * 360f * 4 else 0f, dc) {
             // the letter sits above the hub, like a printed disc label
-            art(disc, s.art, initial, s.accent, round = true, initialAt = dc - Offset(0f, dr * 0.5f))
+            art(disc, s.art, initial, s.color, round = true, initialAt = dc - Offset(0f, dr * 0.5f))
             drawCircle(Color.White.copy(alpha = 0.25f), dr, dc, style = Stroke(px))
         }
         // the hub stays put
