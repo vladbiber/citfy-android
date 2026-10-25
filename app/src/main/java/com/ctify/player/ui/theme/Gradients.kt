@@ -63,9 +63,12 @@ fun LiquidBackground(
     coverColors: List<Color>? = null,
     fadeOut: Float? = null,
     bottomScrim: Float = if (fadeOut == null) 0.45f else 0f,
+    coverBehind: Boolean = true,
 ) {
     val style by Appearance.gradient.collectAsState()
     if (style == GradientStyle.OFF) return
+    // the player's blurred cover shows through; places without a cover get the fade
+    if (style == GradientStyle.ALBUM && coverBehind) return
     val source by Appearance.dyeColors.collectAsState()
     val strength by Appearance.dyeStrength.collectAsState()
     val s = MaterialTheme.colorScheme

@@ -19,6 +19,7 @@ import com.ctify.player.ui.ReverbSection
 import com.ctify.player.ui.ReverseSection
 import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.SpaceSection
+import com.ctify.player.ui.ModeSection
 import com.ctify.player.ui.SpeedSection
 import com.ctify.player.ui.TuningSection
 import com.ctify.player.ui.VinylSection
@@ -30,6 +31,7 @@ fun SoundTab(modifier: Modifier = Modifier, radio: Boolean = false) {
     val context = LocalContext.current
     remember { SoundEngine.init(context) }
     val sections = listOfNotNull<@Composable () -> Unit>(
+        { ModeSection() },
         { PresetStatus() },
         { GenrePresetsRow() },
         { SpeedSection() },

@@ -1,5 +1,8 @@
 package com.ctify.player.ui
 
+import androidx.compose.material.icons.filled.AutoAwesome
+import com.ctify.player.player.fx.Moods
+import com.ctify.player.player.fx.Mood
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -60,6 +63,28 @@ internal fun EffectRangeSection() {
         )
     }
 }
+
+/** Normal, Evil, Godly or both at once; the same switches as Settings > Look. */
+@Composable
+internal fun ModeSection() {
+    val mood by Moods.mood.collectAsState()
+    Section(Icons.Default.AutoAwesome, "Mode", MODE_LABELS.getValue(mood)) {
+        ChipRow {
+            MODE_LABELS.forEach { (m, label) ->
+                FilterChip(
+                    selected = mood == m,
+                    onClick = {
+                        Moods.setEvil(m == Mood.EVIL || m == Mood.GOOD_EVIL)
+                        Moods.setGodly(m == Mood.GODLY || m == Mood.GOOD_EVIL)
+                    },
+                    label = { Text(label) },
+                )
+            }
+        }
+    }
+}
+
+private val MODE_LABELS = linkedMapOf(Mood.NORMAL to "Normal", Mood.EVIL to "Evil", Mood.GODLY to "Godly", Mood.GOOD_EVIL to "Good & Evil")
 
 @Composable
 internal fun SpeedSection() {

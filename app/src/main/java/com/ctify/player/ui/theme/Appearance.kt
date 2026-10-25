@@ -11,7 +11,7 @@ enum class ThemeSource(val label: String) { WALLPAPER("Wallpaper"), CTIFY_BLUE("
 /** The backdrop behind Home's header and the player; tie-dye needs Android 13 shaders, older phones get Fade. */
 enum class GradientStyle(val label: String, val dyed: Boolean = true) {
     SPIRAL("Spiral"), BULLSEYE("Bullseye"), CRUMPLE("Crumple"), ICE("Ice dye"), CHEVRON("Chevron"),
-    FADE("Fade", false), OFF("Off", false),
+    ALBUM("Album art", false), FADE("Fade", false), OFF("Off", false),
 }
 
 /** Where the tie-dye takes its three dyes from. */

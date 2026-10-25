@@ -151,6 +151,7 @@ fun HomeScreen(
                 drawContent()
                 drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent)), blendMode = BlendMode.DstIn)
             },
+        coverBehind = false,
     )
     LazyVerticalGrid(
         columns = GridCells.Adaptive(150.dp),
