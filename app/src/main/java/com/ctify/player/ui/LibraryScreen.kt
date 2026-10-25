@@ -87,6 +87,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.data.Playlist
 import com.ctify.player.data.Track
 import com.ctify.player.player.PlayerViewModel
+import com.ctify.player.recommend.HiddenArtists
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
@@ -217,6 +218,10 @@ fun LibraryScreen(
     // one query for every section and the opened playlist
     var query by rememberSaveable { mutableStateOf("") }
     val q = query.trim()
+    var libFilter by rememberSaveable { mutableStateOf(SongFilter()) }
+    val (likedFilter, setLikedFilter) = rememberSavedFilter(SavedFilters.LIKED)
+    val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
+    val likedPlays = rememberPlayOrder(viewModel.repository, section == 1 && likedFilter.sort == SongSort.PLAYS)
 
     val opened = openedPlaylist?.takeIf { name -> playlists.any { it.name == name } }
     if (opened != null) {
@@ -237,7 +242,16 @@ fun LibraryScreen(
                 AddMenu(add, onNewPlaylist = { showCreate = true })
             }
         }
-        full { SearchField(query, { query = it }, "Search songs, liked songs and playlists", Modifier.padding(horizontal = 8.dp)) }
+        full {
+            Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SearchField(query, { query = it }, "Search songs, liked songs and playlists", Modifier.weight(1f))
+                // each song tab has its own modifiers; playlists have none, so the field keeps the full width there
+                when (section) {
+                    0 -> FilterButton(libFilter.active, onReset = { libFilter = SongFilter() }) { SearchSongOptions(libFilter) { libFilter = it } }
+                    1 -> FilterButton(likedFilter.active, onReset = { setLikedFilter(SongFilter()) }) { PlaylistOptions(likedFilter, setLikedFilter, liked = true) }
+                }
+            }
+        }
         full {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).selectableGroup(),
@@ -251,16 +265,17 @@ fun LibraryScreen(
 
         when (section) {
             0 -> {
-                val shown = if (q.isEmpty()) tracks else tracks.filter { it.matches(q) }
+                val shown = libFilter.apply(tracks, q, favorites)
                 if (tracks.isEmpty()) full { EmptyHint("No music yet. Tap + to import a folder or a song.") }
-                else if (shown.isEmpty()) full { EmptyHint("No songs match \"$q\"") }
+                else if (shown.isEmpty()) full { EmptyHint(if (q.isEmpty()) "No songs match these filters" else "No songs match \"$q\"") }
                 shown.forEach { t ->
                     full { SongRow(t, SongContext.Library, shown, onPlay = { viewModel.playQueue(shown, shown.indexOf(t)) }) }
                 }
             }
             1 -> {
                 val allFavs = tracks.filter { it.id in favorites }
-                val favs = if (q.isEmpty()) allFavs else allFavs.filter { it.matches(q) }
+                val listed = likedFilter.apply(allFavs, liked = favorites, hidden = hidden, added = favorites.toList(), plays = likedPlays)
+                val favs = if (q.isEmpty()) listed else listed.filter { it.matches(q) }
                 // local files are already on the phone; only YouTube streams need saving
                 val streamed = allFavs.filter { it.isStreamed() }
                 if (streamed.isNotEmpty()) full {
@@ -278,7 +293,7 @@ fun LibraryScreen(
                     }
                 }
                 if (allFavs.isEmpty()) full { EmptyHint("Tap the heart on a song to save it here.") }
-                else if (favs.isEmpty()) full { EmptyHint("No liked songs match \"$q\"") }
+                else if (favs.isEmpty()) full { EmptyHint(if (q.isEmpty()) "No liked songs match these filters" else "No liked songs match \"$q\"") }
                 favs.forEach { t ->
                     full { SongRow(t, SongContext.Favorites, favs, onPlay = { viewModel.playQueue(favs, favs.indexOf(t)) }) }
                 }
@@ -337,7 +352,15 @@ private fun PlaylistDetail(
     val name = playlist.name
     val plTracks = viewModel.repository.playlistTracks(name)
     val q = query.trim()
-    val shown = if (q.isEmpty()) plTracks else plTracks.filter { it.matches(q) }
+    val ctx = LocalContext.current
+    val filterKey = SavedFilters.playlistKey(name)
+    val (filter, setFilter) = rememberSavedFilter(filterKey)
+    val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
+    val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
+    val plays = rememberPlayOrder(viewModel.repository, filter.sort == SongSort.PLAYS)
+    // shortcut: Date added is the playlist position, so after a manual reorder it follows that; store add times if asked
+    val listed = filter.apply(plTracks, liked = favorites, hidden = hidden, added = playlist.trackIds, plays = plays)
+    val shown = if (q.isEmpty()) listed else listed.filter { it.matches(q) }
     val dlStates = rememberDownloadStates()
     val grid = rememberLazyGridState()
     // the dragged row follows the finger: its top when the drag began plus how far it moved
@@ -380,7 +403,10 @@ private fun PlaylistDetail(
                         DropdownMenuItem(
                             text = { Text("Change order", color = TextPrimary) },
                             leadingIcon = { Icon(Icons.Filled.SwapVert, null, tint = TextSecondary) },
-                            onClick = { showPlMenu = false; reordering = true },
+                            onClick = {
+                                showPlMenu = false
+                                if (filter.sort == SongSort.CUSTOM) reordering = true else Snack.show("Sort by custom order to drag songs")
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text("Change cover", color = TextPrimary) },
@@ -407,15 +433,15 @@ private fun PlaylistDetail(
                 Text("Playlist · ${songCount(plTracks.size)}", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { viewModel.playQueue(plTracks, 0) }, enabled = plTracks.isNotEmpty()) {
+                    Button(onClick = { viewModel.playQueue(listed, 0) }, enabled = listed.isNotEmpty()) {
                         Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Play")
                     }
                     FilledTonalButton(
                         onClick = {
                             if (!viewModel.ui.value.shuffle) viewModel.toggleShuffle()
-                            viewModel.playQueue(plTracks, plTracks.indices.random())
+                            viewModel.playQueue(listed, listed.indices.random())
                         },
-                        enabled = plTracks.isNotEmpty(),
+                        enabled = listed.isNotEmpty(),
                     ) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Shuffle") }
                 }
                 PlaylistDownloadBar(playlist, plTracks, dlStates)
@@ -423,10 +449,13 @@ private fun PlaylistDetail(
             }
         }
         if (!reordering && plTracks.isNotEmpty()) full {
-            SearchField(query, onQuery, "Search this playlist", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                SearchField(query, onQuery, "Search this playlist", Modifier.weight(1f))
+                FilterButton(filter.active, onReset = { setFilter(SongFilter()) }) { PlaylistOptions(filter, setFilter) }
+            }
         }
         if (plTracks.isEmpty()) full { EmptyHint("This playlist is empty. Add songs with the menu on any track.") }
-        else if (!reordering && shown.isEmpty()) full { EmptyHint("No songs here match \"$q\"") }
+        else if (!reordering && shown.isEmpty()) full { EmptyHint(if (q.isEmpty()) "No songs here match these filters" else "No songs here match \"$q\"") }
         // reordering always shows the whole playlist, so positions are the real ones
         if (reordering) plTracks.forEachIndexed { i, t ->
             val key = "r" + t.id
@@ -469,7 +498,13 @@ private fun PlaylistDetail(
     if (showRename) {
         RenamePlaylistDialog(
             currentName = name,
-            onRename = { newName -> if (viewModel.repository.renamePlaylist(name, newName)) onOpenPlaylist(newName.trim()) },
+            onRename = { newName ->
+                if (viewModel.repository.renamePlaylist(name, newName)) {
+                    // the sort and filters move with the playlist
+                    SavedFilters.save(ctx, SavedFilters.playlistKey(newName.trim()), filter); SavedFilters.save(ctx, filterKey, SongFilter())
+                    onOpenPlaylist(newName.trim())
+                }
+            },
             onDismiss = { showRename = false },
         )
     }

@@ -1,10 +1,8 @@
 package com.ctify.player.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,7 +13,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,9 +62,33 @@ import com.ctify.player.youtube.download.Downloads
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.Serializable
 
 internal enum class Scope(val label: String) { ALL("All"), LIBRARY("Library"), HEARD("Heard"), YOUTUBE("YouTube"), RADIO("Radio") }
-private enum class Kind(val label: String) { SONGS("Songs"), ALBUMS("Albums"), VIDEOS("All videos") }
+
+/** Everything the search filter sheet sets; kept for the session. */
+internal data class SearchFilter(val scope: Scope = Scope.ALL, val lib: SongFilter = SongFilter(), val yt: YtFilter = YtFilter()) : Serializable {
+    val active get() = this != SearchFilter()
+}
+
+/** The filter button for [SearchResults]: where to search, then library and YouTube modifiers for the scopes that use them. */
+@Composable
+internal fun SearchFilterButton(f: SearchFilter, scopes: List<Scope>, onChange: (SearchFilter) -> Unit) =
+    FilterButton(f.active, onReset = { onChange(SearchFilter()) }) {
+        FilterLabel("Search in")
+        FilterChoice(scopes, f.scope, { it.label }) { onChange(f.copy(scope = it)) }
+        if (f.scope == Scope.ALL || f.scope == Scope.LIBRARY) {
+            FilterLabel("Your library", section = true)
+            SearchSongOptions(f.lib) { onChange(f.copy(lib = it)) }
+        }
+        if (f.scope == Scope.ALL || f.scope == Scope.YOUTUBE) {
+            FilterLabel("YouTube", section = true)
+            FilterChoice(YtKind.entries, f.yt.kind, { it.label }) { onChange(f.copy(yt = f.yt.copy(kind = it))) }
+            FilterSwitch("Hide live versions", f.yt.hideLive) { onChange(f.copy(yt = f.yt.copy(hideLive = it))) }
+            FilterSwitch("Hide remixes", f.yt.hideRemixes) { onChange(f.copy(yt = f.yt.copy(hideRemixes = it))) }
+            FilterSwitch("Hide covers", f.yt.hideCovers) { onChange(f.copy(yt = f.yt.copy(hideCovers = it))) }
+        }
+    }
 
 /** Home searches everything: your library, songs heard on the radio, YouTube and stations. */
 internal val HOME_SCOPES = Scope.entries.toList()
@@ -103,53 +123,55 @@ internal fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: 
     )
 }
 
-/** Results for [query] from the [scopes] sources, with chips to narrow them: your songs or heard ones first, then YouTube, then radio. */
+/** Results for [query] from the [scopes] sources, narrowed by [filter]: your songs or heard ones first, then YouTube, then radio. */
 @Composable
-internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: List<Scope>) {
+internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: List<Scope>, filter: SearchFilter) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
+    val liked by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val radioUi = rememberRadioUi()
     val dlStates = rememberDownloadStates()
     val radio = radioRepo()
     val heardAll by radio.heard.collectAsStateWithLifecycle(initialValue = emptyList())
-    var scope by rememberSaveable { mutableStateOf(Scope.ALL) }
-    var kind by rememberSaveable { mutableStateOf(Kind.SONGS) }
+    val scope = filter.scope.takeIf { it in scopes } ?: Scope.ALL
+    val lib = filter.lib
+    val kind = filter.yt.kind
     var ytSongs by remember { mutableStateOf<List<YtSong>>(emptyList()) }
-    val yt = remember(ytSongs) { ytSongs.map { it.toTrack() } }
-    var ytAlbums by remember { mutableStateOf<List<YtPlaylistRef>>(emptyList()) }
+    val yt = remember(ytSongs, filter.yt) { ytSongs.filter { filter.yt.keeps(it.title) }.map { it.toTrack() } }
+    var ytAlbumsAll by remember { mutableStateOf<List<YtPlaylistRef>>(emptyList()) }
+    val ytAlbums = remember(ytAlbumsAll, filter.yt) { ytAlbumsAll.filter { filter.yt.keeps(it.title) } }
     var stations by remember { mutableStateOf<List<Station>>(emptyList()) }
     var ytState by remember { mutableStateOf<String?>(null) }
     var radioState by remember { mutableStateOf<String?>(null) }
 
     val q = query.trim()
-    val local = remember(q, tracks) {
+    val local = remember(q, tracks, lib, liked) {
         if (q.isEmpty()) emptyList()
-        else tracks.filter { it.matches(q) }
+        else lib.apply(tracks, q, liked)
             // on the phone first, saved streams after
             .sortedBy { if (it.uri.startsWith("ytstream")) 1 else 0 }
     }
-    val localAlbums = remember(q, tracks) {
-        if (q.isEmpty()) emptyList()
-        else tracks.filter { it.album.contains(q, true) || it.artist.contains(q, true) }
-            .groupBy { it.album }.filterKeys { it.isNotBlank() && it != "YouTube" }.values.toList()
+    val localAlbums = remember(local, lib) {
+        if (lib.match != Match.ALBUMS) emptyList()
+        else local.groupBy { it.album }.filterKeys { it.isNotBlank() && it != "YouTube" }.values.toList()
     }
     val heard = remember(q, heardAll) {
         if (q.isEmpty()) emptyList() else heardAll.filter { it.title.contains(q, true) || it.artist?.contains(q, true) == true }
     }
     val wantLibrary = Scope.LIBRARY in scopes && (scope == Scope.ALL || scope == Scope.LIBRARY)
-    val wantHeard = Scope.HEARD in scopes && kind == Kind.SONGS && (scope == Scope.ALL || scope == Scope.HEARD)
+    val wantHeard = Scope.HEARD in scopes && lib.match == Match.SONGS && (scope == Scope.ALL || scope == Scope.HEARD)
     val wantYt = scope == Scope.ALL || scope == Scope.YOUTUBE
-    val wantRadio = (scope == Scope.ALL && kind == Kind.SONGS) || scope == Scope.RADIO
+    val wantRadio = (scope == Scope.ALL && lib.match == Match.SONGS && kind == YtKind.SONGS) || scope == Scope.RADIO
     LaunchedEffect(q, wantYt, kind) {
-        ytSongs = emptyList(); ytAlbums = emptyList(); ytState = null
+        ytSongs = emptyList(); ytAlbumsAll = emptyList(); ytState = null
         if (q.length < 2 || !wantYt) return@LaunchedEffect
         NetworkGate.blockReason(Feature.YOUTUBE)?.let { ytState = it; return@LaunchedEffect }
         delay(600)
         ytState = LOADING
         ytState = try {
             when (kind) {
-                Kind.ALBUMS -> ytAlbums = YouTubeSource.searchAlbums(q)
-                Kind.VIDEOS -> ytSongs = YouTubeSource.searchVideos(q)
-                Kind.SONGS -> ytSongs = YouTubeSource.search(q)
+                YtKind.ALBUMS -> ytAlbumsAll = YouTubeSource.searchAlbums(q)
+                YtKind.VIDEOS -> ytSongs = YouTubeSource.searchVideos(q)
+                YtKind.SONGS -> ytSongs = YouTubeSource.search(q)
             }
             null
         } catch (e: CancellationException) {
@@ -168,16 +190,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
     }
 
     LazyColumn(contentPadding = contentPadding()) {
-        item {
-            Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                scopes.forEach { s -> FilterChip(selected = scope == s, onClick = { scope = s }, label = { Text(s.label) }) }
-            }
-            if (scope != Scope.RADIO) Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kind.entries.forEach { k -> FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(k.label) }) }
-            }
-        }
-
-        if (wantLibrary && kind == Kind.ALBUMS) {
+        if (wantLibrary && lib.match == Match.ALBUMS) {
             header("Your albums")
             if (localAlbums.isEmpty()) note("No albums in your library match \"$q\"")
             items(localAlbums, key = { "la" + it.first().album }) { list ->
@@ -187,7 +200,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
             }
         }
 
-        if (wantLibrary && kind == Kind.SONGS) {
+        if (wantLibrary && lib.match != Match.ALBUMS) {
             header("Your library")
             if (local.isEmpty()) note("Nothing in your library matches \"$q\"")
             items(local, key = { "l" + it.id }) { track ->
@@ -201,7 +214,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
             items(heard, key = { "hs" + it.id }) { HeardRow(it) }
         }
 
-        if (wantYt && kind == Kind.ALBUMS) {
+        if (wantYt && kind == YtKind.ALBUMS) {
             header("Albums on YouTube")
             status(ytState, ytAlbums.isEmpty() && q.length >= 2, "No albums found on YouTube")
             items(ytAlbums, key = { "ya" + it.id }) { a ->
@@ -210,8 +223,8 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
             }
         }
 
-        if (wantYt && kind != Kind.ALBUMS) {
-            header(if (kind == Kind.VIDEOS) "All YouTube videos" else "YouTube")
+        if (wantYt && kind != YtKind.ALBUMS) {
+            header(if (kind == YtKind.VIDEOS) "All YouTube videos" else "YouTube")
             status(ytState, yt.isEmpty() && q.length >= 2, "No songs found on YouTube")
             items(yt, key = { "y" + it.id }) { track ->
                 SongRow(track, SongContext.Search, yt, onPlay = { viewModel.repository.remember(yt); viewModel.playQueue(yt, yt.indexOf(track)) })

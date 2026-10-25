@@ -96,6 +96,7 @@ fun HomeScreen(
     val recent by remember { viewModel.repository.recentlyPlayed(20) }.collectAsStateWithLifecycle(emptyList())
     val most by remember { viewModel.repository.mostPlayed(20) }.collectAsStateWithLifecycle(emptyList())
     var query by rememberSaveable { mutableStateOf("") }
+    var searchFilter by rememberSaveable { mutableStateOf(SearchFilter()) }
     // saved YouTube songs load in addedAt order
     val downloaded = remember(tracks) { tracks.filter { it.id.startsWith("yt_") }.asReversed() }
     val ctx = LocalContext.current
@@ -138,10 +139,11 @@ fun HomeScreen(
         // the box stays put above both views, so typing never loses focus when results replace Home
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             SearchField(query, { query = it }, "Songs, artists, heard songs, stations", Modifier.weight(1f))
+            SearchFilterButton(searchFilter, HOME_SCOPES) { searchFilter = it }
             AddMenu(add)
         }
         if (query.isNotBlank()) {
-            SearchResults(viewModel, query, HOME_SCOPES)
+            SearchResults(viewModel, query, HOME_SCOPES, searchFilter)
             return@Column
         }
         LazyVerticalGrid(
