@@ -6,11 +6,11 @@ import org.junit.Test
 
 class ButtonsTest {
     @Test
-    fun playCornerTightensFromPausedToPlayingToPressed() {
-        assertEquals(50, playCorner(playing = false, pressed = false))
-        assertTrue(playCorner(playing = true, pressed = false) < 50)
-        assertTrue(playCorner(playing = true, pressed = true) < playCorner(playing = true, pressed = false))
-        assertEquals(playCorner(playing = false, pressed = true), playCorner(playing = true, pressed = true))
+    fun playStarSoftensFromPausedToPlayingToPressed() {
+        assertEquals(0f, playMorph(playing = false, pressed = false), 0f)
+        assertTrue(playMorph(playing = true, pressed = false) > 0f)
+        assertTrue(playMorph(playing = true, pressed = true) > playMorph(playing = true, pressed = false))
+        assertEquals(playMorph(playing = false, pressed = true), playMorph(playing = true, pressed = true), 0f)
     }
 
     @Test

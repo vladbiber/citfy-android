@@ -3,6 +3,7 @@ package com.ctify.player.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -34,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -46,6 +48,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ctify.player.ui.theme.MorphShape
+import com.ctify.player.ui.theme.PlayMorph
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -55,12 +59,11 @@ import kotlin.math.sin
  * The house buttons. Rules:
  * 1. Icon buttons are 48dp touch targets with 24dp icons (20dp in dense rows). Icons take
  *    LocalContentColor; only an "on" state (a toggle, a running timer) is drawn in the accent.
- * 2. Every main play button is a [PlayPauseButton]: accent fill, round while paused, a squircle while playing.
+ * 2. Every main play button is a [PlayPauseButton]: accent fill on a Sunny star (see ui/theme/Shapes.kt).
  * 3. [CtButton]: Primary (Filled) is the single main action of a screen or sheet, Secondary (FilledTonal)
  *    the other actions, Tertiary (Text) dismiss and minor ones. Outlined is only for a toggle that is off.
- * 4. Pressing morphs the shape (round corners tighten towards a squircle) and dips the button a little.
- *    material3 1.4.0 (BOM 2026.09.00) ships no MaterialShapes or ButtonDefaults.shapes(), so the morph
- *    is an animated corner radius plus scale. With "Remove animations" on it simply snaps.
+ * 4. Pressing morphs the shape (round corners tighten towards a squircle, the play star turns round)
+ *    and dips the button a little. With "Remove animations" on it simply snaps.
  */
 
 enum class Emphasis { Primary, Secondary, Tertiary }
@@ -171,8 +174,8 @@ fun CtToggleIconButton(
 }
 
 /**
- * The main play button: [accent] (or [brush]) fill, round while paused, a squircle while playing,
- * tighter still while pressed. Size it with [modifier]; at least 48dp.
+ * The main play button: [accent] (or [brush]) fill on a Sunny star that softens while playing and
+ * morphs into a circle while pressed. Size it with [modifier]; at least 48dp.
  */
 @Composable
 fun PlayPauseButton(
@@ -185,13 +188,16 @@ fun PlayPauseButton(
 ) {
     val src = remember { MutableInteractionSource() }
     val down by src.collectIsPressedAsState()
-    val corner by animateFloatAsState(playCorner(playing, down).toFloat(), spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow), label = "corner")
+    val motion = !reducedMotion()
+    val target = playMorph(playing, down)
+    val progress by animateFloatAsState(target, if (motion) spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow) else snap(), label = "morph")
     val scale by animateFloatAsState(if (down) 0.92f else 1f, spring(dampingRatio = 0.5f), label = "scale")
-    val shape = RoundedCornerShape(corner.roundToInt())
+    val shape = remember(progress) { MorphShape(PlayMorph.morph, progress.coerceIn(0f, 1f), PlayMorph.rest, PlayMorph.pressed) }
     Box(
         modifier
             .size(48.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(shape)
             .background(brush ?: SolidColor(accent), shape)
             .clickable(src, ripple(), role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -205,11 +211,11 @@ fun PlayPauseButton(
     }
 }
 
-/** Corner of the play button in percent: round when paused, a squircle while playing, tighter when pressed. */
-internal fun playCorner(playing: Boolean, pressed: Boolean): Int = when {
-    pressed -> 18
-    playing -> 30
-    else -> 50
+/** How far the play star has morphed towards a circle: a full star paused, softer playing, round pressed. */
+internal fun playMorph(playing: Boolean, pressed: Boolean): Float = when {
+    pressed -> 1f
+    playing -> 0.4f
+    else -> 0f
 }
 
 /** Shape and scale that follow a press: [rest] and [pressed] are corner percents. */

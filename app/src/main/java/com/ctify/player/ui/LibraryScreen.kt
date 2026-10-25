@@ -136,14 +136,7 @@ internal fun PlaylistCard(playlist: Playlist, firstTrack: Track?, onLongClick: (
             }
             .padding(4.dp),
     ) {
-        if (playlist.coverUri != null || firstTrack != null) {
-            PlaylistArt(playlist, firstTrack, 0.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
-        } else {
-            Box(
-                Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.small).background(SurfaceElevated),
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Accent, modifier = Modifier.size(36.dp)) }
-        }
+        PlaylistArt(playlist, firstTrack, 0.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
         Spacer(Modifier.height(8.dp))
         Text(playlist.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(songCount(playlist.trackIds.size), color = TextSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)

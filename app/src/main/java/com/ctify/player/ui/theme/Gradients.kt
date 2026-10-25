@@ -12,28 +12,31 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.reducedMotion
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import kotlin.math.abs
 
 /** Color 1 fading into color 2 with Two colors on, else solid primary: for play button, selected tab, progress, sliders. */
 @Composable
@@ -44,39 +47,88 @@ fun accentBrush(): Brush {
 }
 
 /**
- * Draws the two-color Oil, Liquid or Fade backdrop behind big surfaces (player, Home header); draws nothing otherwise.
- * With a [pulse] (see [rememberMusicPulse]) the colors are boosted and the blobs (or oil swirls) swell with it.
- * Oil needs Android 13 shaders; older phones get Liquid.
+ * The backdrop behind big surfaces (player, Home header), styled by [Appearance.gradient]: a tie-dye (Android 13+,
+ * older phones get Fade), the soft two-color Fade, or nothing when Off.
+ * [coverColors] are the album cover's colors for Dye colors "Album cover"; theme colors when null.
+ * [fadeOut] fades the dye into the background by that fraction of the height; null covers it all,
+ * with a [bottomScrim] (background alpha at the bottom edge) so the controls stay readable.
+ * With a [pulse] (see [rememberMusicPulse]) the dye deepens and swells with the bass.
  */
 @Composable
-fun LiquidBackground(modifier: Modifier = Modifier, pulse: State<Float>? = null) {
-    val source by Appearance.source.collectAsState()
+fun LiquidBackground(
+    modifier: Modifier = Modifier,
+    pulse: State<Float>? = null,
+    coverColors: List<Color>? = null,
+    fadeOut: Float? = null,
+    bottomScrim: Float = if (fadeOut == null) 0.45f else 0f,
+) {
     val style by Appearance.gradient.collectAsState()
     if (style == GradientStyle.OFF) return
+    val source by Appearance.dyeColors.collectAsState()
+    val strength by Appearance.dyeStrength.collectAsState()
     val s = MaterialTheme.colorScheme
-    // Toned down so text on top stays readable.
-    val oilStyle = style.dyed && Build.VERSION.SDK_INT >= 33
-    val alpha = if (oilStyle) 0.72f else 0.38f
+    val dyes = remember(source, s.primary, s.tertiary, coverColors) { dyeSet(source, s.primary, s.tertiary, coverColors) }
+    // a bad shader must not crash the app: it just falls back to Fade
+    val dye = if (style.dyed && Build.VERSION.SDK_INT >= 33) remember { runCatching { TieDyeBrush() }.getOrNull() } else null
+    val flow = if (dye != null && !reducedMotion()) {
+        rememberInfiniteTransition(label = "dye")
+            .animateFloat(0f, 1f, infiniteRepeatable(tween(DYE_LOOP_MS, easing = LinearEasing)), label = "flow")
+    } else null
+    val scrim = s.background
     val one = if (pulse != null) s.primary.boosted() else s.primary
     val two = if (pulse != null) s.tertiary.boosted() else s.tertiary
-    // a bad shader must not crash the app: it just falls back to Liquid
-    val oil = if (oilStyle) remember { runCatching { OilBrush() }.getOrNull() } else null
-    val flow = if (oil != null && !reducedMotion()) {
-        rememberInfiniteTransition(label = "oil")
-            .animateFloat(0f, 1f, infiniteRepeatable(tween(OIL_LOOP_MS, easing = LinearEasing)), label = "flow")
-    } else null
-    Canvas(modifier) {
+    val masked = dye == null && fadeOut != null
+    Canvas(if (masked) modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen } else modifier) {
         // read here, in the draw phase, so each beat redraws without recomposing
         val e = pulse?.value ?: 0f
-        val al = if (pulse != null) (alpha * 1.4f + 0.18f * e).coerceAtMost(if (oilStyle) 0.92f else 0.75f) else alpha
-        if (oil != null && Build.VERSION.SDK_INT >= 33) {
-            drawRect(oil.at(size.width, size.height, flow?.value ?: 0.3f, e, al, one, two))
-            return@Canvas
+        if (dye != null && Build.VERSION.SDK_INT >= 33) {
+            val mode = style.ordinal.coerceAtMost(GradientStyle.CHEVRON.ordinal)
+            drawRect(dye.at(size.width, size.height, flow?.value ?: 0.3f, e, strength.amount, mode, fadeOut ?: 0f, 0.94f, dyes[0], dyes[1], dyes[2]))
+        } else {
+            val al = if (pulse != null) (0.53f + 0.18f * e).coerceAtMost(0.75f) else 0.38f
+            drawRect(Brush.linearGradient(listOf(one.copy(alpha = al), two.copy(alpha = al))))
+            if (fadeOut != null) drawRect(
+                Brush.verticalGradient(0f to Color.Black, 0.25f * fadeOut to Color.Black, fadeOut to Color.Transparent, endY = size.height),
+                blendMode = BlendMode.DstIn,
+            )
         }
-        val a = one.copy(alpha = al)
-        val b = two.copy(alpha = al)
-        drawRect(Brush.linearGradient(listOf(a, b)))
+        if (bottomScrim > 0f) drawRect(Brush.verticalGradient(0.45f to Color.Transparent, 1f to scrim.copy(alpha = bottomScrim), endY = size.height))
     }
+}
+
+/** A vivid rainbow; the dyes bleed through orange, green and violet. */
+private val RainbowDyes = listOf(Color(0xFFED1F8C), Color(0xFFFFC714), Color(0xFF148CF2))
+
+/** The three dyes: theme primary, tertiary and their hue midpoint, the rainbow, or the cover's colors. */
+internal fun dyeSet(source: DyeColors, primary: Color, tertiary: Color, cover: List<Color>?): List<Color> {
+    if (source == DyeColors.RAINBOW) return RainbowDyes
+    val c = cover?.takeIf { source == DyeColors.COVER && it.isNotEmpty() }
+    val one = (c?.get(0) ?: primary).dyeTone()
+    val two = (c?.getOrNull(1) ?: if (c != null) c[0] else tertiary).dyeTone()
+    val three = c?.getOrNull(2)?.dyeTone() ?: between(one, two)
+    return listOf(one, two, three)
+}
+
+/** Dark-theme tones are pastel; a dye wants them saturated and bright. */
+private fun Color.dyeTone(): Color {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(toArgb(), hsv)
+    hsv[1] = (hsv[1] * 1.35f).coerceIn(0.55f, 0.95f)
+    hsv[2] = hsv[2].coerceAtLeast(0.85f)
+    return Color(android.graphics.Color.HSVToColor(hsv))
+}
+
+/** The hue halfway round the short way; close hues get pushed 50 degrees apart so three dyes show. */
+private fun between(a: Color, b: Color): Color {
+    val x = FloatArray(3)
+    val y = FloatArray(3)
+    android.graphics.Color.colorToHSV(a.toArgb(), x)
+    android.graphics.Color.colorToHSV(b.toArgb(), y)
+    var d = y[0] - x[0]
+    if (d > 180f) d -= 360f
+    if (d < -180f) d += 360f
+    val h = if (abs(d) < 40f) x[0] + 50f else x[0] + d / 2f
+    return Color(android.graphics.Color.HSVToColor(floatArrayOf((h % 360f + 360f) % 360f, (x[1] + y[1]) / 2f, (x[2] + y[2]) / 2f)))
 }
 
 /** More saturated and a little brighter, for the music-reactive background. */

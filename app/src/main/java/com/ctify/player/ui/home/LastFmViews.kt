@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -50,7 +48,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.ctify.player.data.MusicRepository
 import com.ctify.player.lastfm.Continent
 import com.ctify.player.lastfm.LastFm
@@ -64,6 +61,8 @@ import com.ctify.player.ui.songs.SongTarget
 import androidx.compose.foundation.combinedClickable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.ui.EmptyHint
+import com.ctify.player.ui.art.ArtistArt
+import com.ctify.player.ui.art.CoverCollage
 import com.ctify.player.ui.RowPlaceholders
 import com.ctify.player.ui.ScreenTitle
 import com.ctify.player.ui.SectionHeader
@@ -106,7 +105,7 @@ internal fun GenresRow(genres: List<String>, title: String = "Genres", onOpen: (
                         .clickable(role = Role.Button, onClickLabel = "open") { onOpen(tag) }
                         .semantics(mergeDescendants = true) { contentDescription = genreLabel(tag) },
                 ) {
-                    Collage(rememberLoad(tag, emptyList()) { LastFm.tagCovers(tag) }, 150.dp)
+                    Collage(rememberLoad(tag, emptyList()) { LastFm.tagCovers(tag) }, 150.dp, genreLabel(tag))
                     Spacer(Modifier.height(6.dp))
                     Text(genreLabel(tag), color = TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -116,27 +115,14 @@ internal fun GenresRow(genres: List<String>, title: String = "Genres", onOpen: (
 }
 
 @Composable
-internal fun Collage(covers: List<String>, size: Dp) {
-    Column(Modifier.size(size).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.secondaryContainer)) {
-        for (r in 0..1) Row(Modifier.weight(1f)) {
-            for (c in 0..1) Box(Modifier.weight(1f).fillMaxSize()) {
-                covers.getOrNull(r * 2 + c)?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-            }
-        }
-    }
+internal fun Collage(covers: List<String>, size: Dp, name: String = "") {
+    CoverCollage(covers, Modifier.size(size).clip(MaterialTheme.shapes.medium), name)
 }
 
-/** A round artist photo, or the initials when there is none. */
+/** An artist's photo in the cookie shape, else a collage of [covers], else a cover generated from the name. */
 @Composable
-internal fun Avatar(artist: LastFm.Artist, size: Dp) {
-    Box(
-        Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.tertiaryContainer),
-        contentAlignment = Alignment.Center,
-    ) {
-        val initials = artist.name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1).uppercase() }
-        Text(initials, color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.titleLarge)
-        artist.image?.let { AsyncImage(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-    }
+internal fun Avatar(artist: LastFm.Artist, size: Dp, covers: List<String> = listOfNotNull(artist.image)) {
+    ArtistArt(artist.name, null, covers, size = size)
 }
 
 @Composable
@@ -192,7 +178,7 @@ internal fun GenrePage(tag: String, repo: MusicRepository, onBack: () -> Unit) {
     val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
     val songs = rememberLoad(tag, null as List<LastFm.Song>?) { LastFm.tagTracks(tag) }?.let { HiddenArtists.filter(it, hidden) { s -> s.artist } }
     val covers = rememberLoad(tag, emptyList()) { LastFm.tagCovers(tag) }
-    SongsPage(genreLabel(tag), { Collage(covers, 200.dp) }, songs, repo, onBack)
+    SongsPage(genreLabel(tag), { Collage(covers, 200.dp, genreLabel(tag)) }, songs, repo, onBack)
 }
 
 @Composable
