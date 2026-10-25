@@ -143,11 +143,13 @@ object MbParse {
             ?: hits.firstOrNull()?.takeIf { it.optInt("score") == 100 && RatingKeys.norm(it.optString("name")).contains(want) }?.optString("id")
     }
 
-    /** Studio albums and EPs, oldest first; compilations, live and remix records are left out. */
+    /** Studio albums oldest first, then EPs; compilations, live and remix records are left out. */
     fun discography(o: JSONObject): List<MbGroup> = groups(o)
         .filter { g -> g.secondaryTypes.none { it.lowercase() in SKIP_SECONDARY } }
         .distinctBy { titleKey(it.title) }
-        .sortedWith(compareBy({ it.year ?: 9999 }, { it.title }))
+        .let(::albumsFirst)
+
+    fun albumsFirst(groups: List<MbGroup>) = groups.sortedWith(compareBy({ if (it.primaryType.equals("Album", true)) 0 else 1 }, { it.year ?: 9999 }, { it.title }))
 
     /** Index in [mb] to your song with the same title; songs on this album win over others. */
     fun matchLocal(mb: List<MbTrack>, local: List<Track>, album: String): Map<Int, Track> {

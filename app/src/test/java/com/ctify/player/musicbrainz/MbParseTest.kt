@@ -141,6 +141,6 @@ class MbParseTest {
             ]}
             """,
         )
-        assertEquals(listOf("ep", "pablo", "kid"), MbParse.discography(browse).map { it.id })
+        assertEquals(listOf("pablo", "kid", "ep"), MbParse.discography(browse).map { it.id })
     }
 }

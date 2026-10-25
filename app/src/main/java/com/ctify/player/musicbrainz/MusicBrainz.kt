@@ -51,7 +51,7 @@ object MusicBrainz {
         }?.let(MbAlbum::fromJson)
     }
 
-    /** Studio albums and EPs of [artist], oldest first; empty when the artist isn't found. */
+    /** Studio albums then EPs of [artist], oldest first; empty when the artist isn't found. */
     suspend fun discography(artist: String): List<MbGroup> {
         val id = artistId(artist) ?: return emptyList()
         val o = cached("disco_" + RatingKeys.artist(artist)) {
@@ -59,7 +59,7 @@ object MusicBrainz {
             get("release-group", "query" to "arid:$id AND (primarytype:album OR primarytype:ep) AND NOT secondarytype:*", "limit" to "100")
                 ?.let { JSONObject().put("groups", JSONArray(MbParse.discography(it).map(::groupJson))) }
         } ?: return emptyList()
-        return objects(o.optJSONArray("groups")).mapNotNull(MbParse::group)
+        return MbParse.albumsFirst(objects(o.optJSONArray("groups")).mapNotNull(MbParse::group))
     }
 
     private suspend fun artistId(name: String): String? =
