@@ -1,5 +1,6 @@
 package com.ctify.player.ui
 
+import com.ctify.player.ui.mood.moodText
 import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -574,7 +575,7 @@ private fun SourceSwitch(onRadio: Boolean, onSource: (radio: Boolean) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    label, style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false,
+                    moodText(label), style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false,
                     color = if (on) c.onSecondaryContainer else InkDim,
                 )
             }
@@ -699,10 +700,10 @@ private fun NowPlayingDetails(live: LiveProgress, accent: Color, seekBar: Boolea
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            PlayerSheetButton(Icons.Default.Tune, "Sound", Modifier.weight(1f), onSound)
+            PlayerSheetButton(Icons.Default.Tune, moodText("Sound"), Modifier.weight(1f), onSound)
             if (station == null) {
                 var queue by rememberSaveable { mutableStateOf(false) }
-                PlayerSheetButton(Icons.AutoMirrored.Filled.QueueMusic, "Up next", Modifier.weight(1f)) { queue = true }
+                PlayerSheetButton(Icons.AutoMirrored.Filled.QueueMusic, moodText("Up next"), Modifier.weight(1f)) { queue = true }
                 if (queue) QueueSheet(onDismiss = { queue = false })
             }
         }

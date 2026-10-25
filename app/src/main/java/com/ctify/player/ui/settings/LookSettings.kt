@@ -7,6 +7,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.ctify.player.player.fx.Moods
 import com.ctify.player.ui.theme.AppFont
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.DyeColors
@@ -27,8 +28,14 @@ internal fun ColumnScope.LookSettings() {
     val font by Appearance.font.collectAsState()
     val dyeColors by Appearance.dyeColors.collectAsState()
     val dyeStrength by Appearance.dyeStrength.collectAsState()
+    val evil by Moods.evil.collectAsState()
+    val godly by Moods.godly.collectAsState()
 
-    SettingLabel("Theme", Modifier.padding(top = 8.dp))
+    SettingLabel("Modes", Modifier.padding(top = 8.dp))
+    SwitchRow("Evil mode", "Red and black, everything renamed, the music turns dark, low and distorted", evil, Moods::setEvil)
+    SwitchRow("Godly mode", "TempleOS colors, holy names, cathedral reverb and a choir on every song", godly, Moods::setGodly)
+    if (evil && godly) SettingLabel("Both on: Good & Evil. Songs play backwards, black and white, with strange effects.")
+    SettingLabel("Theme", Modifier.padding(top = 12.dp))
     // Below Android 12 there are no wallpaper colors and Wallpaper looks like Guava Blue, so only Guava Blue is offered.
     val sources = if (Appearance.dynamicSupported) ThemeSource.entries else ThemeSource.entries - ThemeSource.WALLPAPER
     val shownSource = if (source in sources) source else ThemeSource.CTIFY_BLUE

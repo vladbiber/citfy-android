@@ -1,5 +1,6 @@
 package com.ctify.player.ui
 
+import com.ctify.player.ui.mood.moodText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -223,7 +224,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                                 ) { Icon(t.icon, t.label) }
                                 else Icon(t.icon, t.label)
                             },
-                            label = { Text(t.label) },
+                            label = { Text(moodText(t.label)) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Accent,
                                 selectedTextColor = Accent,

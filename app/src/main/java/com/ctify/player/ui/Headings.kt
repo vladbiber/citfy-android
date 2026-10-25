@@ -1,5 +1,6 @@
 package com.ctify.player.ui
 
+import com.ctify.player.ui.mood.moodText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +33,7 @@ import com.ctify.player.ui.theme.TextPrimary
 @Composable
 internal fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
     Text(
-        text, color = TextPrimary, style = MaterialTheme.typography.headlineMedium,
+        moodText(text), color = TextPrimary, style = MaterialTheme.typography.headlineMedium,
         modifier = modifier.padding(vertical = 6.dp).semantics { heading() },
     )
 }
@@ -41,7 +42,7 @@ internal fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
 @Composable
 internal fun SectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(
-        text, color = TextPrimary, style = MaterialTheme.typography.titleMedium,
+        moodText(text), color = TextPrimary, style = MaterialTheme.typography.titleMedium,
         modifier = modifier.semantics { heading() },
     )
 }
@@ -68,7 +69,7 @@ private fun PillTab(label: String, selected: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            label,
+            moodText(label),
             color = if (selected) MaterialTheme.colorScheme.onPrimary else TextPrimary,
             fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,

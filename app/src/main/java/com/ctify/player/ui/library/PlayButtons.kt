@@ -1,5 +1,6 @@
 package com.ctify.player.ui.library
 
+import com.ctify.player.ui.mood.moodText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -45,7 +46,7 @@ fun PlayShuffleRow(tracks: List<Track>, repo: MusicRepository, modifier: Modifie
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (tracks.isNotEmpty()) {
             Button(onClick = { PlayList.play(repo, tracks) }) {
-                Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Play")
+                Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text(moodText("Play"))
             }
             // primaryContainer, not the default secondary one, which is the other theme color in Two colors
             FilledTonalButton(
@@ -55,7 +56,7 @@ fun PlayShuffleRow(tracks: List<Track>, repo: MusicRepository, modifier: Modifie
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ),
             ) {
-                Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Shuffle")
+                Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text(moodText("Shuffle"))
             }
         }
         extra()
