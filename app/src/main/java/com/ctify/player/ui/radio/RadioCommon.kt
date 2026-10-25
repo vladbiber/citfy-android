@@ -73,7 +73,6 @@ import com.ctify.player.ui.RowPlaceholders
 import com.ctify.player.ui.enterStagger
 import com.ctify.player.ui.pressFeedback
 import com.ctify.player.ui.theme.Accent
-import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
@@ -298,23 +297,23 @@ internal fun StationRow(
     }
 }
 
-/** The station logo, or a radio icon when there is none or it fails to load. */
+/** The station logo on its muted tile, or the first letter when there is none or it fails to load. */
 @Composable
 internal fun StationArt(station: Station, size: Dp, shape: Shape = MaterialTheme.shapes.small) =
     StationArt(station.name, station.favicon, size, shape)
 
-/** The station's favicon; without one (or while it loads or fails) a color from the name with its first letter. */
+/** A muted tile from the name with the favicon centered on it; without one (or while it loads or fails) the first letter. */
 @Composable
 internal fun StationArt(name: String, favicon: String?, size: Dp, shape: Shape = MaterialTheme.shapes.small, modifier: Modifier = Modifier.size(size)) {
     Box(
-        modifier.clip(shape).background(SurfaceElevated),
+        modifier.clip(shape).background(stationTint(name)),
         contentAlignment = Alignment.Center,
     ) {
         val fallback = @Composable {
-            Box(Modifier.fillMaxSize().background(stationColor(name)), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    name.trim().take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold,
-                    fontSize = with(LocalDensity.current) { (size * 0.42f).toSp() },
+                    name.trim().take(1).uppercase(), color = Color.White.copy(alpha = 0.8f), fontWeight = FontWeight.Bold,
+                    fontSize = with(LocalDensity.current) { (size * 0.40f).toSp() },
                 )
             }
         }
@@ -322,8 +321,8 @@ internal fun StationArt(name: String, favicon: String?, size: Dp, shape: Shape =
             SubcomposeAsyncImage(
                 model = favicon,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(size * 0.14f).clip(MaterialTheme.shapes.extraSmall),
                 loading = { fallback() },
                 error = { fallback() },
             )
