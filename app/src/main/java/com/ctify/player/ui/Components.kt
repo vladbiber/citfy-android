@@ -131,9 +131,21 @@ fun CoverImage(uri: Any?, name: String, shape: Shape, modifier: Modifier) {
 @Composable
 fun CtifyLogo(size: Dp) {
     Image(
-        painterResource(R.drawable.logo_guava), "Guava Player logo",
+        painterResource(moodLogo()), "Guava Player logo",
         modifier = Modifier.size(size),
     )
+}
+
+/** The guava turns red in Evil mode and gold in Godly mode; Good & Evil gets a black and white one. */
+@Composable
+private fun moodLogo(): Int {
+    val mood by com.ctify.player.player.fx.Moods.mood.collectAsState()
+    return when (mood) {
+        com.ctify.player.player.fx.Mood.EVIL -> R.drawable.logo_guava_evil
+        com.ctify.player.player.fx.Mood.GODLY -> R.drawable.logo_guava_godly
+        com.ctify.player.player.fx.Mood.GOOD_EVIL -> R.drawable.logo_guava_goodevil
+        com.ctify.player.player.fx.Mood.NORMAL -> R.drawable.logo_guava
+    }
 }
 
 /** The logo under its new name; [CtifyLogo] stays for existing callers. */

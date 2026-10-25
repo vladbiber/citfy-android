@@ -1,5 +1,7 @@
 package com.ctify.player.ui.theme
 
+import com.ctify.player.player.fx.Moods
+import com.ctify.player.player.fx.Mood
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +62,69 @@ private val CtifyDark = darkColorScheme(
     surfaceContainerHighest = Color(0xFF252C3D),
 )
 
+/** Evil: blood red on black, like the red Spotify logo. */
+private val EvilScheme = darkColorScheme(
+    primary = Color(0xFFFF2A2A), onPrimary = Color(0xFF140000),
+    secondary = Color(0xFFC21807), onSecondary = Color(0xFFFFFFFF),
+    tertiary = Color(0xFF8B0000), onTertiary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFF5C0000), onPrimaryContainer = Color(0xFFFFDAD4),
+    secondaryContainer = Color(0xFF3D0707), onSecondaryContainer = Color(0xFFFFDAD4),
+    tertiaryContainer = Color(0xFF420000), onTertiaryContainer = Color(0xFFFFDAD4),
+    outline = Color(0xFF5A1C1C),
+    background = Color(0xFF070000), onBackground = Color(0xFFFFEDEA),
+    surface = Color(0xFF100303), onSurface = Color(0xFFFFEDEA),
+    surfaceVariant = Color(0xFF2A0B0B), onSurfaceVariant = Color(0xFFD9A3A3),
+    surfaceContainerLowest = Color(0xFF040000), surfaceContainerLow = Color(0xFF0E0202),
+    surfaceContainer = Color(0xFF140404), surfaceContainerHigh = Color(0xFF220808),
+    surfaceContainerHighest = Color(0xFF2E0C0C),
+)
+
+/** Godly: TempleOS's 16-colour palette, deep blue screen, yellow, cyan and white. */
+private val GodlyScheme = darkColorScheme(
+    primary = Color(0xFFFFFF55), onPrimary = Color(0xFF0000AA),
+    secondary = Color(0xFF55FFFF), onSecondary = Color(0xFF0000AA),
+    tertiary = Color(0xFFFF55FF), onTertiary = Color(0xFF0000AA),
+    primaryContainer = Color(0xFF0000AA), onPrimaryContainer = Color(0xFFFFFF55),
+    secondaryContainer = Color(0xFF00AAAA), onSecondaryContainer = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFAA00AA), onTertiaryContainer = Color(0xFFFFFFFF),
+    outline = Color(0xFF5555FF),
+    background = Color(0xFF000033), onBackground = Color(0xFFFFFFFF),
+    surface = Color(0xFF00004A), onSurface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFF000077), onSurfaceVariant = Color(0xFFAAAAAA),
+    surfaceContainerLowest = Color(0xFF000022), surfaceContainerLow = Color(0xFF00003D),
+    surfaceContainer = Color(0xFF000055), surfaceContainerHigh = Color(0xFF000077),
+    surfaceContainerHighest = Color(0xFF0000AA),
+)
+
+/** Good & Evil: the black and white of the Tally Hall album cover. */
+private val GoodEvilScheme = darkColorScheme(
+    primary = Color(0xFFFFFFFF), onPrimary = Color(0xFF000000),
+    secondary = Color(0xFFD0D0D0), onSecondary = Color(0xFF000000),
+    tertiary = Color(0xFF989898), onTertiary = Color(0xFF000000),
+    primaryContainer = Color(0xFFD0D0D0), onPrimaryContainer = Color(0xFF000000),
+    secondaryContainer = Color(0xFF2A2A2A), onSecondaryContainer = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFF676767), onTertiaryContainer = Color(0xFFFFFFFF),
+    outline = Color(0xFF676767),
+    background = Color(0xFF010101), onBackground = Color(0xFFFFFFFF),
+    surface = Color(0xFF0A0A0A), onSurface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFF1E1E1E), onSurfaceVariant = Color(0xFFB0B0B0),
+    surfaceContainerLowest = Color(0xFF000000), surfaceContainerLow = Color(0xFF080808),
+    surfaceContainer = Color(0xFF101010), surfaceContainerHigh = Color(0xFF1C1C1C),
+    surfaceContainerHighest = Color(0xFF282828),
+)
+
+private fun templeType(): Typography {
+    val base = ctifyType(AppFont.SYSTEM)
+    fun TextStyle.mono() = copy(fontFamily = FontFamily.Monospace)
+    return base.copy(
+        displayLarge = base.displayLarge.mono(), displayMedium = base.displayMedium.mono(), displaySmall = base.displaySmall.mono(),
+        headlineLarge = base.headlineLarge.mono(), headlineMedium = base.headlineMedium.mono(), headlineSmall = base.headlineSmall.mono(),
+        titleLarge = base.titleLarge.mono(), titleMedium = base.titleMedium.mono(), titleSmall = base.titleSmall.mono(),
+        bodyLarge = base.bodyLarge.mono(), bodyMedium = base.bodyMedium.mono(), bodySmall = base.bodySmall.mono(),
+        labelLarge = base.labelLarge.mono(), labelMedium = base.labelMedium.mono(), labelSmall = base.labelSmall.mono(),
+    )
+}
+
 // Sizes and weights only: line height and letter spacing still come from bodyLarge, as with hand-typed sizes.
 // Every role takes the chosen family; a serif font only sets the headings, body text stays the phone's.
 private fun ctifyType(font: AppFont): Typography {
@@ -107,14 +172,19 @@ fun CtifyTheme(content: @Composable () -> Unit) {
     val source by Appearance.source.collectAsState()
     val pureBlack by Appearance.pureBlack.collectAsState()
     val font by Appearance.font.collectAsState()
+    val mood by Moods.mood.collectAsState()
     val ctx = LocalContext.current
     var scheme = when {
+        mood == Mood.EVIL -> EvilScheme
+        mood == Mood.GODLY -> GodlyScheme
+        mood == Mood.GOOD_EVIL -> GoodEvilScheme
         source == ThemeSource.DUO -> duoScheme()
         source == ThemeSource.WALLPAPER && Appearance.dynamicSupported -> dynamicDarkColorScheme(ctx)
         else -> CtifyDark
     }
-    if (pureBlack) scheme = scheme.pureBlack()
-    val type = remember(font) { ctifyType(font) }
+    if (pureBlack && mood != Mood.GODLY) scheme = scheme.pureBlack()
+    // Godly speaks in TempleOS's monospace
+    val type = remember(font, mood) { if (mood == Mood.GODLY) templeType() else ctifyType(font) }
     MaterialTheme(colorScheme = scheme, typography = type, shapes = CtifyShapes, content = content)
 }
 

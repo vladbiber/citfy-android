@@ -1,6 +1,8 @@
 package com.ctify.player.player.fx
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.PI
 import kotlin.math.abs
@@ -31,6 +33,7 @@ object Moods {
 
     private fun changed() {
         mood.value = of(evil.value, godly.value)
+        app?.let { setIcon(it, mood.value) }
         app?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()
             ?.putBoolean("evil_mode", evil.value)?.putBoolean("godly_mode", godly.value)?.apply()
     }
@@ -40,6 +43,21 @@ object Moods {
         evil -> Mood.EVIL
         godly -> Mood.GODLY
         else -> Mood.NORMAL
+    }
+
+    /** Swaps the launcher icon by enabling one activity alias and disabling the rest. */
+    private fun setIcon(context: Context, m: Mood) {
+        val pm = context.packageManager
+        val want = when (m) { Mood.NORMAL -> "IconDefault"; Mood.EVIL -> "IconEvil"; Mood.GODLY -> "IconGodly"; Mood.GOOD_EVIL -> "IconGoodEvil" }
+        // enable the new one first so the app always has a launcher entry
+        val names = listOf(want) + listOf("IconDefault", "IconEvil", "IconGodly", "IconGoodEvil").filter { it != want }
+        for (n in names) runCatching {
+            pm.setComponentEnabledSetting(
+                ComponentName(context, "com.ctify.player.$n"),
+                if (n == want) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP,
+            )
+        }
     }
 
     private const val PREFS = "ctify-ui"

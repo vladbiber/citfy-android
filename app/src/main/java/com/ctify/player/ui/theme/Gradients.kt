@@ -1,5 +1,7 @@
 package com.ctify.player.ui.theme
 
+import com.ctify.player.player.fx.Moods
+import com.ctify.player.player.fx.Mood
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -67,7 +69,10 @@ fun LiquidBackground(
     val source by Appearance.dyeColors.collectAsState()
     val strength by Appearance.dyeStrength.collectAsState()
     val s = MaterialTheme.colorScheme
-    val dyes = remember(source, s.primary, s.tertiary, coverColors) { dyeSet(source, s.primary, s.tertiary, coverColors) }
+    val mood by Moods.mood.collectAsState()
+    val dyes = remember(source, s.primary, s.tertiary, coverColors, mood) {
+        MoodDyes[mood] ?: dyeSet(source, s.primary, s.tertiary, coverColors)
+    }
     // a bad shader must not crash the app: it just falls back to Fade
     val dye = if (style.dyed && Build.VERSION.SDK_INT >= 33) remember { runCatching { TieDyeBrush() }.getOrNull() } else null
     val flow = if (dye != null && !reducedMotion()) {
@@ -95,6 +100,13 @@ fun LiquidBackground(
         if (bottomScrim > 0f) drawRect(Brush.verticalGradient(0.45f to Color.Transparent, 1f to scrim.copy(alpha = bottomScrim), endY = size.height))
     }
 }
+
+/** Evil bleeds red into black, Godly is TempleOS yellow, blue and cyan, Good & Evil only white and greys. */
+private val MoodDyes = mapOf(
+    Mood.EVIL to listOf(Color(0xFFD00000), Color(0xFF5A0000), Color(0xFFFF3B1F)),
+    Mood.GODLY to listOf(Color(0xFFFFFF55), Color(0xFF5555FF), Color(0xFF55FFFF)),
+    Mood.GOOD_EVIL to listOf(Color(0xFFFFFFFF), Color(0xFF989898), Color(0xFFD0D0D0)),
+)
 
 /** A vivid rainbow; the dyes bleed through orange, green and violet. */
 private val RainbowDyes = listOf(Color(0xFFED1F8C), Color(0xFFFFC714), Color(0xFF148CF2))

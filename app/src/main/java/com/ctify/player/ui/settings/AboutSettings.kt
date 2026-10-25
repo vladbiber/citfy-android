@@ -22,15 +22,7 @@ import com.ctify.player.ui.SectionHeader
 internal data class AboutCredit(val name: String, val url: String, val license: String?, val note: String)
 
 // switch to Credits.entries once ui/theme/Credits.kt lands
-internal val AboutCredits = listOf(
-    AboutCredit("Levyra", "https://github.com/LUC4N3X/Levyra-deepsound", "GPL-3.0", "Expressive shapes style"),
-    AboutCredit("NewPipe Extractor", "https://github.com/TeamNewPipe/NewPipeExtractor", "GPL-3.0", "YouTube search, streams and downloads"),
-    AboutCredit("Radio Browser", "https://www.radio-browser.info", null, "Radio station directory"),
-    AboutCredit("LRCLIB", "https://lrclib.net", null, "Synced lyrics"),
-    AboutCredit("Last.fm", "https://www.last.fm", null, "Data from Last.fm: genres, artists and charts"),
-    AboutCredit("MusicBrainz", "https://musicbrainz.org", null, "Album info and ratings"),
-    AboutCredit("ListenBrainz", "https://listenbrainz.org", null, "Listening history"),
-)
+internal val AboutCredits get() = com.ctify.player.ui.theme.Credits.entries.map { AboutCredit(it.name, it.url, it.license.ifBlank { null }, it.note) }
 
 private const val REPO = "https://github.com/vladbiber/guava-player"
 
