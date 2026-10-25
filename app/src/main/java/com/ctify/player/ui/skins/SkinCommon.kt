@@ -257,6 +257,8 @@ fun PillSlider(
     stateText: String? = null,
     marks: List<Float> = emptyList(),
     brush: Brush? = null,
+    /** while it has amplitude, the played part is drawn as a moving sine wave */
+    wave: com.ctify.player.ui.Wave? = null,
 ) {
     val latest by rememberUpdatedState(value)
     var drag by remember { mutableFloatStateOf(0f) }
@@ -292,7 +294,19 @@ fun PillSlider(
         val v = value.coerceIn(0f, 1f)
         val x = v * size.width
         drawLine(track, Offset(0f, y), Offset(size.width, y), 2.dp.toPx(), StrokeCap.Round)
-        if (brush != null) drawLine(brush, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
+        val amp = (wave?.amp ?: 0f) * 3.dp.toPx()
+        if (amp > 0.1f && wave != null) {
+            val k = TAU / 28.dp.toPx()
+            val path = androidx.compose.ui.graphics.Path()
+            var px = 0f
+            path.moveTo(0f, y + amp * kotlin.math.sin(-wave.phase))
+            while (px < x) {
+                px = minOf(px + 1.dp.toPx(), x)
+                path.lineTo(px, y + amp * kotlin.math.sin(px * k - wave.phase))
+            }
+            val stroke = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx(), cap = StrokeCap.Round)
+            if (brush != null) drawPath(path, brush, style = stroke) else drawPath(path, accent, style = stroke)
+        } else if (brush != null) drawLine(brush, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
         else drawLine(accent, Offset(0f, y), Offset(x, y), 3.dp.toPx(), StrokeCap.Round)
         val mh = 8.dp.toPx(); val mw = 2.dp.toPx()
         marks.forEach { m ->

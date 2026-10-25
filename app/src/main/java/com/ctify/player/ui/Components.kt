@@ -1,6 +1,8 @@
 package com.ctify.player.ui
 
 import androidx.compose.foundation.progressSemantics
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -48,7 +50,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -280,7 +281,10 @@ fun MiniPlayer(
     onPrevious: () -> Unit = {},
     isLive: Boolean = false,
     status: String? = null,
+    /** the full player is open: the cover hands over to it (see [sharedCover]) */
+    playerOpen: Boolean = false,
 ) {
+    val duo = Appearance.source.collectAsState().value == ThemeSource.DUO
     val scope = rememberCoroutineScope()
     val dx = remember { Animatable(0f) }
     val next by rememberUpdatedState(onNext)
@@ -326,24 +330,28 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            AlbumArt(track, 44.dp, shape = MaterialTheme.shapes.small)
-            Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-                Text(track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(status ?: track.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // a fixed slot, so the row keeps its layout while the cover is away in the player
+            Box(Modifier.size(44.dp)) {
+                androidx.compose.animation.AnimatedVisibility(!playerOpen, enter = fadeIn(), exit = fadeOut()) {
+                    AlbumArt(track, 44.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.sharedCover(this).size(44.dp))
+                }
             }
-            if (isLive) LiveBadge()
-            IconButton(onClick = onTogglePlay) {
-                Icon(
-                    if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    if (isPlaying) "Pause" else "Play", tint = TextPrimary, modifier = Modifier.size(28.dp),
+            Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                Text(
+                    track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.marquee(),
+                )
+                Text(
+                    status ?: track.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.marquee(),
                 )
             }
-            IconButton(onClick = onNext) {
-                Icon(Icons.Filled.SkipNext, nextLabel, tint = TextPrimary)
-            }
+            if (isLive) LiveBadge()
+            PlayPauseButton(isPlaying, onTogglePlay, Accent, brush = if (duo) accentBrush() else null, iconSize = 24.dp)
+            CtIconButton(Icons.Filled.SkipNext, nextLabel, onNext, tint = TextPrimary)
         }
         if (isLive) Spacer(Modifier.height(2.dp))
-        else if (Appearance.source.collectAsState().value == ThemeSource.DUO) {
+        else if (duo) {
             val fill = accentBrush()
             val track = TextPrimary.copy(alpha = 0.15f)
             Box(
