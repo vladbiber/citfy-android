@@ -9,7 +9,6 @@ import com.ctify.player.keys.KeyAction
 import com.ctify.player.keys.KeyRouter
 import com.ctify.player.keys.LocalDeviceProfile
 
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -72,7 +71,6 @@ import com.ctify.player.ui.wheel.WheelScreen
 import com.ctify.player.ui.wheel.liveRadioSource
 import com.ctify.player.ui.wheel.pendingYouTubeSources
 import com.ctify.player.ui.youtube.DownloadsSheet
-import com.ctify.player.ui.youtube.YouTubeScreen
 import com.ctify.player.ui.theme.BgBlack
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.Appearance
@@ -96,7 +94,6 @@ import com.ctify.player.ui.songs.rememberSnackState
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
-    Search("Search", Icons.Filled.Search),
     Library("Library", Icons.Filled.LibraryMusic),
     Radio("Radio", Icons.Filled.Radio),
 }
@@ -107,16 +104,26 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
     var tab by remember { mutableIntStateOf(0) }
     var showNowPlaying by remember { mutableStateOf(false) }
     var showWheel by remember { mutableStateOf(false) }
-    var showYouTube by remember { mutableStateOf(false) }
-    val sharedLink by YtIntake.pending.collectAsState()
-    LaunchedEffect(sharedLink) { if (sharedLink != null) showYouTube = true }
     var showDownloads by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    // the search overlay over Home, opened on one of its pills; the last pill stays for the closing slide
+    var showSearch by remember { mutableStateOf(false) }
+    var searchScope by remember { mutableStateOf(Scope.ALL) }
     var librarySection by rememberSaveable { mutableIntStateOf(0) }
     // artist, album, playlist and genre pages open over the current tab; Back walks back through them
     val pages = remember { mutableStateListOf<HomePage>() }
     val openPage: (HomePage) -> Unit = { pages += it }
-    val selectTab: (Int) -> Unit = { pages.clear(); tab = it }
+    val selectTab: (Int) -> Unit = { pages.clear(); showSearch = false; tab = it }
+    val openSearch: (Scope) -> Unit = { s ->
+        showNowPlaying = false; showSettings = false; showWheel = false
+        pages.clear(); tab = Tab.Home.ordinal; searchScope = s; showSearch = true
+    }
+    // the same top bar buttons on every tab
+    val openWheel: () -> Unit = { showWheel = true }
+    val openSettings: () -> Unit = { showSettings = true }
+    // a link shared from another app opens search on the YouTube pill, which resolves it
+    val sharedLink by YtIntake.pending.collectAsState()
+    LaunchedEffect(sharedLink) { if (sharedLink != null) openSearch(Scope.YOUTUBE) }
 
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val now by PlayerHub.playback.collectAsStateWithLifecycle()
@@ -134,7 +141,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
     val add = AddActions(
         importFolder = { folderLauncher.launch(null) },
         importFile = { importLauncher.launch(arrayOf("audio/*")) },
-        youTube = { showYouTube = true },
+        youTube = { openSearch(Scope.YOUTUBE) },
         spotify = { YtIntake.spotify.value = "" },
         downloads = { showDownloads = true },
     )
@@ -149,23 +156,26 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
     LaunchedEffect(Unit) {
         KeyRouter.uiActions.collect { a ->
             when (a) {
-                KeyAction.SEARCH -> { showNowPlaying = false; showSettings = false; selectTab(Tab.Search.ordinal) }
+                KeyAction.SEARCH -> openSearch(Scope.ALL)
                 KeyAction.QUEUE -> if (nowTrack != null) showQueue = true
                 KeyAction.OPEN_PLAYER -> showNowPlaying = true
                 KeyAction.ADD_TO_PLAYLIST -> keyPick = nowTrack.takeIf { now?.station == null }
                 KeyAction.TAB_1, KeyAction.TAB_2, KeyAction.TAB_3, KeyAction.TAB_4 -> {
-                    showNowPlaying = false; showSettings = false
-                    selectTab(a.ordinal - KeyAction.TAB_1.ordinal)
+                    // three tabs now: Tab 4 has nothing to open
+                    val i = a.ordinal - KeyAction.TAB_1.ordinal
+                    if (i < Tab.entries.size) { showNowPlaying = false; showSettings = false; selectTab(i) }
                 }
                 else -> {}
             }
         }
     }
-    val overlay = showWheel || showYouTube || showNowPlaying || showSettings
+    val overlay = showWheel || showNowPlaying || showSettings
     val goTo by SongSheets.goTo.collectAsState()
     LaunchedEffect(goTo) {
-        goTo?.let { pages += it; SongSheets.goTo.value = null; showWheel = false; showYouTube = false; showNowPlaying = false; showSettings = false }
+        goTo?.let { pages += it; SongSheets.goTo.value = null; showWheel = false; showNowPlaying = false; showSettings = false }
     }
+    // Library and Radio go back to Home first; Back on Home leaves the app. Pages and overlays come later, so they win
+    BackHandler(enabled = tab != Tab.Home.ordinal) { selectTab(Tab.Home.ordinal) }
 
     Scaffold(
         containerColor = BgBlack,
@@ -188,6 +198,8 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                     )
                 }
                 val duo = Appearance.source.collectAsState().value == ThemeSource.DUO
+                // the search overlay takes the whole screen; the mini player stays
+                if (!showSearch) {
                 // square keyboard phones have little height: icons only, in a slim bar
                 if (LocalDeviceProfile.current.isSquare) Row(
                     Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).navigationBarsPadding().height(52.dp),
@@ -222,6 +234,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                         )
                     }
                 }
+                }
             }
         },
     ) { inner ->
@@ -239,21 +252,32 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                         viewModel,
                         onOpenNowPlaying = { showNowPlaying = true },
                         onOpenPage = openPage,
-                        onOpenSearch = { selectTab(Tab.Search.ordinal) },
-                        onOpenSettings = { showSettings = true },
-                        onSpinWheel = { showWheel = true },
+                        onOpenSearch = { openSearch(Scope.ALL) },
+                        onOpenSettings = openSettings,
+                        onSpinWheel = openWheel,
                         add = add,
                     )
-                    Tab.Search.ordinal -> SearchTab(viewModel, add, onOpenSettings = { showSettings = true })
                     Tab.Library.ordinal -> LibraryScreen(
                         viewModel,
                         add = add,
                         onOpenPage = openPage,
-                        onOpenSettings = { showSettings = true },
+                        onOpenSettings = openSettings,
                         section = librarySection,
                         onSection = { librarySection = it },
                     )
                     else -> RadioScreen()
+                }
+            }
+            AnimatedVisibility(
+                visible = showSearch,
+                enter = slideInVertically(initialOffsetY = { it / 8 }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it / 8 }) + fadeOut(),
+            ) {
+                androidx.compose.material3.Surface(
+                    Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+                    color = BgBlack,
+                ) {
+                    SearchOverlay(viewModel, searchScope, onClose = { showSearch = false }, onOpenDownloads = { showDownloads = true })
                 }
             }
             pages.lastOrNull()?.let { page ->
@@ -290,15 +314,6 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                 sources = extra,
             )
         }
-    }
-
-    AnimatedVisibility(
-        visible = showYouTube,
-        enter = slideInVertically(initialOffsetY = { it }),
-        exit = slideOutVertically(targetOffsetY = { it }),
-    ) {
-        BackHandler { showYouTube = false }
-        YouTubeScreen(viewModel, onClose = { showYouTube = false }, onOpenDownloads = { showDownloads = true })
     }
 
     AnimatedVisibility(

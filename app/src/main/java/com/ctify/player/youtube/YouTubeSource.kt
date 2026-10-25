@@ -57,9 +57,13 @@ data class YtSong(
 sealed interface YtLink {
     data class Song(val song: YtSong) : YtLink
     data class Album(val album: YtAlbum) : YtLink
+    data class Playlist(val playlist: YtPlaylist) : YtLink
 }
 
 data class YtAlbum(val id: String, val title: String, val artist: String, val thumbnail: String?, val songs: List<YtSong>)
+
+/** A normal YouTube playlist (PL..., VL...): songs keep their own covers and albums. */
+data class YtPlaylist(val id: String, val title: String, val owner: String, val thumbnail: String?, val songs: List<YtSong>)
 
 /** Search, stream and browse YouTube Music. Every call goes through NetworkGate. */
 object YouTubeSource {
@@ -143,10 +147,12 @@ object YouTubeSource {
     /** True for youtube.com, music.youtube.com and youtu.be links. */
     fun isLink(text: String) = Regex("(?i)(https?://)?([a-z]+\\.)?(youtube\\.com|youtu\\.be)/").containsMatchIn(text)
 
-    /** Opens a song, album or playlist link; a link with both a video and a list opens the list. */
+    /** Opens a song, album or playlist link; a link with both a video and a list opens the list, except RD mixes. */
     suspend fun fromLink(text: String): YtLink {
         val url = Regex("\\S*(youtube\\.com|youtu\\.be)/\\S*").find(text)?.value ?: text.trim()
-        listId(url)?.takeUnless { it.startsWith("RD") }?.let { return YtLink.Album(album(it)) }
+        listId(url)?.takeUnless { it.startsWith("RD") }?.let { id ->
+            return if (id.startsWith("OLAK")) YtLink.Album(album(id)) else YtLink.Playlist(openPlaylist(id))
+        }
         val id = videoId(url) ?: throw YtParseException("This link isn't a YouTube song, album or playlist")
         return YtLink.Song(song(id))
     }
@@ -182,6 +188,14 @@ object YouTubeSource {
         val title = info.name.replace(Regex("^\\S+ [-–] "), "")
         val songs = items.mapIndexedNotNull { i, s -> toSong(s)?.copy(album = title, trackNumber = i + 1, thumbnail = info.thumbnailUrl ?: s.thumbnailUrl) }
         YtAlbum(id, title, artist ?: songs.firstOrNull()?.artist ?: "Unknown artist", info.thumbnailUrl, songs)
+    }
+
+    /** A playlist with its name, owner and cover; VL prefix allowed. */
+    suspend fun openPlaylist(id: String): YtPlaylist = lookup("Open playlist", id) {
+        val clean = id.removePrefix("VL")
+        val (info, items) = playlist("https://www.youtube.com/playlist?list=$clean")
+        val owner = info.uploaderName?.removeSuffix(" - Topic")?.takeIf { it.isNotBlank() }
+        YtPlaylist(clean, info.name, owner ?: "YouTube", info.thumbnailUrl, items.mapNotNull(::toSong))
     }
 
     /** Songs of any playlist id, VL prefix allowed. */
