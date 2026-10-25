@@ -384,7 +384,9 @@ class PlaybackController(
         val file = reverser.reversed(track).getOrElse {
             PlayerHub.reversePreparing.value = false
             PlayerHub.reverseOn.value = false
-            Toast.makeText(context, "Reverse failed: ${it.message}", Toast.LENGTH_LONG).show()
+            // Good & Evil turns songs around on its own: one that can't be reversed just keeps playing forwards
+            if (Moods.mood.value == Mood.GOOD_EVIL) player.play()
+            else Toast.makeText(context, "Reverse failed: ${it.message}", Toast.LENGTH_LONG).show()
             return
         }
         PlayerHub.reversePreparing.value = false
