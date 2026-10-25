@@ -1,6 +1,7 @@
 package com.ctify.player.ui.songs
 
 import com.ctify.player.data.MusicRepository
+import com.ctify.player.data.PlaylistRecency
 import com.ctify.player.data.Track
 import com.ctify.player.net.Feature
 import com.ctify.player.net.NetworkGate
@@ -129,17 +130,15 @@ object SongActions {
         }
     }
 
-    /** Toggles [ids] in a playlist: adds the missing ones, or takes them all out when all are in. */
-    fun togglePlaylist(repo: MusicRepository, name: String, tracks: List<Track>) {
-        val ids = tracks.map { it.id }
-        val have = repo.playlists.value.firstOrNull { it.name == name }?.trackIds.orEmpty()
-        if (ids.all { it in have }) {
-            Snack.show("Removed from $name", repo.removeFromPlaylist(name, ids))
-        } else {
-            repo.remember(tracks)
-            ids.filterNot { it in have }.forEach { repo.addToPlaylist(name, it) }
-            Snack.show("Added to $name")
-        }
+    /** Adds the songs not yet in [name]; never takes any out, so a mis-tap can't lose songs. */
+    fun addToPlaylist(repo: MusicRepository, name: String, tracks: List<Track>) {
+        val have = repo.playlists.value.firstOrNull { it.name == name }?.trackIds.orEmpty().toSet()
+        val add = tracks.filterNot { it.id in have }
+        if (add.isEmpty()) return Snack.show(if (tracks.size == 1) "Already in $name" else "All already in $name")
+        repo.remember(add)
+        add.forEach { repo.addToPlaylist(name, it.id) }
+        PlaylistRecency.touch(name)
+        Snack.show(if (tracks.size == 1) "Added to $name" else "${songs(add.size)} added to $name") { repo.removeFromPlaylist(name, add.map { it.id }) }
     }
 
     fun save(repo: MusicRepository, track: Track) {

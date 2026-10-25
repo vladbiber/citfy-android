@@ -1,5 +1,9 @@
 package com.ctify.player.ui
 
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+
 import com.ctify.player.ui.skins.radio.RadioSkin
 import com.ctify.player.ui.skins.radio.RadioSkinView
 import com.ctify.player.ui.skins.radio.aspectRatio
@@ -277,6 +281,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}, onOpenPlayl
             val screenHeight = maxHeight
             val main: @Composable ColumnScope.() -> Unit = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                CtIconButton(Icons.Default.KeyboardArrowDown, "Close player", onClose, tint = Ink)
                 TopPill(
                     onRadio, onMenu = { menu = true },
                     onSource = { toRadio ->
@@ -593,23 +598,30 @@ private fun SoundStrip(accent: Color, radio: Boolean, onSkin: () -> Unit, onPane
     val preparing by PlayerHub.reversePreparing.collectAsState()
     val genre by SoundSettings.genreKey.collectAsState()
     val space = spaceSummary(width, pan, muffle)
+    // closed: only the effects that are on; open: every control
+    var all by rememberSaveable { mutableStateOf(false) }
+    val genreOn = genre != GenrePreset.BALANCED
+    val speedOn = abs(rate - 1f) > 0.004f
+    val reverbOn = reverb > 0.004f
+    val bassOn = bass >= 0.05f
+    val moreOn = !radio && (v.on || reversed) || rain != RainPreset.OFF || preparing
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StripChip("Skin", Icons.Default.Palette, false, accent, description = "Player look", onClick = onSkin)
-        StripChip(GenrePreset.labelOf(genre), null, genre != GenrePreset.BALANCED, accent, description = "Genre preset ${GenrePreset.labelOf(genre)}") {
+        StripChip(if (all) "Sound ▾" else "Sound ▸", Icons.Default.Tune, false, accent, description = if (all) "Hide sound controls" else "Show sound controls") { all = !all }
+        if (all || genreOn) StripChip(GenrePreset.labelOf(genre), null, genreOn, accent, description = "Genre preset ${GenrePreset.labelOf(genre)}") {
             onPanel(ChipPanel.GENRE)
         }
-        StripChip("Speed ${"%.2f".format(rate)}×", null, abs(rate - 1f) > 0.004f, accent) { onPanel(ChipPanel.SPEED) }
-        StripChip("Reverb ${(reverb * 100).roundToInt()}%", null, reverb > 0.004f, accent) { onPanel(ChipPanel.REVERB) }
-        StripChip(if (bass < 0.05f) "Bass off" else "Bass +${bass.roundToInt()} dB", null, bass >= 0.05f, accent) { onPanel(ChipPanel.BASS) }
-        StripChip("${RETUNE_PRESETS[retune].hz} Hz", null, retune != 0, accent) { onPanel(ChipPanel.HZ) }
-        StripChip(if (space == "off") "Space" else "Space · $space", null, space != "off", accent) { onPanel(ChipPanel.SPACE) }
-        StripChip(
-            if (preparing) "Reverse: decoding…" else "More", Icons.Default.MoreHoriz,
-            !radio && (v.on || reversed) || rain != RainPreset.OFF, accent,
+        if (all || speedOn) StripChip("Speed ${"%.2f".format(rate)}×", null, speedOn, accent) { onPanel(ChipPanel.SPEED) }
+        if (all || reverbOn) StripChip("Reverb ${(reverb * 100).roundToInt()}%", null, reverbOn, accent) { onPanel(ChipPanel.REVERB) }
+        if (all || bassOn) StripChip(if (bass < 0.05f) "Bass off" else "Bass +${bass.roundToInt()} dB", null, bassOn, accent) { onPanel(ChipPanel.BASS) }
+        if (all || retune != 0) StripChip("${RETUNE_PRESETS[retune].hz} Hz", null, retune != 0, accent) { onPanel(ChipPanel.HZ) }
+        if (all || space != "off") StripChip(if (space == "off") "Space" else "Space · $space", null, space != "off", accent) { onPanel(ChipPanel.SPACE) }
+        if (all || moreOn) StripChip(
+            if (preparing) "Reverse: decoding…" else "More", Icons.Default.MoreHoriz, moreOn, accent,
             description = if (radio) "Equalizer and rain" else "Equalizer, rain, vinyl and reverse",
         ) { onPanel(ChipPanel.MORE) }
     }
@@ -690,7 +702,7 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                     )
                     Text(
                         state?.radioStatus.takeIf { station != null } ?: track?.artist ?: "pick something in Library",
-                        color = InkDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = InkDim, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.marquee(),
                     )
                 }
@@ -704,6 +716,11 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
                     contentDescription = if (fav) "Remove from favorites" else "Add to favorites",
                     accent = accent, pop = true,
                 )
+                if (station == null && track != null) {
+                    var pick by remember { mutableStateOf(false) }
+                    CtIconButton(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", { pick = true }, tint = Ink)
+                    if (pick) AddToPlaylistSheet(listOf(track), onDismiss = { pick = false })
+                }
                 if (station == null && track?.isStreamed() == true) DownloadButton(track, accent)
                 val sleepLeft = sleepLeft()
                 CtIconButton(
@@ -755,15 +772,13 @@ private fun ControlCard(live: LiveProgress, accent: Color, seekBar: Boolean, fil
             }
             if (station == null) ChapterRow(live, Ink)
             if (station == null) {
-                var upNext by rememberSaveable { mutableStateOf(false) }
-                CtIconButton(
-                    if (upNext) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    if (upNext) "Hide up next" else "Show up next", { upNext = !upNext },
-                    Modifier.align(Alignment.CenterHorizontally), tint = InkDim,
-                )
-                AnimatedVisibility(upNext, enter = expandVertically(), exit = shrinkVertically()) {
-                    Column(Modifier.padding(end = 8.dp)) { QueueSheet(maxHeight = 260.dp) }
+                var queue by rememberSaveable { mutableStateOf(false) }
+                androidx.compose.material3.TextButton(onClick = { queue = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Ink, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Up next", color = Ink)
                 }
+                if (queue) QueueSheet(onDismiss = { queue = false })
             }
         }
     }

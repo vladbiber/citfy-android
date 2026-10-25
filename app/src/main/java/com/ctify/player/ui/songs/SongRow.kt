@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.CheckCircle
@@ -51,7 +51,7 @@ import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextPrimary
 import kotlinx.coroutines.launch
 
-/** A song row wired to the shared actions: heart = Liked songs, ⋮ and long press = [SongSheet], cover tap = select. */
+/** A song row wired to the shared actions: heart = Liked songs, + = playlist picker, ⋮ = [SongSheet], long press = select. */
 @Composable
 fun SongRow(
     track: Track,
@@ -62,23 +62,26 @@ fun SongRow(
 ) {
     val repo = (LocalContext.current.applicationContext as CtifyApp).repository
     val favorites by repo.favorites.collectAsStateWithLifecycle()
-    val ui by PlayerHub.ui.collectAsStateWithLifecycle()
+    val now by PlayerHub.nowPlaying.collectAsStateWithLifecycle()
     val sel by Selecting.state.collectAsStateWithLifecycle()
     val selecting = sel.isSelecting(context)
-    val on = track.id == ui.currentTrackId
+    val on = track.id == now.first
+    var pick by remember { mutableStateOf(false) }
+    if (pick) AddToPlaylistSheet(listOf(track), onDismiss = { pick = false })
     TrackRow(
         track = track,
         isCurrent = on,
-        isPlaying = on && ui.isPlaying,
+        isPlaying = on && now.second,
         isFavorite = track.id in favorites,
         onClick = { if (selecting) Selecting.toggle(track, context, pool) else onPlay() },
         onToggleFavorite = { SongActions.toggleLike(repo, track) },
         onMore = { SongSheets.show(SongTarget.Song(track), context, pool) },
-        onRemove = if (context is SongContext.Playlist) ({ SongActions.remove(repo, context, listOf(track.id)) }) else null,
         status = status?.first,
         statusIcon = status?.second,
-        onCoverClick = { Selecting.toggle(track, context, pool) },
+        onCoverClick = if (selecting) ({ Selecting.toggle(track, context, pool) }) else null,
         selected = selecting && sel.has(track.id),
+        onAddToPlaylist = if (selecting) null else ({ pick = true }),
+        onLongClick = { Selecting.toggle(track, context, pool) },
     )
 }
 
@@ -105,7 +108,7 @@ fun androidx.compose.foundation.layout.BoxScope.SelectedMark(track: Track, conte
     }
 }
 
-/** The selection bar shown over the top of the screen while songs are picked; Back closes it. */
+/** The selection bar shown over the bottom bar while songs are picked; Back closes it. */
 @Composable
 fun SelectionBar() {
     val repo = (LocalContext.current.applicationContext as CtifyApp).repository
@@ -118,7 +121,7 @@ fun SelectionBar() {
     val ids = sel.tracks.map { it.id }
     val done: (() -> Unit) -> Unit = { action -> action(); Selecting.clear() }
     Surface(Modifier.fillMaxWidth(), color = SurfaceElevated, shadowElevation = 4.dp) {
-        Row(Modifier.statusBarsPadding().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.navigationBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = Selecting::clear) { Icon(Icons.Filled.Close, "Stop selecting", tint = TextPrimary) }
             Text("${sel.tracks.size} selected", color = TextPrimary, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
             if (sel.tracks.size < sel.pool.size) IconButton(onClick = Selecting::selectAll) { Icon(Icons.Filled.SelectAll, "Select all", tint = TextPrimary) }

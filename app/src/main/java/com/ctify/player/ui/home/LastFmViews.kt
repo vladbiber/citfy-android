@@ -73,13 +73,15 @@ import com.ctify.player.ui.theme.TextSecondary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** A page opened from Home's Genres or Creators rows. */
+/** A page shown over the current tab: artists, albums, playlists, genres; Back returns to where it was opened. */
 sealed interface HomePage {
     data class GenrePage(val tag: String) : HomePage
-    data object Creators : HomePage
     data class ArtistPage(val artist: LastFm.Artist) : HomePage
     data class Artists(val title: String, val artists: List<LastFm.Artist>) : HomePage
     data class Top100(val continent: Continent) : HomePage
+    /** your songs of one album; [artist] tells apart albums with the same name */
+    data class Album(val album: String, val artist: String) : HomePage
+    data class Playlist(val name: String) : HomePage
 }
 
 /** Runs [load] once per [key]; [initial] until it finishes, failures (offline, no key) give [empty]. */
@@ -114,7 +116,7 @@ internal fun GenresRow(genres: List<String>, title: String = "Genres", onOpen: (
 }
 
 @Composable
-private fun Collage(covers: List<String>, size: Dp) {
+internal fun Collage(covers: List<String>, size: Dp) {
     Column(Modifier.size(size).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.secondaryContainer)) {
         for (r in 0..1) Row(Modifier.weight(1f)) {
             for (c in 0..1) Box(Modifier.weight(1f).fillMaxSize()) {
@@ -126,7 +128,7 @@ private fun Collage(covers: List<String>, size: Dp) {
 
 /** A round artist photo, or the initials when there is none. */
 @Composable
-private fun Avatar(artist: LastFm.Artist, size: Dp) {
+internal fun Avatar(artist: LastFm.Artist, size: Dp) {
     Box(
         Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.tertiaryContainer),
         contentAlignment = Alignment.Center,
@@ -138,7 +140,7 @@ private fun Avatar(artist: LastFm.Artist, size: Dp) {
 }
 
 @Composable
-private fun ArtistTile(artist: LastFm.Artist, size: Dp, onOpen: (LastFm.Artist) -> Unit) {
+internal fun ArtistTile(artist: LastFm.Artist, size: Dp, onOpen: (LastFm.Artist) -> Unit) {
     Column(
         Modifier.width(size).clip(MaterialTheme.shapes.small)
             .clickable(role = Role.Button, onClickLabel = "open") { onOpen(artist) }
@@ -166,7 +168,7 @@ internal fun CreatorsRow(creators: List<LastFm.Artist>, onOpen: (LastFm.Artist) 
 }
 
 @Composable
-private fun PageTop(title: String, onBack: () -> Unit) {
+internal fun PageTop(title: String, onBack: () -> Unit) {
     Row(Modifier.padding(start = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TextSecondary) }
         ScreenTitle(title)
@@ -191,22 +193,6 @@ internal fun GenrePage(tag: String, repo: MusicRepository, onBack: () -> Unit) {
     val songs = rememberLoad(tag, null as List<LastFm.Song>?) { LastFm.tagTracks(tag) }?.let { HiddenArtists.filter(it, hidden) { s -> s.artist } }
     val covers = rememberLoad(tag, emptyList()) { LastFm.tagCovers(tag) }
     SongsPage(genreLabel(tag), { Collage(covers, 200.dp) }, songs, repo, onBack)
-}
-
-/** An artist's top songs and similar artists. */
-@Composable
-internal fun ArtistPage(artist: LastFm.Artist, repo: MusicRepository, onOpen: (LastFm.Artist) -> Unit, onBack: () -> Unit) {
-    val songs = rememberLoad(artist.name, null as List<LastFm.Song>?) { LastFm.artistTracks(artist.name) }
-    val hidden by HiddenArtists.names.collectAsStateWithLifecycle()
-    val similar = HiddenArtists.filter(rememberLoad(artist.name, emptyList()) { LastFm.similar(artist.name) }, hidden) { it.name }
-    SongsPage(artist.name, { Avatar(artist, 160.dp) }, songs, repo, onBack) {
-        if (similar.isNotEmpty()) {
-            SectionHeader("Similar artists", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp))
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(similar, key = { it.name }) { ArtistTile(it, 96.dp, onOpen) }
-            }
-        }
-    }
 }
 
 @Composable

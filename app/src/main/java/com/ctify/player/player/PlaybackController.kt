@@ -44,7 +44,9 @@ object Cmd {
     const val PLAY_STATIONS = "ctify.PLAY_STATIONS"
     /** leave radio and put back the track queue it replaced */
     const val RESUME_TRACKS = "ctify.RESUME_TRACKS"
-    val ALL = listOf(PLAY_QUEUE, ADD_TO_QUEUE, PLAY_INDEX, NEXT, PREVIOUS, SEEK, TOGGLE_REVERSE, PLAY_STATIONS, RESUME_TRACKS)
+    const val MOVE_IN_QUEUE = "ctify.MOVE_IN_QUEUE"
+    const val REMOVE_FROM_QUEUE = "ctify.REMOVE_FROM_QUEUE"
+    val ALL = listOf(PLAY_QUEUE, ADD_TO_QUEUE, PLAY_INDEX, NEXT, PREVIOUS, SEEK, TOGGLE_REVERSE, PLAY_STATIONS, RESUME_TRACKS, MOVE_IN_QUEUE, REMOVE_FROM_QUEUE)
     /** safe for any controller, e.g. the system media controls and Bluetooth */
     val PUBLIC = listOf(NEXT, PREVIOUS)
 
@@ -53,6 +55,7 @@ object Cmd {
     /** with ADD_TO_QUEUE: right after the current song instead of at the end */
     const val ARG_NEXT = "next"
     const val ARG_INDEX = "index"
+    const val ARG_TO = "to"
     const val ARG_MS = "ms"
     const val ARG_STATIONS = "stations"
 }
@@ -124,6 +127,16 @@ class PlaybackController(
             }
             Cmd.ADD_TO_QUEUE -> addToQueue(args.getString(Cmd.ARG_ID) ?: return false, args.getBoolean(Cmd.ARG_NEXT))
             Cmd.PLAY_INDEX -> playQueueIndex(args.getInt(Cmd.ARG_INDEX, -1))
+            // the reversed copy is one file, so its queue can't be edited
+            Cmd.MOVE_IN_QUEUE -> if (!PlayerHub.reverseOn.value && !radio.active) {
+                val from = args.getInt(Cmd.ARG_INDEX, -1)
+                val to = args.getInt(Cmd.ARG_TO, -1)
+                if (from in 0 until player.mediaItemCount && to in 0 until player.mediaItemCount) player.moveMediaItem(from, to)
+            }
+            Cmd.REMOVE_FROM_QUEUE -> if (!PlayerHub.reverseOn.value && !radio.active) {
+                val i = args.getInt(Cmd.ARG_INDEX, -1)
+                if (i in 0 until player.mediaItemCount && i != player.currentMediaItemIndex) player.removeMediaItem(i)
+            }
             Cmd.NEXT -> next()
             Cmd.PREVIOUS -> previous()
             Cmd.SEEK -> seekTo(args.getLong(Cmd.ARG_MS).coerceAtLeast(0L))

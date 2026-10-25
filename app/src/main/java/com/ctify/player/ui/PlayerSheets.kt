@@ -48,50 +48,6 @@ import com.ctify.player.ui.sound.GenrePresetsRow
 import com.ctify.player.ui.sound.SoundTab
 import com.ctify.player.ui.sound.SuggestionCard
 
-/** The play queue, opened from the arrow under the player's progress bar; starts at the current song. */
-@Composable
-internal fun QueueSheet(maxHeight: Dp = 520.dp) {
-    val repository = (LocalContext.current.applicationContext as CtifyApp).repository
-    val ui by PlayerHub.ui.collectAsState()
-    val recommended by UpNext.recommended.collectAsState()
-    val loading by UpNext.loading.collectAsState()
-    val error by UpNext.error.collectAsState()
-    Text(
-        "Up next", style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.padding(start = 16.dp, bottom = 4.dp).semantics { heading() },
-    )
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        listOf(false to "Library", true to "Recommended").forEachIndexed { i, (on, label) ->
-            SegmentedButton(
-                selected = recommended == on, onClick = { UpNext.choose(on) },
-                shape = SegmentedButtonDefaults.itemShape(i, 2),
-            ) { Text(label) }
-        }
-    }
-    val note = if (loading) "Finding songs like this one…" else error
-    if (note != null) Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (loading) {
-            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(8.dp))
-        }
-        Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    val list = rememberLazyListState(initialFirstVisibleItemIndex = ui.currentIndex.coerceAtLeast(0))
-    LazyColumn(Modifier.heightIn(max = maxHeight), state = list, contentPadding = PaddingValues(bottom = 8.dp)) {
-        itemsIndexed(ui.queueIds) { index, id ->
-            val t = repository.trackById(id) ?: return@itemsIndexed
-            TrackRow(
-                track = t,
-                isCurrent = index == ui.currentIndex,
-                isPlaying = ui.isPlaying && index == ui.currentIndex,
-                isFavorite = false,
-                onClick = { PlayerHub.playQueueIndex(index) },
-                onToggleFavorite = null,
-            )
-        }
-    }
-}
-
 @Composable
 internal fun SoundSheet(radio: Boolean = false) {
     Column(

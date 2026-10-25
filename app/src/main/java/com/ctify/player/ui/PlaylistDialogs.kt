@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlaylistAdd
@@ -36,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.CtifyApp
 import com.ctify.player.data.MusicRepository
+import com.ctify.player.data.PlaylistRecency
 import com.ctify.player.data.Track
 import com.ctify.player.ui.songs.SongActions
 import com.ctify.player.ui.songs.Snack
@@ -46,7 +49,7 @@ import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 
-/** Bottom sheet that adds [tracks] to playlists, e.g. from the selection bar. */
+/** Bottom sheet that adds [tracks] to a playlist: from a song row, the player, the song sheet or the selection bar. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddToPlaylistSheet(tracks: List<Track>, onDismiss: () -> Unit) {
@@ -56,20 +59,22 @@ fun AddToPlaylistSheet(tracks: List<Track>, onDismiss: () -> Unit) {
             color = TextPrimary, style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp).semantics { heading() },
         )
-        PlaylistRows(tracks, onDone = onDismiss)
+        Column(Modifier.verticalScroll(rememberScrollState())) { PlaylistRows(tracks, onDone = onDismiss) }
         Spacer(Modifier.height(24.dp))
     }
 }
 
 /**
- * "New playlist" and every playlist, checked when it already holds all of [tracks]; a tap adds them,
- * or takes them out when checked. Used inside the song sheet and [AddToPlaylistSheet].
+ * "New playlist", then every playlist with the last used first; a tap adds [tracks] and closes.
+ * Playlists that already hold them all are checked and left alone.
  */
 @Composable
 fun ColumnScope.PlaylistRows(tracks: List<Track>, onDone: () -> Unit) {
     val repo = (LocalContext.current.applicationContext as CtifyApp).repository
     val playlists by repo.playlists.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf("") }
+    val ordered = remember(playlists) { PlaylistRecency.order(playlists) }
     Row(
         Modifier.fillMaxWidth().clickable { showCreate = true }.padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -78,19 +83,21 @@ fun ColumnScope.PlaylistRows(tracks: List<Track>, onDone: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Text("New playlist", color = Accent, fontWeight = FontWeight.SemiBold)
     }
-    playlists.forEach { pl ->
+    if (playlists.size > 8) SearchField(filter, { filter = it }, "Find a playlist", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+    val q = filter.trim()
+    ordered.filter { q.isEmpty() || it.name.contains(q, true) }.forEach { pl ->
         val already = tracks.all { it.id in pl.trackIds }
         Row(
-            Modifier.fillMaxWidth().clickable { SongActions.togglePlaylist(repo, pl.name, tracks); onDone() }.padding(16.dp),
+            Modifier.fillMaxWidth().clickable { SongActions.addToPlaylist(repo, pl.name, tracks); onDone() }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Filled.QueueMusic, null, tint = TextSecondary)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(pl.name, color = TextPrimary)
-                if (already) Text("Tap to remove", color = TextMuted, style = MaterialTheme.typography.labelSmall)
+                Text(if (already) "Already in it" else songCount(pl.trackIds.size), color = TextMuted, style = MaterialTheme.typography.bodySmall)
             }
-            if (already) Icon(Icons.Filled.Check, "in playlist", tint = Accent)
+            if (already) Icon(Icons.Filled.Check, "already in playlist", tint = Accent)
         }
     }
     if (showCreate) CreatePlaylistDialog(repo, addTracks = tracks, onDismiss = { showCreate = false; onDone() })
@@ -109,6 +116,7 @@ fun CreatePlaylistDialog(repo: MusicRepository, addTracks: List<Track> = emptyLi
                     val n = name.trim()
                     repo.remember(addTracks)
                     repo.createPlaylistWithTracks(n, addTracks.map { it.id })
+                    PlaylistRecency.touch(n)
                     Snack.show(if (addTracks.isEmpty()) "Created $n" else "Added to $n")
                     onDismiss()
                 },

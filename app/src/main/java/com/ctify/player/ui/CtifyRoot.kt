@@ -1,5 +1,12 @@
 package com.ctify.player.ui
 
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.ctify.player.ui.home.HomePage
+import com.ctify.player.ui.home.PageHost
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -80,9 +87,9 @@ import com.ctify.player.ui.songs.rememberSnackState
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
+    Search("Search", Icons.Filled.Search),
     Library("Library", Icons.Filled.LibraryMusic),
     Radio("Radio", Icons.Filled.Radio),
-    Settings("Settings", Icons.Filled.Settings),
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -95,8 +102,12 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
     val sharedLink by YtIntake.pending.collectAsState()
     LaunchedEffect(sharedLink) { if (sharedLink != null) showYouTube = true }
     var showDownloads by remember { mutableStateOf(false) }
-    var openedPlaylist by remember { mutableStateOf<String?>(null) }
-    var librarySection by remember { mutableIntStateOf(0) }
+    var showSettings by remember { mutableStateOf(false) }
+    var librarySection by rememberSaveable { mutableIntStateOf(0) }
+    // artist, album, playlist and genre pages open over the current tab; Back walks back through them
+    val pages = remember { mutableStateListOf<HomePage>() }
+    val openPage: (HomePage) -> Unit = { pages += it }
+    val selectTab: (Int) -> Unit = { pages.clear(); tab = it }
 
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val now by PlayerHub.playback.collectAsStateWithLifecycle()
@@ -122,9 +133,11 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
     val ctx = androidx.compose.ui.platform.LocalContext.current
     remember { HiddenArtists.init(ctx) }
     val snack = rememberSnackState()
-    val overlay = showWheel || showYouTube || showNowPlaying
+    val overlay = showWheel || showYouTube || showNowPlaying || showSettings
     val goTo by SongSheets.goTo.collectAsState()
-    LaunchedEffect(goTo) { if (goTo != null) { tab = Tab.Home.ordinal; showWheel = false; showYouTube = false; showNowPlaying = false } }
+    LaunchedEffect(goTo) {
+        goTo?.let { pages += it; SongSheets.goTo.value = null; showWheel = false; showYouTube = false; showNowPlaying = false; showSettings = false }
+    }
 
     Scaffold(
         containerColor = BgBlack,
@@ -151,7 +164,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                     Tab.entries.forEachIndexed { index, t ->
                         NavigationBarItem(
                             selected = tab == index,
-                            onClick = { tab = index },
+                            onClick = { selectTab(index) },
                             icon = {
                                 // M3 indicators take one color, so Two colors draws its own fade pill (64x32 like the stock one)
                                 if (duo && tab == index) Box(
@@ -184,23 +197,37 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                     (slideOutHorizontally(standardSpring()) { -dir * it / 5 } + fadeOut(fastSpring()))
             }, label = "tab") { page ->
                 when (page) {
-                    0 -> HomeScreen(
+                    Tab.Home.ordinal -> HomeScreen(
                         viewModel,
                         onOpenNowPlaying = { showNowPlaying = true },
-                        onOpenPlaylist = { name -> openedPlaylist = name; tab = Tab.Library.ordinal },
+                        onOpenPage = openPage,
+                        onOpenSearch = { selectTab(Tab.Search.ordinal) },
+                        onOpenSettings = { showSettings = true },
                         onSpinWheel = { showWheel = true },
                         add = add,
                     )
+                    Tab.Search.ordinal -> SearchTab(viewModel, add, onOpenSettings = { showSettings = true })
                     Tab.Library.ordinal -> LibraryScreen(
                         viewModel,
                         add = add,
-                        openedPlaylist = openedPlaylist,
-                        onOpenPlaylist = { openedPlaylist = it },
+                        onOpenPage = openPage,
+                        onOpenSettings = { showSettings = true },
                         section = librarySection,
                         onSection = { librarySection = it },
                     )
-                    Tab.Radio.ordinal -> RadioScreen()
-                    else -> SettingsScreen()
+                    else -> RadioScreen()
+                }
+            }
+            pages.lastOrNull()?.let { page ->
+                BackHandler { pages.removeAt(pages.lastIndex) }
+                androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = BgBlack) {
+                    key(pages.size) {
+                        PageHost(
+                            page, viewModel.repository, open = openPage,
+                            back = { if (pages.isNotEmpty()) pages.removeAt(pages.lastIndex) },
+                            replace = { if (pages.isNotEmpty()) pages[pages.lastIndex] = it },
+                        )
+                    }
                 }
             }
         }
@@ -236,6 +263,17 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
         YouTubeScreen(viewModel, onClose = { showYouTube = false }, onOpenDownloads = { showDownloads = true })
     }
 
+    AnimatedVisibility(
+        visible = showSettings,
+        enter = slideInVertically(initialOffsetY = { it / 8 }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { it / 8 }) + fadeOut(),
+    ) {
+        BackHandler { showSettings = false }
+        Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}) {
+            SettingsScreen(onClose = { showSettings = false })
+        }
+    }
+
     if (showDownloads) DownloadsSheet(onDismiss = { showDownloads = false })
 
     val spotifyLink by YtIntake.spotify.collectAsState()
@@ -259,8 +297,8 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
             CompositionLocalProvider(LocalPlayerVisibility provides this@AnimatedVisibility) {
                 PlayerContent(
                     onClose = { showNowPlaying = false },
-                    onOpenRadio = { showNowPlaying = false; tab = Tab.Radio.ordinal },
-                    onOpenPlaylist = { name -> openedPlaylist = name; tab = Tab.Library.ordinal },
+                    onOpenRadio = { showNowPlaying = false; selectTab(Tab.Radio.ordinal) },
+                    onOpenPlaylist = { name -> showNowPlaying = false; pages += HomePage.Playlist(name) },
                 )
             }
         }
@@ -269,8 +307,8 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
     // song sheet, selection bar and, over full-screen overlays, the snackbar
     SongSheetHost()
     Box(Modifier.fillMaxSize().systemBarsPadding().padding(bottom = 8.dp), contentAlignment = Alignment.BottomCenter) { if (overlay) SnackbarHost(snack) }
-    // the parent Surface stretches its children, so the bar gets a full-size box to sit at the top of
-    Box(Modifier.fillMaxSize()) { SelectionBar() }
+    // over the tab bar while songs are picked, where thumbs already are
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) { SelectionBar() }
 } } // SharedTransitionLayout, LocalSharedCover: the mini player's cover grows into the player
 
 internal fun contentPadding() = PaddingValues(bottom = 12.dp)

@@ -1,6 +1,14 @@
 package com.ctify.player.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.History
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -24,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -60,6 +70,8 @@ import com.ctify.player.youtube.YtPlaylistRef
 import com.ctify.player.youtube.YtSong
 import com.ctify.player.youtube.download.Downloads
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.Serializable
@@ -144,11 +156,13 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
     var radioState by remember { mutableStateOf<String?>(null) }
 
     val q = query.trim()
-    val local = remember(q, tracks, lib, liked) {
-        if (q.isEmpty()) emptyList()
-        else lib.apply(tracks, q, liked)
-            // on the phone first, saved streams after
-            .sortedBy { if (it.uri.startsWith("ytstream")) 1 else 0 }
+    // off the main thread, so typing stays smooth with a big library
+    val local by produceState(emptyList<Track>(), q, tracks, lib, liked) {
+        value = if (q.isEmpty()) emptyList() else withContext(Dispatchers.Default) {
+            lib.apply(tracks, q, liked)
+                // on the phone first, saved streams after
+                .sortedBy { if (it.uri.startsWith("ytstream")) 1 else 0 }
+        }
     }
     val localAlbums = remember(local, lib) {
         if (lib.match != Match.ALBUMS) emptyList()
@@ -162,10 +176,17 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
     val wantYt = scope == Scope.ALL || scope == Scope.YOUTUBE
     val wantRadio = (scope == Scope.ALL && lib.match == Match.SONGS && kind == YtKind.SONGS) || scope == Scope.RADIO
     LaunchedEffect(q, wantYt, kind) {
-        ytSongs = emptyList(); ytAlbumsAll = emptyList(); ytState = null
-        if (q.length < 2 || !wantYt) return@LaunchedEffect
-        NetworkGate.blockReason(Feature.YOUTUBE)?.let { ytState = it; return@LaunchedEffect }
-        delay(600)
+        if (q.length < 2 || !wantYt) { ytSongs = emptyList(); ytAlbumsAll = emptyList(); ytState = null; return@LaunchedEffect }
+        NetworkGate.blockReason(Feature.YOUTUBE)?.let { ytSongs = emptyList(); ytAlbumsAll = emptyList(); ytState = it; return@LaunchedEffect }
+        // a query searched in the last minutes shows at once
+        val hit: Any? = when (kind) {
+            YtKind.ALBUMS -> YouTubeSource.cached<List<YtPlaylistRef>>(YouTubeSource.ALBUMS, q)?.also { ytAlbumsAll = it }
+            YtKind.VIDEOS -> YouTubeSource.cached<List<YtSong>>(YouTubeSource.VIDEOS, q)?.also { ytSongs = it }
+            YtKind.SONGS -> YouTubeSource.cached<List<YtSong>>(YouTubeSource.SONGS, q)?.also { ytSongs = it }
+        }
+        if (hit != null) { ytState = null; return@LaunchedEffect }
+        // the old results stay up until the new ones arrive
+        delay(250)
         ytState = LOADING
         ytState = try {
             when (kind) {
@@ -181,10 +202,9 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
         }
     }
     LaunchedEffect(q, wantRadio) {
-        stations = emptyList(); radioState = null
-        if (q.length < 2 || !wantRadio) return@LaunchedEffect
-        NetworkGate.blockReason(Feature.RADIO)?.let { radioState = it; return@LaunchedEffect }
-        delay(600)
+        if (q.length < 2 || !wantRadio) { stations = emptyList(); radioState = null; return@LaunchedEffect }
+        NetworkGate.blockReason(Feature.RADIO)?.let { stations = emptyList(); radioState = it; return@LaunchedEffect }
+        delay(300)
         radioState = LOADING
         radioState = radio.search(StationQuery(name = q, limit = 20)).fold({ stations = it; null }, { it.message ?: "Radio search failed" })
     }
@@ -216,7 +236,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
 
         if (wantYt && kind == YtKind.ALBUMS) {
             header("Albums on YouTube")
-            status(ytState, ytAlbums.isEmpty() && q.length >= 2, "No albums found on YouTube")
+            status(ytState, ytAlbums.isEmpty() && q.length >= 2, "No albums found on YouTube", hasResults = ytAlbums.isNotEmpty())
             items(ytAlbums, key = { "ya" + it.id }) { a ->
                 // opens in the YouTube page, which has Play, Save and Download for the album
                 CardRow(a.thumbnail, a.title, a.subtitle) { YtIntake.offer("https://music.youtube.com/playlist?list=${a.id}") }
@@ -225,7 +245,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
 
         if (wantYt && kind != YtKind.ALBUMS) {
             header(if (kind == YtKind.VIDEOS) "All YouTube videos" else "YouTube")
-            status(ytState, yt.isEmpty() && q.length >= 2, "No songs found on YouTube")
+            status(ytState, yt.isEmpty() && q.length >= 2, "No songs found on YouTube", hasResults = yt.isNotEmpty())
             items(yt, key = { "y" + it.id }) { track ->
                 SongRow(track, SongContext.Search, yt, onPlay = { viewModel.repository.remember(yt); viewModel.playQueue(yt, yt.indexOf(track)) })
             }
@@ -233,7 +253,7 @@ internal fun SearchResults(viewModel: PlayerViewModel, query: String, scopes: Li
 
         if (wantRadio) {
             header("Radio")
-            status(radioState, stations.isEmpty() && q.length >= 2, "No stations found")
+            status(radioState, stations.isEmpty() && q.length >= 2, "No stations found", hasResults = stations.isNotEmpty())
             stationRows(stations, radioUi, keyPrefix = "r")
         }
     }
@@ -249,12 +269,95 @@ private fun LazyListScope.note(text: String) = item {
     Text(text, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 }
 
-private fun LazyListScope.status(state: String?, empty: Boolean, emptyText: String) {
+private fun LazyListScope.status(state: String?, empty: Boolean, emptyText: String, hasResults: Boolean = false) {
     when {
+        // a thin bar over results that are being replaced, a spinner when there's nothing yet
+        state == LOADING && hasResults -> item {
+            LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), color = Accent)
+        }
         state == LOADING -> item {
             Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Accent) }
         }
         state != null -> note(state)
         empty -> note(emptyText)
     }
+}
+
+/** The Search tab: one box for your library, heard songs, YouTube and radio; a pasted YouTube link opens it. */
+@Composable
+internal fun SearchTab(viewModel: PlayerViewModel, add: AddActions, onOpenSettings: () -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var searchFilter by rememberSaveable { mutableStateOf(SearchFilter()) }
+    val ctx = LocalContext.current
+    val recent = remember { RecentSearches(ctx) }
+    var recentList by remember { mutableStateOf(recent.all()) }
+    val focus = remember { FocusRequester() }
+    var focusedOnce by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (!focusedOnce) { focusedOnce = true; runCatching { focus.requestFocus() } } }
+    // a search counts once the user stopped typing for a while
+    LaunchedEffect(query) {
+        val q = query.trim()
+        if (q.length < 2 || YouTubeSource.isLink(q)) return@LaunchedEffect
+        delay(2000)
+        recent.add(q); recentList = recent.all()
+    }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ScreenTitle("Search", Modifier.weight(1f))
+            AddMenu(add)
+            SettingsButton(onOpenSettings)
+        }
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            SearchField(query, { query = it }, "Songs, artists, albums, stations", Modifier.weight(1f).focusRequester(focus))
+            SearchFilterButton(searchFilter, HOME_SCOPES) { searchFilter = it }
+        }
+        val q = query.trim()
+        when {
+            YouTubeSource.isLink(q) -> Column(Modifier.padding(16.dp)) {
+                Text("That's a YouTube link", color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = { YtIntake.offer(q); query = "" }) { Text("Open it") }
+            }
+            q.isNotEmpty() -> SearchResults(viewModel, query, HOME_SCOPES, searchFilter)
+            recentList.isEmpty() -> Text(
+                "Search your library, songs heard on the radio, YouTube and stations at once.",
+                color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp),
+            )
+            else -> LazyColumn(contentPadding = contentPadding()) {
+                item {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        SectionHeader("Recent searches", Modifier.weight(1f))
+                        TextButton(onClick = { recent.clear(); recentList = emptyList() }) { Text("Clear") }
+                    }
+                }
+                items(recentList, key = { "rs$it" }) { s ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { query = s }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.History, null, tint = TextMuted)
+                        Spacer(Modifier.width(16.dp))
+                        Text(s, color = TextPrimary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        IconButton(onClick = { recent.remove(s); recentList = recent.all() }) { Icon(Icons.Filled.Close, "Forget $s", tint = TextMuted) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The last searches, newest first, kept on the phone. */
+private class RecentSearches(context: android.content.Context) {
+    private val prefs = context.applicationContext.getSharedPreferences("recent_searches", android.content.Context.MODE_PRIVATE)
+
+    fun all(): List<String> = prefs.getString("q", null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
+
+    fun add(q: String) = save(listOf(q) + all().filterNot { it.equals(q, true) || q.startsWith(it, true) })
+
+    fun remove(q: String) = save(all() - q)
+
+    fun clear() = save(emptyList())
+
+    private fun save(list: List<String>) = prefs.edit().putString("q", list.take(MAX).joinToString("\n")).apply()
+
+    private companion object { const val MAX = 12 }
 }

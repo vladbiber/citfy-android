@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.SkipNext
@@ -198,6 +199,10 @@ fun TrackRow(
     /** a tap on the cover picks the song for multi-select */
     onCoverClick: (() -> Unit)? = null,
     selected: Boolean = false,
+    /** the + button that opens the playlist picker */
+    onAddToPlaylist: (() -> Unit)? = null,
+    /** long press; defaults to [onMore] */
+    onLongClick: (() -> Unit)? = onMore,
 ) {
     val titleColor by animateColorAsState(if (isCurrent) Accent else TextPrimary, label = "title")
     Row(
@@ -208,7 +213,7 @@ fun TrackRow(
             .clip(MaterialTheme.shapes.small)
             .background(if (selected) MaterialTheme.colorScheme.primaryContainer else if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
             .then(if (selected) Modifier.border(1.5.dp, Accent, MaterialTheme.shapes.small) else Modifier)
-            .combinedClickable(onClickLabel = "play", onLongClickLabel = "more options", onLongClick = onMore, onClick = onClick)
+            .combinedClickable(onClickLabel = "play", onLongClickLabel = if (onLongClick === onMore) "more options" else "select", onLongClick = onLongClick, onClick = onClick)
             .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -260,6 +265,11 @@ fun TrackRow(
                     tint = if (isFavorite) Accent else TextSecondary,
                     modifier = Modifier.size(20.dp),
                 )
+            }
+        }
+        if (onAddToPlaylist != null) {
+            IconButton(onClick = onAddToPlaylist) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add ${track.title} to a playlist", tint = TextSecondary, modifier = Modifier.size(20.dp))
             }
         }
         if (onRemove != null) {
@@ -349,7 +359,7 @@ fun MiniPlayer(
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.marquee(),
                 )
                 Text(
-                    status ?: track.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall,
+                    status ?: track.artist, color = TextSecondary, style = MaterialTheme.typography.bodySmall,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.marquee(),
                 )
             }

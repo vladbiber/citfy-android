@@ -2,8 +2,13 @@ package com.ctify.player.ui.songs
 
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import com.ctify.player.recommend.RadioMixer
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
+import com.ctify.player.ui.theme.SurfaceElevated
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -60,7 +65,7 @@ import com.ctify.player.radio.HeardLikes
 import com.ctify.player.radio.SongLinks
 import com.ctify.player.recommend.SongRadio
 import com.ctify.player.ui.AlbumArt
-import com.ctify.player.ui.PlaylistRows
+import com.ctify.player.ui.AddToPlaylistSheet
 import com.ctify.player.ui.home.HomePage
 import com.ctify.player.ui.home.genreLabel
 import com.ctify.player.ui.theme.Accent
@@ -77,7 +82,7 @@ import kotlinx.coroutines.CancellationException
 /**
  * The one options sheet for a song, opened from ⋮ or a long press anywhere.
  * [context] picks the single remove action and whether Hide artist shows; [onSelect] adds Select
- * (multi-select); [extraTop] puts screen-specific rows above the common ones (e.g. the player's own).
+ * (multi-select); [extraTop] adds screen-specific rows after Play next, queue, playlist and like (e.g. the player's own).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,6 +122,9 @@ fun SongSheet(
     // the YouTube lookup shows its own dialogs, so the sheet makes way for it
     ytAction?.let { action -> heard?.let { HeardYouTube(it, action, onDone = onDismiss) }; return }
 
+    // the picker replaces the sheet, so it isn't buried under the other rows
+    track?.let { t -> if (pickPlaylist) return AddToPlaylistSheet(listOf(t), onDismiss = onDismiss) }
+
     val done: (() -> Unit) -> Unit = { action -> action(); onDismiss() }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SurfaceDark) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -130,22 +138,20 @@ fun SongSheet(
                     if (finding) Text("Looking it up on YouTube…", color = TextMuted, style = MaterialTheme.typography.labelSmall)
                 }
             }
-            extraTop?.invoke(this)
 
             if (heard != null) SheetRow(Icons.Filled.PlayArrow, "Play from YouTube") { ytAction = HeardAction.PLAY }
             val t = track
-            if (t != null) {
-                SheetRow(Icons.Filled.SkipNext, "Play next") { done { repo.remember(listOf(t)); PlayerHub.playNext(t.id) } }
-                SheetRow(Icons.AutoMirrored.Filled.PlaylistPlay, "Add to queue") { done { repo.remember(listOf(t)); PlayerHub.addToQueue(t.id) } }
+            // the three things people do most, as big buttons on top
+            if (t != null) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SheetTile(Icons.Filled.SkipNext, "Play next", Modifier.weight(1f)) { done { repo.remember(listOf(t)); PlayerHub.playNext(t.id) } }
+                SheetTile(Icons.AutoMirrored.Filled.PlaylistPlay, "Add to queue", Modifier.weight(1f)) { done { repo.remember(listOf(t)); PlayerHub.addToQueue(t.id) } }
+                SheetTile(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", Modifier.weight(1f)) { pickPlaylist = true }
             }
             when {
                 heard != null -> LikeRow(heard.liked) { done { HeardLikes.setLiked(ctx, heard, !heard.liked) } }
                 t != null -> LikeRow(t.id in favorites) { done { SongActions.toggleLike(repo, t) } }
             }
-            if (t != null) {
-                SheetRow(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist") { pickPlaylist = !pickPlaylist }
-                if (pickPlaylist) Column(Modifier.padding(start = 24.dp)) { PlaylistRows(listOf(t), onDone = onDismiss) }
-            }
+            extraTop?.invoke(this)
             if (context is SongContext.Playlist && t != null) {
                 val index = playlists.firstOrNull { it.name == context.name }?.trackIds?.indexOf(t.id) ?: -1
                 if (index > 0) SheetRow(Icons.Filled.VerticalAlignTop, "Move to top") { done { repo.moveInPlaylist(context.name, index, 0) } }
@@ -160,7 +166,7 @@ fun SongSheet(
                 heard == null && t != null && t.isStreamed() ->
                     SheetRow(Icons.Filled.Download, "Download", "Keeps a copy on the phone, plays offline") { done { SongActions.download(listOf(t)) } }
             }
-            if (artist != null && LastFm.enabled) SheetRow(Icons.Filled.Person, "Go to artist", artist) {
+            if (artist != null) SheetRow(Icons.Filled.Person, "Go to artist", artist) {
                 done { SongSheets.goTo.value = HomePage.ArtistPage(LastFm.Artist(artist, null)) }
             }
             genreTag?.let { tag -> SheetRow(Icons.Filled.Category, "Go to genre", genreLabel(tag)) { done { SongSheets.goTo.value = HomePage.GenrePage(tag) } } }
@@ -228,5 +234,18 @@ internal fun SheetRow(
             Text(label, color = color, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (sub != null) Text(sub, color = TextMuted, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+    }
+}
+
+/** A big square-ish button for the sheet's top row. */
+@Composable
+private fun SheetTile(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(MaterialTheme.shapes.medium).background(SurfaceElevated).clickable(onClick = onClick).padding(vertical = 12.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, null, tint = Accent)
+        Spacer(Modifier.height(6.dp))
+        Text(label, color = TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

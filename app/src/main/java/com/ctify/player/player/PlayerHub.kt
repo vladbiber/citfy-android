@@ -15,6 +15,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** What the player screens read: the current track and transport state. */
@@ -47,6 +52,10 @@ object PlayerHub {
 
     /** what the playback controller in the service publishes */
     val ui = MutableStateFlow(PlayerUiState())
+
+    /** Only the current song id and play state, so song rows don't redraw on every position tick. */
+    val nowPlaying: StateFlow<Pair<String?, Boolean>> = ui.map { it.currentTrackId to it.isPlaying }.distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, null to false)
 
     /** session handle held while the app is open; all transport goes through the service */
     @Volatile var remote: MediaController? = null
@@ -105,6 +114,8 @@ object PlayerHub {
     /** Back from radio to the track queue it interrupted, resumed where it was. */
     fun resumeTracks() = send(Cmd.RESUME_TRACKS)
     fun playQueueIndex(index: Int) = send(Cmd.PLAY_INDEX) { putInt(Cmd.ARG_INDEX, index) }
+    fun moveInQueue(from: Int, to: Int) = send(Cmd.MOVE_IN_QUEUE) { putInt(Cmd.ARG_INDEX, from); putInt(Cmd.ARG_TO, to) }
+    fun removeFromQueue(index: Int) = send(Cmd.REMOVE_FROM_QUEUE) { putInt(Cmd.ARG_INDEX, index) }
 
     private fun send(action: String, args: Bundle.() -> Unit = {}) {
         remote?.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), Bundle().apply(args))
