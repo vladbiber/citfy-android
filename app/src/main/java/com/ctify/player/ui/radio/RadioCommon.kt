@@ -1,7 +1,9 @@
 package com.ctify.player.ui.radio
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +25,6 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Radio
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -67,6 +69,9 @@ import com.ctify.player.radio.RadioRepository
 import com.ctify.player.radio.Station
 import com.ctify.player.radio.StationSource
 import com.ctify.player.ui.EmptyHint
+import com.ctify.player.ui.RowPlaceholders
+import com.ctify.player.ui.enterStagger
+import com.ctify.player.ui.pressFeedback
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
@@ -162,9 +167,7 @@ internal fun <T> LazyListScope.loadStatus(state: LoadState<T>, blocked: String?,
             if (hasData) {
                 LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(2.dp), color = Accent)
             } else {
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Accent)
-                }
+                RowPlaceholders()
             }
         }
     } else if (!hasData && state.error == null && blocked == null && data != null) {
@@ -214,6 +217,7 @@ internal fun LazyListScope.stationRows(
             onClick = { PlayerHub.playStations(list, i) },
             onToggleFavorite = { ui.toggleFavorite(s) },
             onDelete = onDelete?.let { { it(s) } },
+            modifier = Modifier.enterStagger(i),
         )
     }
 }
@@ -234,15 +238,18 @@ internal fun StationRow(
     onToggleFavorite: () -> Unit,
     onDelete: (() -> Unit)? = null,
     isOffAir: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
+    val press = remember { MutableInteractionSource() }
     Row(
-        Modifier
+        modifier
+            .pressFeedback(press)
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .padding(horizontal = 8.dp)
             .clip(MaterialTheme.shapes.small)
             .background(if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(onClickLabel = "play", onClick = onClick)
+            .clickable(press, LocalIndication.current, onClickLabel = "play", onClick = onClick)
             .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -293,17 +300,27 @@ internal fun StationRow(
 
 /** The station logo, or a radio icon when there is none or it fails to load. */
 @Composable
-internal fun StationArt(station: Station, size: Dp, shape: Shape = MaterialTheme.shapes.small) {
+internal fun StationArt(station: Station, size: Dp, shape: Shape = MaterialTheme.shapes.small) =
+    StationArt(station.name, station.favicon, size, shape)
+
+/** The station's favicon; without one (or while it loads or fails) a color from the name with its first letter. */
+@Composable
+internal fun StationArt(name: String, favicon: String?, size: Dp, shape: Shape = MaterialTheme.shapes.small, modifier: Modifier = Modifier.size(size)) {
     Box(
-        Modifier.size(size).clip(shape).background(SurfaceElevated),
+        modifier.clip(shape).background(SurfaceElevated),
         contentAlignment = Alignment.Center,
     ) {
         val fallback = @Composable {
-            Icon(Icons.Filled.Radio, null, tint = TextSecondary, modifier = Modifier.size(size / 2.4f))
+            Box(Modifier.fillMaxSize().background(stationColor(name)), contentAlignment = Alignment.Center) {
+                Text(
+                    name.trim().take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold,
+                    fontSize = with(LocalDensity.current) { (size * 0.42f).toSp() },
+                )
+            }
         }
-        if (station.favicon != null) {
+        if (favicon != null) {
             SubcomposeAsyncImage(
-                model = station.favicon,
+                model = favicon,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

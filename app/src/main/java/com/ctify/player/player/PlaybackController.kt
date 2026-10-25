@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -12,6 +13,8 @@ import com.ctify.player.data.PlaybackState
 import com.ctify.player.data.Track
 import com.ctify.player.radio.RadioRepository
 import com.ctify.player.radio.Station
+import com.ctify.player.recommend.UpNext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -41,13 +44,18 @@ object Cmd {
     const val PLAY_STATIONS = "ctify.PLAY_STATIONS"
     /** leave radio and put back the track queue it replaced */
     const val RESUME_TRACKS = "ctify.RESUME_TRACKS"
-    val ALL = listOf(PLAY_QUEUE, ADD_TO_QUEUE, PLAY_INDEX, NEXT, PREVIOUS, SEEK, TOGGLE_REVERSE, PLAY_STATIONS, RESUME_TRACKS)
+    const val MOVE_IN_QUEUE = "ctify.MOVE_IN_QUEUE"
+    const val REMOVE_FROM_QUEUE = "ctify.REMOVE_FROM_QUEUE"
+    val ALL = listOf(PLAY_QUEUE, ADD_TO_QUEUE, PLAY_INDEX, NEXT, PREVIOUS, SEEK, TOGGLE_REVERSE, PLAY_STATIONS, RESUME_TRACKS, MOVE_IN_QUEUE, REMOVE_FROM_QUEUE)
     /** safe for any controller, e.g. the system media controls and Bluetooth */
     val PUBLIC = listOf(NEXT, PREVIOUS)
 
     const val ARG_IDS = "ids"
     const val ARG_ID = "id"
+    /** with ADD_TO_QUEUE: right after the current song instead of at the end */
+    const val ARG_NEXT = "next"
     const val ARG_INDEX = "index"
+    const val ARG_TO = "to"
     const val ARG_MS = "ms"
     const val ARG_STATIONS = "stations"
 }
@@ -70,6 +78,10 @@ class PlaybackController(
     /** the track queue radio replaced, so the player's Now Playing switch can resume it */
     private var parked: Parked? = null
     private class Parked(val items: List<MediaItem>, val index: Int, val positionMs: Long)
+    /** the library songs a Recommended up next replaced, in play order; null while the library queue plays */
+    private var libraryUpcoming: List<MediaItem>? = null
+    private var mixJob: Job? = null
+    private var mixFor: String? = null
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = sync()
@@ -77,11 +89,14 @@ class PlaybackController(
             if (state == Player.STATE_ENDED && PlayerHub.reverseOn.value) reverseStep(+1)
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) = radio.onIsPlayingChanged(isPlaying)
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = upNext()
         override fun onMetadata(metadata: androidx.media3.common.Metadata) = radio.onMetadata(metadata)
     }
 
     init {
         player.addListener(listener)
+        UpNext.init(context)
+        scope.launch { UpNext.recommended.collect { upNext() } }
         scope.launch {
             if (repository.tracks.value.isEmpty()) repository.load(includeDevice = false)
             restoreSnapshot()
@@ -110,8 +125,18 @@ class PlaybackController(
                 val ids = args.getStringArray(Cmd.ARG_IDS) ?: return false
                 playQueue(ids.mapNotNull(repository::trackById), args.getInt(Cmd.ARG_INDEX))
             }
-            Cmd.ADD_TO_QUEUE -> addToQueue(args.getString(Cmd.ARG_ID) ?: return false)
+            Cmd.ADD_TO_QUEUE -> addToQueue(args.getString(Cmd.ARG_ID) ?: return false, args.getBoolean(Cmd.ARG_NEXT))
             Cmd.PLAY_INDEX -> playQueueIndex(args.getInt(Cmd.ARG_INDEX, -1))
+            // the reversed copy is one file, so its queue can't be edited
+            Cmd.MOVE_IN_QUEUE -> if (!PlayerHub.reverseOn.value && !radio.active) {
+                val from = args.getInt(Cmd.ARG_INDEX, -1)
+                val to = args.getInt(Cmd.ARG_TO, -1)
+                if (from in 0 until player.mediaItemCount && to in 0 until player.mediaItemCount) player.moveMediaItem(from, to)
+            }
+            Cmd.REMOVE_FROM_QUEUE -> if (!PlayerHub.reverseOn.value && !radio.active) {
+                val i = args.getInt(Cmd.ARG_INDEX, -1)
+                if (i in 0 until player.mediaItemCount && i != player.currentMediaItemIndex) player.removeMediaItem(i)
+            }
             Cmd.NEXT -> next()
             Cmd.PREVIOUS -> previous()
             Cmd.SEEK -> seekTo(args.getLong(Cmd.ARG_MS).coerceAtLeast(0L))
@@ -247,6 +272,8 @@ class PlaybackController(
     private fun playQueue(tracks: List<Track>, startIndex: Int) {
         if (tracks.isEmpty()) return
         radio.stop()
+        // a new queue: Recommended mixes from its first song again
+        libraryUpcoming = null
         if (PlayerHub.reverseOn.value) {
             reverseQueue = tracks
             reverseIndex = startIndex.coerceIn(0, tracks.lastIndex)
@@ -258,18 +285,21 @@ class PlaybackController(
         player.play()
     }
 
-    /** Appends a track to the end of the current play queue, starting one if nothing is loaded. */
-    private fun addToQueue(trackId: String) {
+    /** Appends a track to the end of the current play queue (or after the current song), starting one if nothing is loaded. */
+    private fun addToQueue(trackId: String, next: Boolean = false) {
         val track = repository.trackById(trackId) ?: return
         if (radio.active) { radio.stop(); player.clearMediaItems() }
         if (player.mediaItemCount == 0) {
+            libraryUpcoming = null
             player.setMediaItem(track.toMediaItem())
             player.prepare()
             player.play()
+        } else if (next) {
+            player.addMediaItem(player.currentMediaItemIndex + 1, track.toMediaItem())
         } else {
             player.addMediaItem(track.toMediaItem())
         }
-        Toast.makeText(context, "Added to queue: ${track.title}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, (if (next) "Plays next: " else "Added to queue: ") + track.title, Toast.LENGTH_SHORT).show()
     }
 
     /** Jumps to a specific song in the current play queue. */
@@ -361,6 +391,60 @@ class PlaybackController(
         if (wasPlaying) player.play()
     }
 
+    /**
+     * Keeps Up next on what its switch says: the queue the listener started, or the mix of the song playing
+     * now (fetched once on the switch, then topped up when fewer than [LOW] songs are left).
+     */
+    private fun upNext() {
+        // radio has no up next, and reverse walks its own copy of the queue
+        if (radio.active || PlayerHub.reverseOn.value) return
+        if (!UpNext.recommended.value) {
+            mixJob?.cancel()
+            UpNext.loading.value = false
+            val saved = libraryUpcoming ?: return
+            libraryUpcoming = null
+            replaceUpcoming(saved)
+            return
+        }
+        val seed = repository.trackById(player.currentMediaItem?.mediaId) ?: return
+        val left = player.mediaItemCount - 1 - player.currentMediaItemIndex
+        val first = libraryUpcoming == null
+        if (!first && left >= LOW) return
+        if (mixJob?.isActive == true && mixFor == seed.id) return
+        mixJob?.cancel()
+        mixFor = seed.id
+        mixJob = scope.launch {
+            UpNext.loading.value = first
+            val queued = (0 until player.mediaItemCount).mapNotNull { repository.trackById(player.getMediaItemAt(it).mediaId) }
+            val songs = try {
+                UpNext.fetch(context, repository, seed, queued)
+            } catch (e: UpNext.Unavailable) {
+                // a failed top-up keeps what is queued; a failed switch falls back to Library
+                if (first) UpNext.fail(e.message.orEmpty())
+                return@launch
+            } finally {
+                if (mixFor == seed.id) UpNext.loading.value = false
+            }
+            if (player.currentMediaItem?.mediaId != seed.id || !UpNext.recommended.value || radio.active || PlayerHub.reverseOn.value) return@launch
+            val items = songs.map { it.toMediaItem() }
+            if (libraryUpcoming != null) { player.addMediaItems(items); return@launch }
+            // saved in the order they would have played, so a shuffled queue comes back as it was
+            libraryUpcoming = generateSequence(player.currentMediaItemIndex) {
+                player.currentTimeline.getNextWindowIndex(it, Player.REPEAT_MODE_OFF, player.shuffleModeEnabled).takeIf { i -> i != C.INDEX_UNSET }
+            }.drop(1).map(player::getMediaItemAt).toList()
+            if (player.shuffleModeEnabled) {
+                // shuffled songs sit on both sides of the current one: keep only it, so the mix plays in order right after it
+                // shortcut: shuffle stays off after Library comes back (its songs return in their shuffled order)
+                player.shuffleModeEnabled = false
+                player.removeMediaItems(0, player.currentMediaItemIndex)
+            }
+            replaceUpcoming(items)
+        }
+    }
+
+    private fun replaceUpcoming(items: List<MediaItem>) =
+        player.replaceMediaItems(player.currentMediaItemIndex + 1, player.mediaItemCount, items)
+
     /** Radio reconnects instead of skipping; local files keep the skip in the service. */
     fun onPlayerError(error: androidx.media3.common.PlaybackException): Boolean = radio.onPlayerError(error)
 
@@ -372,3 +456,5 @@ class PlaybackController(
 }
 
 private const val REV = "rev:"
+/** songs left in a Recommended up next before it is topped up */
+private const val LOW = 5

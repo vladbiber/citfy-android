@@ -6,6 +6,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import com.ctify.player.data.Track
+import com.ctify.player.listenbrainz.ListenBrainz
 import com.ctify.player.player.fx.Fx
 import com.ctify.player.player.fx.FxRange
 import com.ctify.player.player.fx.RETUNE_PRESETS
@@ -15,6 +16,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** What the player screens read: the current track and transport state. */
@@ -48,6 +54,10 @@ object PlayerHub {
     /** what the playback controller in the service publishes */
     val ui = MutableStateFlow(PlayerUiState())
 
+    /** Only the current song id and play state, so song rows don't redraw on every position tick. */
+    val nowPlaying: StateFlow<Pair<String?, Boolean>> = ui.map { it.currentTrackId to it.isPlaying }.distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, null to false)
+
     /** session handle held while the app is open; all transport goes through the service */
     @Volatile var remote: MediaController? = null
 
@@ -55,13 +65,21 @@ object PlayerHub {
         if (::app.isInitialized) return
         app = context.applicationContext
         loadFx()
+        ListenBrainz.init(app)
         val counter = PlayCounter()
+        val listens = PlayCounter(ListenBrainz::thresholdMs)
+        var announced: String? = null
         scope.launch {
             playback.collect { s ->
                 val t = s?.track ?: return@collect
                 // radio songs are kept separately as heard songs
-                if (s.station == null && counter.update(t.id, s.progressMs.toLong(), s.durationMs, s.isPlaying)) {
+                if (s.station != null) return@collect
+                if (counter.update(t.id, s.progressMs.toLong(), s.durationMs, s.isPlaying)) {
                     (app as com.ctify.player.CtifyApp).repository.recordPlay(t)
+                }
+                if (s.isPlaying && t.id != announced) { announced = t.id; ListenBrainz.nowPlaying(t) }
+                if (listens.update(t.id, s.progressMs.toLong(), s.durationMs, s.isPlaying)) {
+                    ListenBrainz.listened(t, System.currentTimeMillis() - s.progressMs)
                 }
             }
         }
@@ -98,12 +116,15 @@ object PlayerHub {
         putStringArray(Cmd.ARG_IDS, ids.toTypedArray()); putInt(Cmd.ARG_INDEX, startIndex)
     }
     fun addToQueue(id: String) = send(Cmd.ADD_TO_QUEUE) { putString(Cmd.ARG_ID, id) }
+    fun playNext(id: String) = send(Cmd.ADD_TO_QUEUE) { putString(Cmd.ARG_ID, id); putBoolean(Cmd.ARG_NEXT, true) }
     fun playStations(stations: List<com.ctify.player.radio.Station>, index: Int) = send(Cmd.PLAY_STATIONS) {
         putString(Cmd.ARG_STATIONS, com.ctify.player.radio.Station.toJson(stations)); putInt(Cmd.ARG_INDEX, index)
     }
     /** Back from radio to the track queue it interrupted, resumed where it was. */
     fun resumeTracks() = send(Cmd.RESUME_TRACKS)
     fun playQueueIndex(index: Int) = send(Cmd.PLAY_INDEX) { putInt(Cmd.ARG_INDEX, index) }
+    fun moveInQueue(from: Int, to: Int) = send(Cmd.MOVE_IN_QUEUE) { putInt(Cmd.ARG_INDEX, from); putInt(Cmd.ARG_TO, to) }
+    fun removeFromQueue(index: Int) = send(Cmd.REMOVE_FROM_QUEUE) { putInt(Cmd.ARG_INDEX, index) }
 
     private fun send(action: String, args: Bundle.() -> Unit = {}) {
         remote?.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), Bundle().apply(args))
@@ -277,8 +298,8 @@ object PlayerHub {
 }
 
 
-/** Decides when a track counts as played: ~30 s of listening or half the track, whichever comes first. */
-internal class PlayCounter {
+/** Decides when a track counts as played: by default ~30 s of listening or half the track, whichever comes first. */
+internal class PlayCounter(private val threshold: (Long) -> Long = ::thresholdMs) {
     private var id: String? = null
     private var lastMs = 0L
     private var heardMs = 0L
@@ -293,7 +314,7 @@ internal class PlayCounter {
         val step = positionMs - lastMs
         lastMs = positionMs
         if (playing && step in 1..MAX_STEP_MS) heardMs += step
-        if (counted || heardMs < thresholdMs(durationMs)) return false
+        if (counted || heardMs < threshold(durationMs)) return false
         counted = true
         return true
     }

@@ -11,7 +11,7 @@ enum class ThemeMode(val label: String) { SYSTEM("System"), LIGHT("Light"), DARK
 enum class ThemeSource(val label: String) { WALLPAPER("Wallpaper"), CTIFY_BLUE("Ctify Blue"), DUO("Two colors") }
 
 /** How the two colors blend on big surfaces; small spots always fade. */
-enum class GradientStyle(val label: String) { LIQUID("Liquid"), FADE("Fade") }
+enum class GradientStyle(val label: String) { OIL("Oil"), LIQUID("Liquid"), FADE("Fade") }
 
 /** The colors a user can pick for the two-color theme. */
 enum class Swatch(val label: String, val color: Color) {
@@ -42,7 +42,7 @@ object Appearance {
     val source = MutableStateFlow(ThemeSource.WALLPAPER)
     val color1 = MutableStateFlow(Swatch.BLUE)
     val color2 = MutableStateFlow(Swatch.PURPLE)
-    val gradient = MutableStateFlow(GradientStyle.LIQUID)
+    val gradient = MutableStateFlow(GradientStyle.OIL)
     val pureBlack = MutableStateFlow(false)
     val coverColors = MutableStateFlow(false)
     /** Player background swells with the bass; battery saver turns it off whatever this says. */
@@ -58,7 +58,7 @@ object Appearance {
         source.value = storedSource(p.getString("theme_source", null), p.getBoolean("dynamic_colors", true))
         color1.value = runCatching { Swatch.valueOf(p.getString("color1", null)!!) }.getOrDefault(Swatch.BLUE)
         color2.value = runCatching { Swatch.valueOf(p.getString("color2", null)!!) }.getOrDefault(Swatch.PURPLE)
-        gradient.value = runCatching { GradientStyle.valueOf(p.getString("gradient", null)!!) }.getOrDefault(GradientStyle.LIQUID)
+        gradient.value = runCatching { GradientStyle.valueOf(p.getString("gradient", null)!!) }.getOrDefault(GradientStyle.OIL)
         pureBlack.value = p.getBoolean("pure_black", false)
         coverColors.value = p.getBoolean("cover_colors", false)
         reactToMusic.value = p.getBoolean("react_to_music", true)

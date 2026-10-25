@@ -5,8 +5,14 @@ import com.ctify.player.diag.Diagnostics
 import com.ctify.player.diag.Failure
 import com.ctify.player.diag.classOf
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.playlist.PlaylistInfo
@@ -58,25 +64,81 @@ data class YtAlbum(val id: String, val title: String, val artist: String, val th
 /** Search, stream and browse YouTube Music. Every call goes through NetworkGate. */
 object YouTubeSource {
     private const val MAX_ITEMS = 200
+    private const val CACHE_MS = 5 * 60 * 1000L
+    private const val CACHE_SIZE = 32
 
-    suspend fun search(query: String): List<YtSong> = lookup("Search songs", query) {
-        val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), null))
-        info.relatedItems.mapNotNull(::toSong)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private class Hit(val at: Long, val value: Deferred<Any>) {
+        @Volatile var result: Any? = null
+    }
+    private val cache = object : LinkedHashMap<String, Hit>(CACHE_SIZE, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Hit>) = size > CACHE_SIZE
+    }
+
+    /** Fetches the search client version once, so the first search is a single request. */
+    fun warmUp() {
+        scope.launch {
+            runCatching { YtRuntime.ensure(); YoutubeParsingHelper.getYoutubeMusicClientVersion() }
+        }
+    }
+
+    /** A cached result from the last [CACHE_MS], or null; lets the screen show it before any wait. */
+    @Suppress("UNCHECKED_CAST")
+    fun <T> cached(kind: String, query: String): T? = synchronized(cache) {
+        val hit = cache[key(kind, query)] ?: return null
+        if (System.currentTimeMillis() - hit.at > CACHE_MS) return null
+        hit.result as T?
+    }
+
+    private fun key(kind: String, query: String) = kind + "|" + YtRuntime.hl + "|" + query.trim().lowercase()
+
+    /** One request per query: repeats come from the cache, and identical queries share the request in flight. */
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun <T : Any> memo(kind: String, query: String, fetch: suspend () -> T): T {
+        val k = key(kind, query)
+        val hit = synchronized(cache) {
+            cache[k]?.takeIf { System.currentTimeMillis() - it.at < CACHE_MS && !it.value.isCancelled }
+                ?: Hit(System.currentTimeMillis(), scope.async { fetch() as Any }).also { cache[k] = it }
+        }
+        val d = hit.value
+        return try {
+            (d.await() as T).also { hit.result = it }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            synchronized(cache) { if (cache[k]?.value === d) cache.remove(k) }
+            throw e
+        }
+    }
+
+    suspend fun search(query: String): List<YtSong> = memo(SONGS, query) {
+        lookup("Search songs", query) {
+            val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), null))
+            info.relatedItems.mapNotNull(::toSong)
+        }
     }
 
     /** Every YouTube video, not only music: for live sets, rare uploads and other niche audio. */
-    suspend fun searchVideos(query: String): List<YtSong> = lookup("Search videos", query) {
-        val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.VIDEOS), null))
-        info.relatedItems.mapNotNull(::toSong)
-    }
-
-    suspend fun searchAlbums(query: String): List<YtPlaylistRef> = lookup("Search albums", query) {
-        val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS), null))
-        info.relatedItems.filterIsInstance<PlaylistInfoItem>().mapNotNull { p ->
-            val id = listId(p.url) ?: return@mapNotNull null
-            YtPlaylistRef(id, p.name, p.uploaderName.orEmpty(), p.thumbnailUrl)
+    suspend fun searchVideos(query: String): List<YtSong> = memo(VIDEOS, query) {
+        lookup("Search videos", query) {
+            val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.VIDEOS), null))
+            info.relatedItems.mapNotNull(::toSong)
         }
     }
+
+    suspend fun searchAlbums(query: String): List<YtPlaylistRef> = memo(ALBUMS, query) {
+        lookup("Search albums", query) {
+            val info = SearchInfo.getInfo(ServiceList.YouTube, ServiceList.YouTube.searchQHFactory.fromQuery(query, filter(YoutubeSearchQueryHandlerFactory.MUSIC_ALBUMS), null))
+            info.relatedItems.filterIsInstance<PlaylistInfoItem>().mapNotNull { p ->
+                val id = listId(p.url) ?: return@mapNotNull null
+                YtPlaylistRef(id, p.name, p.uploaderName.orEmpty(), p.thumbnailUrl)
+            }
+        }
+    }
+
+    const val SONGS = "songs"
+    const val VIDEOS = "videos"
+    const val ALBUMS = "albums"
 
     /** True for youtube.com, music.youtube.com and youtu.be links. */
     fun isLink(text: String) = Regex("(?i)(https?://)?([a-z]+\\.)?(youtube\\.com|youtu\\.be)/").containsMatchIn(text)

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -21,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.PrimaryTabRow
@@ -41,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.ctify.player.ui.visualizer.Visualizer
+import com.ctify.player.ui.visualizer.VisualizerCustomizeSheet
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -125,5 +130,14 @@ private fun <T> LookPager(
             Text(label(item), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
         }
     }
-    Button(onClick = { onSelect(items[pager.currentPage]) }) { Text("Select") }
+    var customize by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // the picker is generic; only the visualizers have a shared look to customize
+        if (items.firstOrNull() is Visualizer) OutlinedButton(onClick = { customize = true }) { Text("Customize") }
+        Button(onClick = { onSelect(items[pager.currentPage]) }) { Text("Select") }
+    }
+    if (customize) {
+        val item = items[pager.currentPage]
+        VisualizerCustomizeSheet(preview = { preview(item, DpSize(200.dp, 200.dp)) }, onDismiss = { customize = false })
+    }
 }

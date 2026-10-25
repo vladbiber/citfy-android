@@ -1,5 +1,15 @@
 package com.ctify.player.ui
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.IconButton
+import com.ctify.player.data.HistoryPrefs
+import com.ctify.player.data.Playlist
+import com.ctify.player.data.PlaylistRecency
+import com.ctify.player.ui.theme.SurfaceElevated
+import com.ctify.player.ui.theme.TextMuted
+
 import com.ctify.player.ui.theme.LiquidBackground
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -24,8 +34,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -64,9 +72,16 @@ import com.ctify.player.ui.home.ArtistPage
 import com.ctify.player.ui.home.CreatorsPage
 import com.ctify.player.ui.home.CreatorsRow
 import com.ctify.player.ui.home.ForYouPager
+import com.ctify.player.ui.home.StarsShelf
+import com.ctify.player.ui.home.ForYouPlaceholder
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.shape.CircleShape
 import com.ctify.player.ui.home.GenrePage
 import com.ctify.player.ui.home.GenresRow
 import com.ctify.player.ui.home.HomePage
+import com.ctify.player.ui.home.Top100Page
+import com.ctify.player.ui.home.WorldSection
 import com.ctify.player.ui.home.rememberCreators
 import com.ctify.player.ui.home.rememberGenres
 import com.ctify.player.ui.radio.radioRepo
@@ -74,46 +89,42 @@ import com.ctify.player.ui.radio.HeardSection
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import com.ctify.player.ui.radio.HomeStationRows
+import com.ctify.player.radio.HeardLikes
+import com.ctify.player.ui.songs.SelectedMark
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongSheets
+import com.ctify.player.ui.songs.songClicks
 
 @Composable
 fun HomeScreen(
     viewModel: PlayerViewModel,
     onOpenNowPlaying: () -> Unit,
-    onMore: (String) -> Unit,
-    onOpenPlaylist: (String) -> Unit,
-    onOpenFavorites: () -> Unit = {},
+    onOpenPage: (HomePage) -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
     onSpinWheel: () -> Unit = {},
     add: AddActions,
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
-    val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
     val playlists by viewModel.repository.playlists.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val recent by remember { viewModel.repository.recentlyPlayed(20) }.collectAsStateWithLifecycle(emptyList())
+    val showRecent by HistoryPrefs.flow(HistoryPrefs.Key.SHOW_RECENT).collectAsStateWithLifecycle()
+    val showMost by HistoryPrefs.flow(HistoryPrefs.Key.SHOW_MOST).collectAsStateWithLifecycle()
     val most by remember { viewModel.repository.mostPlayed(20) }.collectAsStateWithLifecycle(emptyList())
-    var query by rememberSaveable { mutableStateOf("") }
-    // saved YouTube songs load in addedAt order
-    val downloaded = remember(tracks) { tracks.filter { it.id.startsWith("yt_") }.asReversed() }
     val ctx = LocalContext.current
     val shelves by Recommendations.shelves.collectAsStateWithLifecycle()
+    val stars by Recommendations.stars.collectAsStateWithLifecycle()
     val shelf = remember(shelves) { shelves.mapValues { (_, songs) -> songs.map { it.toTrack() } } }
     // waits for the library so liked and downloaded seeds exist
-    LaunchedEffect(tracks.isNotEmpty()) { if (tracks.isNotEmpty()) Recommendations.refresh(ctx, viewModel.repository) }
+    LaunchedEffect(tracks.isNotEmpty()) {
+        if (tracks.isNotEmpty()) { Recommendations.refresh(ctx, viewModel.repository); HeardLikes.sync(ctx) }
+    }
     remember { LastFm.init(ctx) }
     val genres = rememberGenres(viewModel.repository, radioRepo())
-    val creators = rememberCreators(viewModel.repository, genres.firstOrNull())
-    val pages = remember { mutableStateListOf<HomePage>() }
-    pages.lastOrNull()?.let { page ->
-        val back: () -> Unit = { pages.removeAt(pages.lastIndex) }
-        val open: (LastFm.Artist) -> Unit = { pages += HomePage.ArtistPage(it) }
-        BackHandler(onBack = back)
-        when (page) {
-            is HomePage.GenrePage -> GenrePage(page.tag, viewModel.repository, back)
-            HomePage.Creators -> CreatorsPage(creators, open, back)
-            is HomePage.ArtistPage -> ArtistPage(page.artist, viewModel.repository, open, back)
-        }
-        return
-    }
+    val creators = rememberCreators(viewModel.repository, genres?.firstOrNull())
+    val building by Recommendations.building.collectAsStateWithLifecycle()
+    val recentPlaylists = remember(playlists) { PlaylistRecency.order(playlists) }
 
     Box(Modifier.fillMaxSize()) {
     // Two colors: the liquid wash sits behind the header and fades out downward
@@ -125,73 +136,87 @@ fun HomeScreen(
                 drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent)), blendMode = BlendMode.DstIn)
             },
     )
-    Column(Modifier.fillMaxSize()) {
-        // the box stays put above both views, so typing never loses focus when results replace Home
-        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            SearchField(query, { query = it }, "Songs, artists, heard songs, stations", Modifier.weight(1f))
-            AddMenu(add)
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(150.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        var shown = 0
+        // Home's own full(): shadows the shared one so every shelf below staggers in on first show
+        fun LazyGridScope.full(content: @Composable () -> Unit) {
+            val i = shown++
+            item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.enterStagger(i)) { content() } }
         }
-        if (query.isNotBlank()) {
-            SearchResults(viewModel, query, onMore, HOME_SCOPES)
-            return@Column
+        full {
+            Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                ScreenTitle("Home", Modifier.weight(1f))
+                IconButton(onClick = onSpinWheel) { Icon(Icons.Filled.Casino, "Spin the wheel", tint = TextPrimary) }
+                AddMenu(add)
+                SettingsButton(onOpenSettings)
+            }
         }
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(150.dp),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder or add songs from YouTube.") }
-            shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
-            if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, ui.currentTrackId, viewModel, onOpenNowPlaying) }
-            if (most.isNotEmpty()) full { TrackCarousel("Most played", most, ui.currentTrackId, viewModel, onOpenNowPlaying) }
-            full {
-                HeroCard(
-                    "Shuffle everything", "${tracks.size} songs on this phone", Icons.Filled.Shuffle,
-                    listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer),
-                ) {
-                    if (tracks.isNotEmpty()) { viewModel.playQueue(tracks.shuffled(), 0); onOpenNowPlaying() }
-                }
-            }
-            full {
-                HeroCard(
-                    "Favorites", if (favorites.isEmpty()) "Tap a heart to save songs" else "${favorites.size} songs",
-                    Icons.Filled.Favorite, listOf(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer),
-                    onClick = onOpenFavorites,
-                )
-            }
-            full {
-                HeroCard(
-                    "Spin the wheel", if (tracks.isEmpty()) "Let chance pick a song" else "1 in ${"%,d".format(tracks.size)} songs",
-                    Icons.Filled.Casino, listOf(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.primaryContainer),
-                    onClick = onSpinWheel,
-                )
-            }
-            listOf(Shelf.PLAYED, Shelf.LIKED, Shelf.DOWNLOADS).forEach { s ->
-                shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
-            }
-            if (downloaded.isNotEmpty()) full { TrackCarousel("Downloaded", downloaded, ui.currentTrackId, viewModel, onOpenNowPlaying) }
-            if (genres.isNotEmpty()) full { GenresRow(genres) { pages += HomePage.GenrePage(it) } }
-            if (creators.isNotEmpty()) full { CreatorsRow(creators, onOpen = { pages += HomePage.ArtistPage(it) }, onSeeAll = { pages += HomePage.Creators }) }
-            full { HomeStationRows() }
-            if (playlists.isNotEmpty()) {
-                full { SectionHeader("Playlists", Modifier.padding(top = 10.dp, start = 4.dp)) }
-                items(playlists, key = { it.name }) { pl ->
-                    PlaylistCard(pl, pl.trackIds.firstNotNullOfOrNull { viewModel.repository.trackById(it) }) {
-                        onOpenPlaylist(pl.name)
-                    }
-                }
-            }
-            full { HeardSection() }
+        full { SearchPill(onOpenSearch) }
+        if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder, or search YouTube to add songs.") }
+        if (building && shelf[Shelf.FOR_YOU].isNullOrEmpty()) full { ForYouPlaceholder() }
+        shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+        if (showRecent && recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+        if (recentPlaylists.isNotEmpty()) full { PlaylistsRow(recentPlaylists, viewModel) { onOpenPage(HomePage.Playlist(it)) } }
+        stars.forEachIndexed { i, g -> full { StarsShelf(g, i == 0, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+        listOf(Shelf.PLAYED, Shelf.DOWNLOADS).forEach { s ->
+            shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+        }
+        if (showMost && most.isNotEmpty()) full { TrackCarousel("Most played", most, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+        if (genres == null) full { ShelfPlaceholder("Genres", 150.dp) }
+        if (!genres.isNullOrEmpty()) full { GenresRow(genres) { onOpenPage(HomePage.GenrePage(it)) } }
+        if (creators == null) full { ShelfPlaceholder("Creators", 104.dp, CircleShape) }
+        if (!creators.isNullOrEmpty()) full {
+            CreatorsRow(creators, onOpen = { onOpenPage(HomePage.ArtistPage(it)) }, onSeeAll = { onOpenPage(HomePage.Artists("Creators", creators)) })
+        }
+        if (LastFm.enabled) full {
+            WorldSection(
+                onGenre = { onOpenPage(HomePage.GenrePage(it)) }, onArtist = { onOpenPage(HomePage.ArtistPage(it)) },
+                onSeeAll = { title, list -> onOpenPage(HomePage.Artists(title, list)) }, onTop100 = { onOpenPage(HomePage.Top100(it)) },
+            )
         }
     }
     }
 }
 
+/** Looks like a search box; a tap goes to the Search tab. */
+@Composable
+private fun SearchPill(onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp).heightIn(min = 52.dp).clip(MaterialTheme.shapes.extraLarge)
+            .background(SurfaceElevated).clickable(role = Role.Button, onClickLabel = "search", onClick = onClick).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Search, null, tint = TextSecondary)
+        Spacer(Modifier.width(12.dp))
+        Text("Songs, artists, albums, stations", color = TextMuted, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/** Your playlists, the last one you added to first. */
+@Composable
+private fun PlaylistsRow(playlists: List<Playlist>, viewModel: PlayerViewModel, onOpen: (String) -> Unit) {
+    Column {
+        SectionHeader("Your playlists", Modifier.padding(top = 10.dp, start = 4.dp))
+        Spacer(Modifier.height(8.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(playlists, key = { it.name }) { pl ->
+                Box(Modifier.width(140.dp)) {
+                    PlaylistCard(pl, pl.trackIds.firstNotNullOfOrNull { viewModel.repository.trackById(it) }) { onOpen(pl.name) }
+                }
+            }
+        }
+    }
+}
+
 /** A titled row of song covers, like Home's station row; a tap plays the row from that song. */
 @Composable
-private fun TrackCarousel(title: String, list: List<Track>, current: String?, viewModel: PlayerViewModel, onOpenNowPlaying: () -> Unit) {
+private fun TrackCarousel(title: String, list: List<Track>, context: SongContext, current: String?, viewModel: PlayerViewModel, onOpenNowPlaying: () -> Unit) {
     Column {
         SectionHeader(title, Modifier.padding(top = 10.dp, start = 4.dp))
         Spacer(Modifier.height(8.dp))
@@ -202,7 +227,7 @@ private fun TrackCarousel(title: String, list: List<Track>, current: String?, vi
                     Modifier
                         .width(140.dp)
                         .clip(MaterialTheme.shapes.small)
-                        .clickable(onClickLabel = "play") {
+                        .songClicks(t, context, list) {
                             // streamed songs from history may not be loaded this session
                             viewModel.repository.remember(list)
                             viewModel.playQueue(list, i)
@@ -213,37 +238,15 @@ private fun TrackCarousel(title: String, list: List<Track>, current: String?, vi
                             if (on) stateDescription = "now playing"
                         },
                 ) {
-                    AlbumArt(t, 140.dp, shape = MaterialTheme.shapes.small)
+                    Box(Modifier.clip(MaterialTheme.shapes.small)) {
+                        AlbumArt(t, 140.dp, shape = MaterialTheme.shapes.small)
+                        SelectedMark(t, context)
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text(t.title, color = if (on) Accent else TextPrimary, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(t.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(t.artist, color = TextSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun HeroCard(title: String, subtitle: String, icon: ImageVector, colors: List<Color>, onClick: () -> Unit) {
-    val ink = MaterialTheme.colorScheme.onPrimaryContainer
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp)
-            .clip(MaterialTheme.shapes.large)
-            .background(Brush.linearGradient(colors))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(52.dp).clip(MaterialTheme.shapes.small).background(ink.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = null, tint = ink) }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, color = ink)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink.copy(alpha = 0.85f))
         }
     }
 }

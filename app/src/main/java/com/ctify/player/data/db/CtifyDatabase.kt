@@ -39,6 +39,8 @@ import com.ctify.player.youtube.download.DownloadEntity
         TrackLoudness::class,
         DownloadEntity::class,
         PlayEntity::class,
+        RatingEntity::class,
+        RatingTagEntity::class,
     ],
     version = CtifyDatabase.VERSION,
     exportSchema = true,
@@ -49,6 +51,7 @@ import com.ctify.player.youtube.download.DownloadEntity
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
+        AutoMigration(from = 7, to = 8),
     ],
 )
 abstract class CtifyDatabase : RoomDatabase() {
@@ -58,10 +61,11 @@ abstract class CtifyDatabase : RoomDatabase() {
     abstract fun heardSongs(): HeardSongDao
     abstract fun sound(): SoundDao
     abstract fun downloads(): DownloadDao
+    abstract fun ratings(): RatingsDao
 
     companion object {
         const val NAME = "ctify.db"
-        const val VERSION = 7
+        const val VERSION = 8
 
         fun open(context: Context): CtifyDatabase =
             Room.databaseBuilder(context.applicationContext, CtifyDatabase::class.java, NAME).build()

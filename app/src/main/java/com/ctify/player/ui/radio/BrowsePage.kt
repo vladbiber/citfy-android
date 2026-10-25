@@ -1,7 +1,9 @@
 package com.ctify.player.ui.radio
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardActions
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.genre.Genre
+import com.ctify.player.keys.typingField
 import com.ctify.player.radio.CountryCount
 import com.ctify.player.radio.RadioTab
 import com.ctify.player.radio.Station
@@ -56,6 +60,8 @@ import com.ctify.player.radio.StationSort
 import com.ctify.player.radio.TabKind
 import com.ctify.player.radio.TagCount
 import com.ctify.player.ui.SectionHeader
+import com.ctify.player.ui.enterStagger
+import com.ctify.player.ui.pressFeedback
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
@@ -125,7 +131,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, onSubmit: () 
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.typingField().fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         placeholder = { Text("Station name", color = TextMuted) },
         leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextSecondary) },
         trailingIcon = {
@@ -176,9 +182,10 @@ private fun BrowseHome(
         }
         if (section == 0) {
             item(key = "families") { SectionHeader("Genre families", Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp)) }
-            items(Genre.entries, key = { "g" + it.name }) { g ->
+            itemsIndexed(Genre.entries, key = { _, g -> "g" + g.name }) { i, g ->
                 val pinned = tabs.firstOrNull { it.kind == TabKind.GENRE && it.key == g.name }
                 PinRow(
+                    modifier = Modifier.enterStagger(i),
                     title = g.label,
                     subtitle = g.tags.take(4).joinToString(", "),
                     pinned = pinned != null,
@@ -204,8 +211,8 @@ private fun BrowseHome(
             loadStatus(countries, blocked, List<CountryCount>::isEmpty, "No countries found.")
             countries.data?.let { list ->
                 val sorted = list.filter { it.code == own } + list.filter { it.code != own }
-                items(sorted, key = { "c" + it.code }) { c ->
-                    CountryRow(c, isOwn = c.code == own) { onCountry(c) }
+                itemsIndexed(sorted, key = { _, c -> "c" + c.code }) { i, c ->
+                    CountryRow(c, isOwn = c.code == own, Modifier.enterStagger(i)) { onCountry(c) }
                 }
             }
         }
@@ -213,9 +220,10 @@ private fun BrowseHome(
 }
 
 @Composable
-private fun PinRow(title: String, subtitle: String, pinned: Boolean, onClick: () -> Unit, onPin: () -> Unit) {
+private fun PinRow(title: String, subtitle: String, pinned: Boolean, onClick: () -> Unit, onPin: () -> Unit, modifier: Modifier = Modifier) {
+    val press = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClickLabel = "show stations", onClick = onClick)
+        modifier.pressFeedback(press).fillMaxWidth().heightIn(min = 56.dp).clickable(press, LocalIndication.current, onClickLabel = "show stations", onClick = onClick)
             .padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -234,9 +242,10 @@ private fun PinRow(title: String, subtitle: String, pinned: Boolean, onClick: ()
 }
 
 @Composable
-private fun CountryRow(c: CountryCount, isOwn: Boolean, onClick: () -> Unit) {
+private fun CountryRow(c: CountryCount, isOwn: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val press = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClickLabel = "show stations", onClick = onClick)
+        modifier.pressFeedback(press).fillMaxWidth().heightIn(min = 56.dp).clickable(press, LocalIndication.current, onClickLabel = "show stations", onClick = onClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

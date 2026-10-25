@@ -10,6 +10,9 @@ import com.ctify.player.youtube.YtSong
 object RadioMixer {
     const val MAX_RUN = 2
 
+    /** [artistKey]s left out of every cleaned list: artists rated 2 stars or less. */
+    @Volatile var excluded: Set<String> = emptySet()
+
     private val VERSION = Regex(
         "\\b(live|remix(ed)?|sped up|speed up|slowed|reverb|nightcore|cover|karaoke|instrumental|acoustic|8d|lyrics?|lyric video)\\b",
         RegexOption.IGNORE_CASE,
@@ -30,9 +33,12 @@ object RadioMixer {
 
     fun isVersion(title: String) = VERSION.containsMatchIn(title)
 
-    /** First credited artist, lower case: "A feat. B", "A & B" and "A, B" all give "a". */
-    fun artistKey(artist: String): String =
-        artist.lowercase().split(Regex(",|&| x | feat\\.? | ft\\.? | and ")).first().removeSuffix(" - topic").trim()
+    /** First credited artist as written: "A feat. B", "A & B" and "A, B" all give "A". */
+    fun leadArtist(artist: String): String =
+        artist.split(Regex(",|&| x | feat\\.? | ft\\.? | and ", RegexOption.IGNORE_CASE)).first().trim().removeSuffix(" - Topic").trim()
+
+    /** [leadArtist], lower case, for matching. */
+    fun artistKey(artist: String): String = leadArtist(artist).lowercase().removeSuffix(" - topic").trim()
 
     /** Same title and artist, or the same title where one of them is a cover, live, remix... */
     fun sameWork(a: YtSong, b: YtSong): Boolean {
@@ -41,12 +47,13 @@ object RadioMixer {
         return artistKey(a.artist) == artistKey(b.artist) || isVersion(a.title) || isVersion(b.title)
     }
 
-    /** Drops [known] songs (seeds, songs already in the list) and their other versions, then orders the rest. */
-    fun clean(known: List<YtSong>, songs: List<YtSong>, played: Set<String>): List<YtSong> {
+    /** Drops [known] songs (seeds, songs already in the list), their other versions and [excluded] artists, then orders the rest. */
+    fun clean(known: List<YtSong>, songs: List<YtSong>, played: Set<String>, excluded: Set<String> = this.excluded): List<YtSong> {
         val ids = known.mapTo(HashSet()) { it.videoId }
         val kept = ArrayList<YtSong>()
         for (s in songs) {
             if (!ids.add(s.videoId)) continue
+            if (excluded.isNotEmpty() && artistKey(tidy(s).artist) in excluded) continue
             if (known.any { sameWork(it, s) } || kept.any { sameWork(it, s) }) continue
             kept += s
         }

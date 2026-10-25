@@ -1,6 +1,11 @@
 package com.ctify.player.ui.radio
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
+import com.ctify.player.ui.enterStagger
+import com.ctify.player.ui.pressFeedback
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -48,11 +53,14 @@ private fun StationCarousel(title: String, list: List<Station>, current: String?
     LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         itemsIndexed(list, key = { _, s -> s.uuid }) { i, s ->
             val on = s.uuid == current
+            val press = remember { MutableInteractionSource() }
             Column(
                 Modifier
+                    .enterStagger(i)
+                    .pressFeedback(press)
                     .width(96.dp)
                     .clip(MaterialTheme.shapes.small)
-                    .clickable(onClickLabel = "play") { PlayerHub.playStations(list, i) }
+                    .clickable(press, LocalIndication.current, onClickLabel = "play") { PlayerHub.playStations(list, i) }
                     .semantics(mergeDescendants = true) {
                         contentDescription = s.name
                         if (on) stateDescription = "now playing"

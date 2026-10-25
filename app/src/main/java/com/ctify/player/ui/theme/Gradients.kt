@@ -4,7 +4,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.os.PowerManager
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +24,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.ctify.player.player.PlayerHub
+import com.ctify.player.ui.reducedMotion
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -37,8 +44,9 @@ fun accentBrush(): Brush {
 }
 
 /**
- * Draws the two-color Liquid or Fade backdrop behind big surfaces (player, Home header); draws nothing otherwise.
- * With a [pulse] (see [rememberMusicPulse]) the colors are boosted and the blobs swell with it.
+ * Draws the two-color Oil, Liquid or Fade backdrop behind big surfaces (player, Home header); draws nothing otherwise.
+ * With a [pulse] (see [rememberMusicPulse]) the colors are boosted and the blobs (or oil swirls) swell with it.
+ * Oil needs Android 13 shaders; older phones get Liquid.
  */
 @Composable
 fun LiquidBackground(modifier: Modifier = Modifier, pulse: State<Float>? = null) {
@@ -47,13 +55,25 @@ fun LiquidBackground(modifier: Modifier = Modifier, pulse: State<Float>? = null)
     if (source != ThemeSource.DUO) return
     val s = MaterialTheme.colorScheme
     // Toned down so text on top stays readable; light mode gets pastel washes.
-    val alpha = if (isAppInDarkTheme()) 0.38f else 0.24f
+    val oilStyle = style == GradientStyle.OIL && Build.VERSION.SDK_INT >= 33
+    // oil is a picture, not a wash: it needs more body than Liquid to read as a slick
+    val alpha = if (isAppInDarkTheme()) (if (oilStyle) 0.72f else 0.38f) else (if (oilStyle) 0.42f else 0.24f)
     val one = if (pulse != null) s.primary.boosted() else s.primary
     val two = if (pulse != null) s.tertiary.boosted() else s.tertiary
+    // a bad shader must not crash the app: it just falls back to Liquid
+    val oil = if (style == GradientStyle.OIL && Build.VERSION.SDK_INT >= 33) remember { runCatching { OilBrush() }.getOrNull() } else null
+    val flow = if (oil != null && !reducedMotion()) {
+        rememberInfiniteTransition(label = "oil")
+            .animateFloat(0f, 1f, infiniteRepeatable(tween(OIL_LOOP_MS, easing = LinearEasing)), label = "flow")
+    } else null
     Canvas(modifier) {
         // read here, in the draw phase, so each beat redraws without recomposing
         val e = pulse?.value ?: 0f
-        val al = if (pulse != null) (alpha * 1.4f + 0.18f * e).coerceAtMost(0.75f) else alpha
+        val al = if (pulse != null) (alpha * 1.4f + 0.18f * e).coerceAtMost(if (oilStyle) 0.92f else 0.75f) else alpha
+        if (oil != null && Build.VERSION.SDK_INT >= 33) {
+            drawRect(oil.at(size.width, size.height, flow?.value ?: 0.3f, e, al, one, two))
+            return@Canvas
+        }
         val a = one.copy(alpha = al)
         val b = two.copy(alpha = al)
         if (style == GradientStyle.FADE) {

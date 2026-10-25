@@ -2,6 +2,18 @@ package com.ctify.player.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.ui.Alignment
+import com.ctify.player.recommend.UpNext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -36,33 +48,8 @@ import com.ctify.player.ui.sound.GenrePresetsRow
 import com.ctify.player.ui.sound.SoundTab
 import com.ctify.player.ui.sound.SuggestionCard
 
-/** The play queue, opened from the arrow under the player's progress bar; starts at the current song. */
 @Composable
-internal fun QueueSheet(maxHeight: Dp = 520.dp) {
-    val repository = (LocalContext.current.applicationContext as CtifyApp).repository
-    val ui by PlayerHub.ui.collectAsState()
-    Text(
-        "Up next", style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.padding(start = 16.dp, bottom = 4.dp).semantics { heading() },
-    )
-    val list = rememberLazyListState(initialFirstVisibleItemIndex = ui.currentIndex.coerceAtLeast(0))
-    LazyColumn(Modifier.heightIn(max = maxHeight), state = list, contentPadding = PaddingValues(bottom = 8.dp)) {
-        itemsIndexed(ui.queueIds) { index, id ->
-            val t = repository.trackById(id) ?: return@itemsIndexed
-            TrackRow(
-                track = t,
-                isCurrent = index == ui.currentIndex,
-                isPlaying = ui.isPlaying && index == ui.currentIndex,
-                isFavorite = false,
-                onClick = { PlayerHub.playQueueIndex(index) },
-                onToggleFavorite = null,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun SoundSheet() {
+internal fun SoundSheet(radio: Boolean = false) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -72,7 +59,7 @@ internal fun SoundSheet() {
     ) {
         Text("Sound", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(12.dp))
-        SoundTab()
+        SoundTab(radio = radio)
         val uri = LocalUriHandler.current
         Text(
             "Player designs inspired by Spun by @yappologistic",
@@ -94,7 +81,7 @@ internal fun SoundSheet() {
 internal enum class ChipPanel { GENRE, SPEED, REVERB, BASS, HZ, SPACE, MORE }
 
 @Composable
-internal fun ChipPanelSheet(panel: ChipPanel) {
+internal fun ChipPanelSheet(panel: ChipPanel, radio: Boolean, onEqualizer: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -116,9 +103,17 @@ internal fun ChipPanelSheet(panel: ChipPanel) {
             ChipPanel.HZ -> TuningSection()
             ChipPanel.SPACE -> SpaceSection()
             ChipPanel.MORE -> {
+                CtButton(onClick = onEqualizer, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Equalizer, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Equalizer and all sound settings")
+                }
                 RainSection()
-                VinylSection()
-                ReverseSection()
+                // a live stream can't be played backwards, and vinyl wear is for records
+                if (!radio) {
+                    VinylSection()
+                    ReverseSection()
+                }
             }
         }
     }

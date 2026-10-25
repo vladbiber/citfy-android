@@ -59,6 +59,7 @@ interface RadioDao {
     @Upsert suspend fun addRecent(r: StationRecent)
     @Query("DELETE FROM station_recents WHERE uuid NOT IN (SELECT uuid FROM station_recents ORDER BY playedAt DESC LIMIT 50)")
     suspend fun trimRecents()
+    @Query("DELETE FROM station_recents") suspend fun clearRecents()
 
     @Query("SELECT * FROM stations WHERE source = 'CUSTOM' ORDER BY name") fun customStations(): Flow<List<Station>>
     @Query("DELETE FROM stations WHERE uuid = :uuid") suspend fun deleteStation(uuid: String)

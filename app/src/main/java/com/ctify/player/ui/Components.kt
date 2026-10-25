@@ -1,10 +1,13 @@
 package com.ctify.player.ui
 
 import androidx.compose.foundation.progressSemantics
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -24,7 +27,10 @@ import com.ctify.player.ui.theme.accentBrush
 import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +44,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.SkipNext
@@ -46,7 +53,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -70,11 +76,14 @@ import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import com.ctify.player.data.Track
 import com.ctify.player.ui.radio.LiveBadge
+import com.ctify.player.ui.radio.StationArt
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextMuted
 import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
+
+fun songCount(n: Int) = if (n == 1) "1 song" else "$n songs"
 
 fun formatMs(ms: Int): String = formatTime(ms.toLong())
 
@@ -182,11 +191,19 @@ fun TrackRow(
     isFavorite: Boolean,
     onClick: () -> Unit,
     onToggleFavorite: (() -> Unit)?,
+    /** the ⋮ button; a long press does the same */
     onMore: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     /** small line before the artist, e.g. "Online" or "Downloaded" */
     status: String? = null,
     statusIcon: ImageVector? = null,
+    /** a tap on the cover picks the song for multi-select */
+    onCoverClick: (() -> Unit)? = null,
+    selected: Boolean = false,
+    /** the + button that opens the playlist picker */
+    onAddToPlaylist: (() -> Unit)? = null,
+    /** long press; defaults to [onMore] */
+    onLongClick: (() -> Unit)? = onMore,
 ) {
     val titleColor by animateColorAsState(if (isCurrent) Accent else TextPrimary, label = "title")
     Row(
@@ -195,8 +212,9 @@ fun TrackRow(
             .heightIn(min = 64.dp)
             .padding(horizontal = 8.dp)
             .clip(MaterialTheme.shapes.small)
-            .background(if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(onClickLabel = "play", onClick = onClick)
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else if (isCurrent) Accent.copy(alpha = 0.10f) else Color.Transparent)
+            .then(if (selected) Modifier.border(1.5.dp, Accent, MaterialTheme.shapes.small) else Modifier)
+            .combinedClickable(onClickLabel = "play", onLongClickLabel = if (onLongClick === onMore) "more options" else "select", onLongClick = onLongClick, onClick = onClick)
             .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -204,18 +222,22 @@ fun TrackRow(
             Modifier.semantics(mergeDescendants = true) {
                 contentDescription = "${track.title}, by ${track.artist}, ${formatTime(track.durationMs)}"
                 if (isCurrent) stateDescription = if (isPlaying) "now playing" else "paused"
+                if (selected) stateDescription = "selected"
             }.weight(1f),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(contentAlignment = Alignment.Center) {
+                Box(
+                    if (onCoverClick != null) Modifier.clip(MaterialTheme.shapes.small).clickable(onClickLabel = if (selected) "unselect" else "select", onClick = onCoverClick) else Modifier,
+                    contentAlignment = Alignment.Center,
+                ) {
                     AlbumArt(track, 50.dp, shape = MaterialTheme.shapes.small)
-                    if (isCurrent) {
+                    if (selected || isCurrent) {
                         Box(
                             Modifier.size(50.dp).clip(MaterialTheme.shapes.small).background(Color.Black.copy(alpha = 0.45f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                if (isPlaying) Icons.Filled.GraphicEq else Icons.Filled.Pause,
+                                if (selected) Icons.Filled.CheckCircle else if (isPlaying) Icons.Filled.GraphicEq else Icons.Filled.Pause,
                                 null, tint = Accent, modifier = Modifier.size(22.dp),
                             )
                         }
@@ -240,10 +262,15 @@ fun TrackRow(
             IconButton(onClick = onToggleFavorite) {
                 Icon(
                     if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    if (isFavorite) "Remove ${track.title} from favorites" else "Add ${track.title} to favorites",
+                    if (isFavorite) "Unlike ${track.title}" else "Like ${track.title}",
                     tint = if (isFavorite) Accent else TextSecondary,
                     modifier = Modifier.size(20.dp),
                 )
+            }
+        }
+        if (onAddToPlaylist != null) {
+            IconButton(onClick = onAddToPlaylist) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add ${track.title} to a playlist", tint = TextSecondary, modifier = Modifier.size(20.dp))
             }
         }
         if (onRemove != null) {
@@ -270,11 +297,15 @@ fun MiniPlayer(
     onPrevious: () -> Unit = {},
     isLive: Boolean = false,
     status: String? = null,
+    /** the full player is open: the cover hands over to it (see [sharedCover]) */
+    playerOpen: Boolean = false,
 ) {
+    val duo = Appearance.source.collectAsState().value == ThemeSource.DUO
     val scope = rememberCoroutineScope()
     val dx = remember { Animatable(0f) }
     val next by rememberUpdatedState(onNext)
     val previous by rememberUpdatedState(onPrevious)
+    val openPlayer by rememberUpdatedState(onClick)
     val swipeAt = with(LocalDensity.current) { 72.dp.toPx() }
     val nextLabel = if (isLive) "Next station" else "Next track"
     val previousLabel = if (isLive) "Previous station" else "Previous track"
@@ -282,6 +313,13 @@ fun MiniPlayer(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp)
+            // swipe up opens the player, like a tap
+            .pointerInput(Unit) {
+                var dy = 0f
+                detectVerticalDragGestures(onDragStart = { dy = 0f }, onDragEnd = { if (dy < -swipeAt / 2) openPlayer() }) { change, amount ->
+                    change.consume(); dy += amount
+                }
+            }
             // swipe left = next, right = previous; taps still open the player
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
@@ -316,24 +354,30 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            AlbumArt(track, 44.dp, shape = MaterialTheme.shapes.small)
-            Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-                Text(track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(status ?: track.artist, color = TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // a fixed slot, so the row keeps its layout while the cover is away in the player
+            Box(Modifier.size(44.dp)) {
+                androidx.compose.animation.AnimatedVisibility(!playerOpen, enter = fadeIn(), exit = fadeOut()) {
+                    // radio: the Track's album is the station name
+                    if (isLive) StationArt(track.album, track.coverUri, 44.dp, MaterialTheme.shapes.small, Modifier.sharedCover(this).size(44.dp))
+                    else AlbumArt(track, 44.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.sharedCover(this).size(44.dp))
+                }
             }
-            if (isLive) LiveBadge()
-            IconButton(onClick = onTogglePlay) {
-                Icon(
-                    if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    if (isPlaying) "Pause" else "Play", tint = TextPrimary, modifier = Modifier.size(28.dp),
+            Column(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                Text(
+                    track.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.marquee(),
+                )
+                Text(
+                    status ?: track.artist, color = TextSecondary, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.marquee(),
                 )
             }
-            IconButton(onClick = onNext) {
-                Icon(Icons.Filled.SkipNext, nextLabel, tint = TextPrimary)
-            }
+            if (isLive) LiveBadge()
+            PlayPauseButton(isPlaying, onTogglePlay, Accent, brush = if (duo) accentBrush() else null, iconSize = 24.dp)
+            CtIconButton(Icons.Filled.SkipNext, nextLabel, onNext, tint = TextPrimary)
         }
         if (isLive) Spacer(Modifier.height(2.dp))
-        else if (Appearance.source.collectAsState().value == ThemeSource.DUO) {
+        else if (duo) {
             val fill = accentBrush()
             val track = TextPrimary.copy(alpha = 0.15f)
             Box(

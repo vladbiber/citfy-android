@@ -14,8 +14,8 @@ android {
         applicationId = "com.ctify.player"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
-        versionName = "2.1.2"
+        versionCode = 25
+        versionName = "2.4.1"
         vectorDrawables { useSupportLibrary = true }
         // Last.fm key for genres and creators: local.properties, else the environment; blank hides those parts
         val lastFmKey = rootProject.file("local.properties").takeIf { it.exists() }
@@ -112,4 +112,6 @@ dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs.nio)
 
     testImplementation(libs.junit)
+    // real org.json for parsing tests; the android.jar copy is a stub
+    testImplementation(libs.org.json)
 }

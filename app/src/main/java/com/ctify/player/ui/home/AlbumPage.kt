@@ -1,0 +1,199 @@
+package com.ctify.player.ui.home
+
+import android.widget.Toast
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ctify.player.data.MusicRepository
+import com.ctify.player.data.RateTarget
+import com.ctify.player.data.RatingKeys
+import com.ctify.player.data.Ratings
+import com.ctify.player.data.Track
+import com.ctify.player.data.db.RatingKind
+import com.ctify.player.lastfm.LastFm
+import com.ctify.player.musicbrainz.MbAlbum
+import com.ctify.player.musicbrainz.MbParse
+import com.ctify.player.musicbrainz.MusicBrainz
+import com.ctify.player.net.Feature
+import com.ctify.player.net.NetworkGate
+import com.ctify.player.recommend.SongRadio
+import com.ctify.player.ui.AlbumArt
+import com.ctify.player.ui.RowPlaceholders
+import com.ctify.player.ui.SectionHeader
+import com.ctify.player.ui.library.PlayList
+import com.ctify.player.ui.library.PlayShuffleRow
+import com.ctify.player.ui.library.artistMatches
+import com.ctify.player.ui.rating.RatingBar
+import com.ctify.player.ui.songCount
+import com.ctify.player.ui.songs.SongContext
+import com.ctify.player.ui.songs.SongRow
+import com.ctify.player.ui.theme.TextSecondary
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+private sealed interface MbLoad {
+    data object Loading : MbLoad
+    data object Missing : MbLoad
+    data class Found(val album: MbAlbum) : MbLoad
+}
+
+/** Your songs of one album with Play and Shuffle; with MusicBrainz on, the album's facts and its full track list. */
+@Composable
+internal fun AlbumPage(album: String, artist: String, repo: MusicRepository, onOpen: (HomePage) -> Unit, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val tracks by repo.tracks.collectAsStateWithLifecycle()
+    val songs = remember(tracks, album, artist) {
+        tracks.filter { it.album == album && (artist.isBlank() || artistMatches(it.artist, artist) || it.artist.contains(artist, true)) }
+    }
+    val mbOn = rememberMbOn()
+    val load by produceState<MbLoad>(MbLoad.Loading, album, artist, mbOn) {
+        value = if (!mbOn || artist.isBlank()) MbLoad.Missing else try {
+            MusicBrainz.album(artist, album)?.let { MbLoad.Found(it) } ?: MbLoad.Missing
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            MbLoad.Missing
+        }
+    }
+    val mb = (load as? MbLoad.Found)?.album
+    val byArtist = remember(tracks, artist) { if (artist.isBlank()) songs else tracks.filter { artistMatches(it.artist, artist) || it.album == album } }
+    val matches = remember(mb, byArtist) { mb?.let { MbParse.matchLocal(it.tracks, byArtist, album) }.orEmpty() }
+    val inOrder = remember(matches) { matches.toSortedMap().values.distinctBy { it.id } }
+    val multiDisc = remember(mb) { mb?.tracks?.any { it.disc > 1 } == true }
+    var busy by remember { mutableStateOf<Int?>(null) }
+    var saving by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    fun toast(msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+
+    fun saveAll(a: MbAlbum) {
+        NetworkGate.blockReason(Feature.YOUTUBE)?.let { toast(it); return }
+        val missing = a.tracks.indices.filter { it !in matches }
+        scope.launch {
+            val found = mutableListOf<Track>()
+            var lost = 0
+            try {
+                missing.forEachIndexed { n, i ->
+                    saving = n + 1 to missing.size
+                    val t = a.tracks[i]
+                    val s = SongRadio.find(artist, t.title, t.lengthMs)
+                    if (s == null) lost++ else found += s.copy(album = album, artist = artist.ifBlank { s.artist }, trackNumber = t.position).toTrack()
+                }
+            } finally {
+                if (found.isNotEmpty()) repo.saveStreamed(found)
+                saving = null
+            }
+            toast(if (lost == 0) "Saved ${songCount(found.size)}" else "Saved ${songCount(found.size)}; $lost not found on YouTube")
+        }
+    }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+        item { PageTop(album, onBack) }
+        item {
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                val first = songs.firstOrNull()
+                if (first == null && mb != null) Cover(mb.group.coverUrl, 180.dp) else AlbumArt(first, 180.dp, shape = MaterialTheme.shapes.large)
+                Spacer(Modifier.height(10.dp))
+                if (artist.isNotBlank()) TextButton(onClick = { onOpen(HomePage.ArtistPage(LastFm.Artist(artist, null))) }) {
+                    Text(artist, style = MaterialTheme.typography.titleMedium)
+                }
+                Text(
+                    if (songs.isEmpty() && mb != null) "None of your songs are from this album yet" else "Album · ${songCount(songs.size)}",
+                    color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
+                )
+                if (mb != null) AlbumFacts(mb, artist, album)
+                else RatingLine(artist, album, null, null)
+                Spacer(Modifier.height(10.dp))
+                PlayShuffleRow(songs, repo)
+            }
+        }
+        items(songs, key = { it.id }) { t: Track -> SongRow(t, SongContext.Library, songs, onPlay = { PlayList.play(repo, songs, songs.indexOf(t)) }) }
+        if (mbOn && load == MbLoad.Loading && artist.isNotBlank()) item {
+            SectionHeader("Full track list", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
+            RowPlaceholders(3)
+        }
+        if (mb != null && mb.tracks.isNotEmpty()) {
+            item {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        SectionHeader("Full track list")
+                        Text("${matches.size} of ${mb.tracks.size} in your library", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    val left = mb.tracks.size - matches.size
+                    FilledTonalButton(onClick = { saveAll(mb) }, enabled = left > 0 && saving == null) {
+                        Icon(Icons.Filled.LibraryAdd, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(saving?.let { (n, of) -> "Saving $n of $of" } ?: "Save all")
+                    }
+                }
+            }
+            itemsIndexed(mb.tracks, key = { i, _ -> "mb$i" }) { i, t ->
+                val mine = matches[i]
+                val number = if (multiDisc) "${t.disc}-${t.position}" else "${t.position}"
+                MbTrackRow(number, t, mine, busy == i) {
+                    if (mine != null) PlayList.play(repo, inOrder, inOrder.indexOf(mine).coerceAtLeast(0))
+                    else {
+                        busy = i
+                        scope.launch {
+                            val song = SongRadio.find(artist, t.title, t.lengthMs)
+                            busy = null
+                            if (song == null) toast("Not found on YouTube") else SongRadio.play(repo, song)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Year, type, community and personal rating, and genres. */
+@Composable
+private fun AlbumFacts(mb: MbAlbum, artist: String, album: String) {
+    val facts = mb.group.label()
+    if (facts.isNotEmpty()) Text(facts, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
+    RatingLine(artist, album, mb.rating?.let { "MusicBrainz ★ %.1f (%d)".format(it, mb.votes) }, mb.group.year)
+    TagChips(mb.tags)
+}
+
+/** "MusicBrainz ★ 4.1 (23)" next to your own stars for the album. */
+@Composable
+private fun RatingLine(artist: String, album: String, community: String?, year: Int?) {
+    val ctx = LocalContext.current
+    val target = remember(artist, album, year) { RatingKeys.album(artist, album)?.let { RateTarget(RatingKind.ALBUM, it, album, artist, album, year = year) } } ?: return
+    val ratings = remember { Ratings.get(ctx) }
+    val row by remember(target.key) { ratings.rating(RatingKind.ALBUM, target.key) }.collectAsState(null)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        community?.let { Text(it, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 12.dp)) }
+        Text("You", color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 6.dp))
+        RatingBar(row?.value ?: 0, { ratings.set(target, it) }, starSize = 20.dp, label = "Your album rating, $album")
+    }
+}

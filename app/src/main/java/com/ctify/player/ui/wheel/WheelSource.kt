@@ -37,7 +37,6 @@ interface WheelSource {
 
     fun isFavorite(item: WheelItem): Boolean = false
     fun toggleFavorite(item: WheelItem) {}
-    val canAddToPlaylist: Boolean get() = false
     val canDownload: Boolean get() = false
     fun download(item: WheelItem) {}
 }
@@ -73,7 +72,6 @@ class LibrarySource(private val repo: MusicRepository, val scope: LibraryScope) 
         PlayerHub.playQueue(listOf(winner.id) + wheel.map { it.id }.filter { it != winner.id }.shuffled(), 0)
     override fun isFavorite(item: WheelItem) = repo.isFavorite(item.id)
     override fun toggleFavorite(item: WheelItem) = repo.toggleFavorite(item.id)
-    override val canAddToPlaylist get() = true
 }
 
 /** A fixed station list, e.g. the radio tab that is open. */
