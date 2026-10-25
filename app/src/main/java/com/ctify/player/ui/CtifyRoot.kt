@@ -266,7 +266,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                         section = librarySection,
                         onSection = { librarySection = it },
                     )
-                    else -> RadioScreen()
+                    else -> RadioScreen(onOpenWheel = openWheel, onOpenSettings = openSettings)
                 }
             }
             AnimatedVisibility(

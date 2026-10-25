@@ -25,6 +25,7 @@ class Fx {
     @Volatile var vinylWarmth = 0.6f    // 0 .. 1 rolloff, saturation, mono bass
     @Volatile var vinylWow = 0.4f       // 0 .. 1 wow and flutter
     @Volatile var vinylSurface = 0.4f   // 0 .. 1 hiss and rumble
+    @Volatile var mood = Mood.NORMAL    // Evil / Godly / Good & Evil layer
     /** device, genre and EQ layers, colour, ReplayGain and balance */
     val hifi = HifiFx()
 
@@ -142,6 +143,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
     private val frame = FloatArray(2)
     private var smoothPre = 1f
     private val hifi = HifiChain(fx.hifi, sampleRate)
+    private val moodFx = MoodFx(sampleRate)
 
     /**
      * How far the preamp turns everything down before the boosts. Only a part of each boost,
@@ -167,7 +169,8 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
         get() = fx.reverb < 0.001f && smoothWet < 0.001f && fx.bassGainDb < 0.01f && !fx.vinyl && vinylMix < 0.0005f &&
             kotlin.math.abs(fx.width - 1f) < 0.002f && kotlin.math.abs(smoothWidth - 1f) < 0.002f &&
             fx.pan8d < 0.002f && smoothPan < 0.002f && fx.muffle < 0.001f &&
-            fx.rain == RainPreset.OFF && rainMix < 0.0005f && smoothPre > 0.9999f && hifi.idle
+            fx.rain == RainPreset.OFF && rainMix < 0.0005f && smoothPre > 0.9999f && hifi.idle &&
+            fx.mood == Mood.NORMAL && moodFx.idle
 
     /** Processes [frames] interleaved stereo samples of [buf] in place. */
     fun process(buf: FloatArray, frames: Int) {
@@ -254,6 +257,7 @@ class EffectChain(private val fx: Fx, private val sampleRate: Float) {
             buf[i * 2] = frame[0]
             buf[i * 2 + 1] = frame[1]
         }
+        moodFx.process(buf, frames, fx.mood)
         hifi.post(buf, frames)
     }
 

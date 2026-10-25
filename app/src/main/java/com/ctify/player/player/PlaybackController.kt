@@ -1,5 +1,10 @@
 package com.ctify.player.player
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import com.ctify.player.player.fx.Mood
+import com.ctify.player.player.fx.Moods
+import kotlinx.coroutines.flow.combine
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
@@ -103,7 +108,29 @@ class PlaybackController(
             sync()
         }
         // speed and pitch move together, like slowva's resampler
-        scope.launch { PlayerHub.rate.collect { player.playbackParameters = PlaybackParameters(it, it) } }
+        Moods.init(context)
+        scope.launch {
+            combine(PlayerHub.rate, Moods.mood) { r, m -> r * m.pitch }
+                .collect { player.playbackParameters = PlaybackParameters(it, it) }
+        }
+        // Good & Evil plays everything backwards; leaving it plays forwards again
+        scope.launch {
+            var was = Moods.mood.value
+            Moods.mood.collect { m ->
+                PlayerHub.fx.mood = m
+                val reversed = PlayerHub.reverseOn.value
+                if (m == Mood.GOOD_EVIL && !reversed && !radio.active && player.mediaItemCount > 0) enterReverse()
+                else if (was == Mood.GOOD_EVIL && m != Mood.GOOD_EVIL && reversed) leaveReverse()
+                was = m
+            }
+        }
+        // a new song started forwards while Good & Evil is on: turn it around too
+        scope.launch {
+            PlayerHub.ui.map { it.currentTrackId }.distinctUntilChanged().collect {
+                if (it != null && Moods.mood.value == Mood.GOOD_EVIL && !PlayerHub.reverseOn.value &&
+                    !PlayerHub.reversePreparing.value && !radio.active) enterReverse()
+            }
+        }
         scope.launch {
             while (true) {
                 if (player.isPlaying) {
