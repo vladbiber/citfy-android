@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderColors
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -72,8 +74,19 @@ fun MarkedSlider(
                 onValueChange(if (abs(raw - default) < span * 0.02f) default else raw)
             },
             valueRange = valueRange,
+            colors = fxSliderColors(),
         )
     }
+}
+
+/** One slider color everywhere in the sound sheet: primary on a faint primary track. */
+@Composable
+fun fxSliderColors(): SliderColors {
+    val c = MaterialTheme.colorScheme
+    return SliderDefaults.colors(
+        thumbColor = c.primary, activeTrackColor = c.primary, activeTickColor = c.onPrimary,
+        inactiveTrackColor = c.primary.copy(alpha = 0.22f), inactiveTickColor = c.primary,
+    )
 }
 
 /** The seek bar's wave: [amp] 0 (flat) to 1, [phase] in radians. Read them in the draw phase only. */

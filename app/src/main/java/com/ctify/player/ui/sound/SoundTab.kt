@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -25,32 +24,36 @@ import com.ctify.player.ui.TuningSection
 import com.ctify.player.ui.VinylSection
 import com.ctify.player.ui.enterStagger
 
-/** Every sound setting, top to bottom: suggestion, genre presets, effects, then headphones, hi-fi, EQ; [radio] leaves out vinyl and reverse. */
+/** Every sound setting: presets, speed, reverb, bass, EQ, then effects, output and the range; [radio] leaves out vinyl and reverse. */
 @Composable
 fun SoundTab(modifier: Modifier = Modifier, radio: Boolean = false) {
     val context = LocalContext.current
     remember { SoundEngine.init(context) }
     val sections = listOfNotNull<@Composable () -> Unit>(
-        { SuggestionCard() },
+        { PresetStatus() },
         { GenrePresetsRow() },
-        { SectionHeader("Effects", Modifier.padding(top = 4.dp)) },
         { SpeedSection() },
         { ReverbSection() },
         { BassSection() },
+        { EqSection() },
+        { Heading("Effects") },
         { TuningSection() },
         { SpaceSection() },
         { RainSection() },
         if (radio) null else { { VinylSection() } },
         if (radio) null else { { ReverseSection() } },
-        { EffectRangeSection() },
-        { ResetFxButton() },
-        { HorizontalDivider() },
+        { Heading("Output") },
         { HeadphonesSection() },
         { HifiSection() },
-        { EqSection() },
+        { Heading("Range") },
+        { EffectRangeSection() },
+        { ResetFxButton() },
     )
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // each section emits a single node, so the wrapper keeps the spacing as it was
         sections.forEachIndexed { i, section -> Box(Modifier.enterStagger(i)) { section() } }
     }
 }
+
+@Composable
+private fun Heading(text: String) = SectionHeader(text, Modifier.padding(top = 12.dp, start = 4.dp))

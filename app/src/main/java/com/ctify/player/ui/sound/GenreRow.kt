@@ -9,6 +9,7 @@ import com.ctify.player.ui.pressFeedback
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -50,56 +52,28 @@ import com.ctify.player.player.sound.GenrePreset
 import com.ctify.player.player.sound.SoundEngine
 import com.ctify.player.player.sound.SoundSettings
 import com.ctify.player.ui.FxSlider
-import com.ctify.player.ui.SectionHeader
+import com.ctify.player.ui.Section
 
-/** "Suggested for this song": the preset and why. It only applies on a tap. */
+/** Plain status: the preset in use and, only when a genre was found, what it matched; Apply or Undo beside it. */
 @Composable
-fun SuggestionCard() {
+fun PresetStatus() {
     val s by SoundEngine.suggestion.collectAsState()
     val current by SoundSettings.genreKey.collectAsState()
-    val now by PlayerHub.playback.collectAsState()
-    val radio = now?.station != null
-    val shape = MaterialTheme.shapes.large
-    val sug = s
-    if (sug == null) {
-        Text(
-            "Play something to get a preset suggestion.",
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-        return
-    }
-    val label = GenrePreset.labelOf(sug.key)
-    if (sug.key == current) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (sug.autoFrom != null) "$label applied automatically" else "$label, ${sug.reason}",
-                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
-            )
-            if (sug.autoFrom != null) TextButton(onClick = { SoundEngine.undoAuto() }) { Text("Undo") }
-        }
-        return
-    }
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = shape, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                if (radio) "Suggested for this station" else "Suggested for this song",
-                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Text(sug.reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                }
-                Button(onClick = { SoundEngine.applySuggestion() }) { Text("Apply") }
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+        Text("Preset: ${GenrePreset.labelOf(current)}", style = MaterialTheme.typography.bodyLarge)
+        val sug = s?.takeIf { it.key != GenrePreset.BALANCED } ?: return@Column
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Matched to ${GenrePreset.labelOf(sug.key)}", style = MaterialTheme.typography.bodyMedium, color = dim, modifier = Modifier.weight(1f))
+            when {
+                sug.key != current -> TextButton(onClick = { SoundEngine.applySuggestion() }) { Text("Apply") }
+                sug.autoFrom != null -> TextButton(onClick = { SoundEngine.undoAuto() }) { Text("Undo") }
             }
         }
     }
 }
 
-/** The preset chips with the auto-apply switch; long-press a chip to edit or reset it. */
+/** The preset chips (wrapping, never clipped) with the auto-apply switch; long-press a chip to edit or reset it. */
 @Composable
 fun GenrePresetsRow() {
     val presets by SoundSettings.presets.collectAsState()
@@ -107,20 +81,11 @@ fun GenrePresetsRow() {
     val auto by SoundSettings.genreAuto.collectAsState()
     var editing by remember { mutableStateOf<GenrePreset?>(null) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionHeader("Genre presets", Modifier.weight(1f))
-            Text("Auto-apply", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = auto, onCheckedChange = { SoundSettings.setGenreAuto(it) },
-                modifier = Modifier.semantics { contentDescription = "Auto-apply genre presets" },
-            )
-        }
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()),
+    Section(Icons.Default.Tune, "Presets", GenrePreset.labelOf(current)) {
+        FlowRow(
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             presets.forEach { p ->
                 PresetChip(
@@ -133,8 +98,15 @@ fun GenrePresetsRow() {
                 Icon(Icons.Default.Edit, contentDescription = "Edit the current preset")
             }
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Auto-apply by genre", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Switch(
+                checked = auto, onCheckedChange = { SoundSettings.setGenreAuto(it) },
+                modifier = Modifier.semantics { contentDescription = "Auto-apply genre presets" },
+            )
+        }
         Text(
-            if (auto) "Each new song gets its suggested preset. Picking another one teaches it for the song and the artist."
+            if (auto) "Each new song gets its matched preset. Picking another one teaches it for the song and the artist."
             else "Presets change only when you tap one. Long-press to edit.",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

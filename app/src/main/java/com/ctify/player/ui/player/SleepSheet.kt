@@ -1,11 +1,24 @@
 package com.ctify.player.ui.player
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,8 +27,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.ctify.player.player.SleepTimer
 import com.ctify.player.ui.SectionHeader
@@ -34,27 +47,51 @@ internal fun sleepLeft(): String? {
     }
 }
 
-/** Sleep timer choices; [live] radio has no track end. */
+/** Sleep timer: big pill choices, and while one runs a card with the time left and Cancel; [live] radio has no track end. */
 @Composable
 internal fun SleepSheet(live: Boolean, onDone: () -> Unit) {
     val left = sleepLeft()
-    Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+    val at by SleepTimer.endsAt.collectAsState()
+    val c = MaterialTheme.colorScheme
+    Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeader("Sleep timer")
-        Text(
-            left?.let { "Pausing $it" } ?: "Fades out, then pauses",
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+        if (left != null) Surface(color = c.primaryContainer, contentColor = c.onPrimaryContainer, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Bedtime, contentDescription = null, modifier = Modifier.size(28.dp))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Pausing $left", style = MaterialTheme.typography.titleMedium)
+                    Text("Fades out first", style = MaterialTheme.typography.bodyMedium)
+                }
+                FilledTonalButton(onClick = { SleepTimer.cancel(); onDone() }) { Text("Cancel") }
+            }
+        } else Text(
+            "Fades out, then pauses",
+            style = MaterialTheme.typography.bodyMedium, color = c.onSurfaceVariant,
         )
-        listOf(15, 30, 45, 60, 90).forEach { m -> Choice("$m minutes") { SleepTimer.start(m); onDone() } }
-        if (!live) Choice("End of this track") { SleepTimer.endOfTrack(); onDone() }
-        if (left != null) Choice("Off") { SleepTimer.cancel(); onDone() }
+        Text(if (left != null) "Change it" else "Pause in", style = MaterialTheme.typography.labelLarge, color = c.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        FlowRow(
+            Modifier.fillMaxWidth().selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(15, 30, 45, 60, 90).forEach { m -> Choice("$m min", selected = false) { SleepTimer.start(m); onDone() } }
+            if (!live) Choice("End of song", selected = at == SleepTimer.END_OF_TRACK) { SleepTimer.endOfTrack(); onDone() }
+        }
+        Spacer(Modifier.height(4.dp))
     }
 }
 
 @Composable
-private fun Choice(label: String, onClick: () -> Unit) {
-    Text(
-        label, style = MaterialTheme.typography.bodyLarge,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick).padding(vertical = 12.dp),
-    )
+private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Surface(
+        selected = selected, onClick = onClick,
+        color = if (selected) c.primary else c.surfaceContainerHigh,
+        contentColor = if (selected) c.onPrimary else c.onSurface,
+        shape = CircleShape,
+        modifier = Modifier.heightIn(min = 56.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 22.dp, vertical = 16.dp))
+    }
 }

@@ -1,8 +1,9 @@
 package com.ctify.player.ui
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.FastRewind
@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.player.fx.FxRange
@@ -46,7 +47,7 @@ import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.roundToInt
 
-/** The effect sections, one composable each: the full sound sheet stacks them, a player chip opens one. */
+/** The effect sections, one composable each; the sound sheet stacks them. */
 @Composable
 internal fun EffectRangeSection() {
     val range by PlayerHub.fxRange.collectAsState()
@@ -213,7 +214,7 @@ internal fun ResetFxButton() {
 @Composable
 internal fun Section(icon: ImageVector, title: String, summary: String, content: @Composable () -> Unit) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -222,7 +223,10 @@ internal fun Section(icon: ImageVector, title: String, summary: String, content:
                 Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 SectionHeader(title, Modifier.weight(1f))
-                Text(summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    summary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp).widthIn(max = 160.dp),
+                )
             }
             content()
         }
@@ -230,8 +234,9 @@ internal fun Section(icon: ImageVector, title: String, summary: String, content:
 }
 
 @Composable
-internal fun ChipRow(content: @Composable () -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+internal fun ChipRow(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    // wraps instead of scrolling, so no chip ends up half off the edge
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         content()
     }
 }
