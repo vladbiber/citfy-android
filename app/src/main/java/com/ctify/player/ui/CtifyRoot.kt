@@ -262,6 +262,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                         add = add,
                         onOpenPage = openPage,
                         onOpenSettings = openSettings,
+                        onOpenWheel = openWheel,
                         section = librarySection,
                         onSection = { librarySection = it },
                     )
