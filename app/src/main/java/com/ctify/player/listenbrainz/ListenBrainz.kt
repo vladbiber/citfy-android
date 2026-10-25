@@ -108,7 +108,7 @@ object ListenBrainz {
     /** One listen; [listenedAt] in seconds, null for playing_now. */
     fun listen(t: Track, listenedAt: Long?): JSONObject {
         val info = JSONObject()
-            .put("submission_client", "ctify")
+            .put("submission_client", "guava-player")
             .put("submission_client_version", BuildConfig.VERSION_NAME)
         if (t.durationMs > 0) info.put("duration_ms", t.durationMs)
         val meta = JSONObject()

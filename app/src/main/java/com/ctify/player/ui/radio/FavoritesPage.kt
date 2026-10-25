@@ -68,7 +68,7 @@ internal fun FavoritesPage() {
 }
 
 @Composable
-private fun AddStationDialog(onDismiss: () -> Unit) {
+internal fun AddStationDialog(onDismiss: () -> Unit) {
     val radio = radioRepo()
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }

@@ -46,6 +46,7 @@ import com.ctify.player.player.sound.EqMode
 import com.ctify.player.player.sound.SoundSettings
 import com.ctify.player.ui.ChipRow
 import com.ctify.player.ui.FxSlider
+import com.ctify.player.ui.fxSliderColors
 import com.ctify.player.ui.Section
 import kotlin.math.log10
 import kotlin.math.pow
@@ -58,12 +59,11 @@ fun EqSection() {
     val summary = if (!eq.on) "off" else eq.mode.label.lowercase()
     Section(Icons.Default.Equalizer, "EQ", summary) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ChipRow {
+            ChipRow(Modifier.weight(1f)) {
                 EqMode.entries.forEach { m ->
                     FilterChip(selected = eq.mode == m, onClick = { SoundSettings.setEq { it.copy(mode = m) } }, label = { Text(m.label) })
                 }
             }
-            Text("", Modifier.weight(1f))
             Switch(
                 checked = eq.on, onCheckedChange = { on -> SoundSettings.setEq { it.copy(on = on) } },
                 modifier = Modifier.semantics { contentDescription = "EQ on" },
@@ -96,6 +96,7 @@ fun GraphicEditor(bands: List<Float>, onChange: (Int, Float) -> Unit) {
                     value = g,
                     onValueChange = { v -> onChange(i, if (kotlin.math.abs(v) < 0.4f) 0f else (v * 2f).roundToInt() / 2f) },
                     valueRange = -12f..12f,
+                    colors = fxSliderColors(),
                     modifier = Modifier
                         .semantics { contentDescription = "${freqLabel(f)} band"; stateDescription = "%+.1f dB".format(g) }
                         .graphicsLayer { rotationZ = 270f; transformOrigin = TransformOrigin(0f, 0f) }

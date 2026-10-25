@@ -46,7 +46,7 @@ fun VinylControls(modifier: Modifier = Modifier) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ChipRow {
             VinylPreset.entries.forEach { p ->
                 val active = abs(p.crackle - v.crackle) < 0.01f && abs(p.warmth - v.warmth) < 0.01f &&
                     abs(p.wow - v.wow) < 0.01f && abs(p.surface - v.surface) < 0.01f

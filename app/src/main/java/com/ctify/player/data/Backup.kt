@@ -69,7 +69,7 @@ object Backup {
                     }
                 }
                 val newDb = File(staging, DB_ENTRY)
-                require(newDb.exists()) { "Not a Ctify backup" }
+                require(newDb.exists()) { "Not a Guava Player backup" }
                 checkDatabase(newDb)
 
                 db.close()
@@ -88,10 +88,10 @@ object Backup {
     /** Refuses files that aren't SQLite or come from a newer Ctify with a schema this one can't read. */
     private fun checkDatabase(file: File) {
         val header = file.inputStream().use { s -> ByteArray(16).also { s.read(it) } }
-        require(String(header, Charsets.US_ASCII).startsWith("SQLite format 3")) { "Not a Ctify backup" }
+        require(String(header, Charsets.US_ASCII).startsWith("SQLite format 3")) { "Not a Guava Player backup" }
         val version = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { it.version }
         val current = CtifyDatabase.VERSION
-        require(version in 1..current) { "This backup is from a newer Ctify (database v$version, this app reads up to v$current)" }
+        require(version in 1..current) { "This backup is from a newer Guava Player (database v$version, this app reads up to v$current)" }
     }
 
     private fun prefsDir(context: Context) = File(context.applicationInfo.dataDir, "shared_prefs")

@@ -11,7 +11,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -39,10 +41,20 @@ import com.ctify.player.ui.songs.SongContext
 import com.ctify.player.ui.songs.SongSheet
 import com.ctify.player.ui.songs.SongTarget
 
-/** The player's top-left menu for a song: the song sheet with its playlists on top. */
+/** The player's ⋮ menu for a song: the song sheet with the player's look, sleep timer and playlists added. */
 @Composable
-fun SongPlayerMenu(track: Track, onOpenPlaylist: (String) -> Unit, onDismiss: () -> Unit) =
-    SongSheet(SongTarget.Song(track), SongContext.Other, onDismiss, extraTop = { PlaylistsFor(track, onOpenPlaylist, onDismiss) })
+fun SongPlayerMenu(track: Track, onOpenPlaylist: (String) -> Unit, onDismiss: () -> Unit, onLook: () -> Unit, onSleep: () -> Unit) =
+    SongSheet(SongTarget.Song(track), SongContext.Other, onDismiss, extraTop = {
+        PlayerRows(onDismiss, onLook, onSleep)
+        PlaylistsFor(track, onOpenPlaylist, onDismiss)
+    })
+
+/** Player look and sleep timer, shared by the song and station menus. */
+@Composable
+private fun PlayerRows(onDismiss: () -> Unit, onLook: () -> Unit, onSleep: () -> Unit) {
+    SheetRow(Icons.Filled.Palette, "Player look", "Skins and visualizers") { onDismiss(); onLook() }
+    SheetRow(Icons.Filled.Bedtime, "Sleep timer", sleepLeft()?.let { "Pausing $it" } ?: "Fade out and pause later") { onDismiss(); onSleep() }
+}
 
 /** "In your playlists" (tap to open) and "Would fit in" (playlists with the same artist, tap to add). */
 @Composable
@@ -75,10 +87,10 @@ private fun ColumnScope.PlaylistsFor(track: Track, onOpenPlaylist: (String) -> U
 private fun Heading(text: String) =
     Text(text, color = TextMuted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
 
-/** The player's top-left menu on radio: the station's website, its genre and similar stations. */
+/** The player's ⋮ menu on radio: the station's website, its genre and similar stations. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StationPlayerMenu(station: Station, onDismiss: () -> Unit) {
+fun StationPlayerMenu(station: Station, onDismiss: () -> Unit, onLook: () -> Unit, onSleep: () -> Unit) {
     val ctx = LocalContext.current
     val radio = (ctx.applicationContext as CtifyApp).radio
     val similar by produceState<List<Station>?>(null, station.uuid) {
@@ -94,6 +106,7 @@ fun StationPlayerMenu(station: Station, onDismiss: () -> Unit) {
                 listOfNotNull(station.genre?.label, station.countryCode).joinToString(" · ").ifEmpty { "Radio" },
                 color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
             )
+            PlayerRows(onDismiss, onLook, onSleep)
             station.homepage?.takeIf { it.startsWith("http") }?.let { url ->
                 SheetRow(Icons.Filled.Language, "Station website", Uri.parse(url).host) {
                     onDismiss()

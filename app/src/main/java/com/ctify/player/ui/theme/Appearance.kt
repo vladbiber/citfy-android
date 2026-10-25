@@ -5,13 +5,29 @@ import android.os.Build
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.MutableStateFlow
 
-enum class ThemeMode(val label: String) { SYSTEM("System"), LIGHT("Light"), DARK("Dark") }
-
 /** Where the app colors come from. */
-enum class ThemeSource(val label: String) { WALLPAPER("Wallpaper"), CTIFY_BLUE("Ctify Blue"), DUO("Two colors") }
+enum class ThemeSource(val label: String) { WALLPAPER("Wallpaper"), CTIFY_BLUE("Guava Blue"), DUO("Two colors") }
 
-/** How the two colors blend on big surfaces; small spots always fade. */
-enum class GradientStyle(val label: String) { OIL("Oil"), LIQUID("Liquid"), FADE("Fade") }
+/** The backdrop behind Home's header and the player; tie-dye needs Android 13 shaders, older phones get Fade. */
+enum class GradientStyle(val label: String, val dyed: Boolean = true) {
+    SPIRAL("Spiral"), BULLSEYE("Bullseye"), CRUMPLE("Crumple"), ICE("Ice dye"), CHEVRON("Chevron"),
+    FADE("Fade", false), OFF("Off", false),
+}
+
+/** Where the tie-dye takes its three dyes from. */
+enum class DyeColors(val label: String) { THEME("Theme colors"), RAINBOW("Rainbow"), COVER("Album cover") }
+
+/** How strongly the dye shows. */
+enum class DyeStrength(val label: String, val amount: Float) { LOW("Low", 0.55f), MEDIUM("Medium", 0.8f), HIGH("High", 1f) }
+
+/** The app font; [res] null means the phone's own. */
+enum class AppFont(val label: String, val res: Int?, val variable: Boolean = true) {
+    SYSTEM("Phone default", null),
+    MANROPE("Manrope", com.ctify.player.R.font.font_manrope),
+    INTER("Inter", com.ctify.player.R.font.font_inter),
+    SPACE_GROTESK("Space Grotesk", com.ctify.player.R.font.font_space_grotesk),
+    DM_SERIF("DM Serif headings", com.ctify.player.R.font.font_dm_serif, variable = false),
+}
 
 /** The colors a user can pick for the two-color theme. */
 enum class Swatch(val label: String, val color: Color) {
@@ -38,11 +54,13 @@ internal fun storedSource(stored: String?, dynamicColors: Boolean): ThemeSource 
 object Appearance {
     private lateinit var app: Context
 
-    val mode = MutableStateFlow(ThemeMode.SYSTEM)
     val source = MutableStateFlow(ThemeSource.WALLPAPER)
     val color1 = MutableStateFlow(Swatch.BLUE)
     val color2 = MutableStateFlow(Swatch.PURPLE)
-    val gradient = MutableStateFlow(GradientStyle.OIL)
+    val gradient = MutableStateFlow(GradientStyle.SPIRAL)
+    val dyeColors = MutableStateFlow(DyeColors.THEME)
+    val dyeStrength = MutableStateFlow(DyeStrength.MEDIUM)
+    val font = MutableStateFlow(AppFont.MANROPE)
     val pureBlack = MutableStateFlow(false)
     val coverColors = MutableStateFlow(false)
     /** Player background swells with the bass; battery saver turns it off whatever this says. */
@@ -54,32 +72,39 @@ object Appearance {
         if (::app.isInitialized) return
         app = context.applicationContext
         val p = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        mode.value = runCatching { ThemeMode.valueOf(p.getString("theme", null)!!) }.getOrDefault(ThemeMode.SYSTEM)
         source.value = storedSource(p.getString("theme_source", null), p.getBoolean("dynamic_colors", true))
         color1.value = runCatching { Swatch.valueOf(p.getString("color1", null)!!) }.getOrDefault(Swatch.BLUE)
         color2.value = runCatching { Swatch.valueOf(p.getString("color2", null)!!) }.getOrDefault(Swatch.PURPLE)
-        gradient.value = runCatching { GradientStyle.valueOf(p.getString("gradient", null)!!) }.getOrDefault(GradientStyle.OIL)
+        // "gradient" held Oil/Liquid before 3.0; a new key so everyone starts on the tie-dye
+        gradient.value = runCatching { GradientStyle.valueOf(p.getString("backdrop", null)!!) }.getOrDefault(GradientStyle.SPIRAL)
+        dyeColors.value = runCatching { DyeColors.valueOf(p.getString("dye_colors", null)!!) }.getOrDefault(DyeColors.THEME)
+        dyeStrength.value = runCatching { DyeStrength.valueOf(p.getString("dye_strength", null)!!) }.getOrDefault(DyeStrength.MEDIUM)
+        font.value = runCatching { AppFont.valueOf(p.getString("font", null)!!) }.getOrDefault(AppFont.MANROPE)
         pureBlack.value = p.getBoolean("pure_black", false)
         coverColors.value = p.getBoolean("cover_colors", false)
         reactToMusic.value = p.getBoolean("react_to_music", true)
     }
 
-    fun setMode(v: ThemeMode) { mode.value = v; save() }
     fun setSource(v: ThemeSource) { source.value = v; save() }
     fun setColor1(v: Swatch) { color1.value = v; save() }
     fun setColor2(v: Swatch) { color2.value = v; save() }
     fun setGradient(v: GradientStyle) { gradient.value = v; save() }
+    fun setDyeColors(v: DyeColors) { dyeColors.value = v; save() }
+    fun setDyeStrength(v: DyeStrength) { dyeStrength.value = v; save() }
+    fun setFont(v: AppFont) { font.value = v; save() }
     fun setPureBlack(v: Boolean) { pureBlack.value = v; save() }
     fun setCoverColors(v: Boolean) { coverColors.value = v; save() }
     fun setReactToMusic(v: Boolean) { reactToMusic.value = v; save() }
 
     private fun save() {
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString("theme", mode.value.name)
             .putString("theme_source", source.value.name)
             .putString("color1", color1.value.name)
             .putString("color2", color2.value.name)
-            .putString("gradient", gradient.value.name)
+            .putString("backdrop", gradient.value.name)
+            .putString("dye_colors", dyeColors.value.name)
+            .putString("dye_strength", dyeStrength.value.name)
+            .putString("font", font.value.name)
             .putBoolean("pure_black", pureBlack.value)
             .putBoolean("cover_colors", coverColors.value)
             .putBoolean("react_to_music", reactToMusic.value)

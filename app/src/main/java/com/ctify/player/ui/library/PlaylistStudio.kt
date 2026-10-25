@@ -35,7 +35,22 @@ import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
+import com.ctify.player.ui.NewPlaylist
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -101,7 +116,8 @@ import com.ctify.player.ui.youtube.ytStatus
 import kotlinx.coroutines.launch
 
 /**
- * One playlist: Play, Shuffle and Add songs up top, songs below. Swipe a song away to remove it (with Undo);
+ * One playlist: Play, Shuffle and Add songs up top, songs below; an empty one shows just a big Add songs.
+ * Tap the name to rename it in place; a playlist just made opens with its name ready to type over. Swipe a song away to remove it (with Undo);
  * Reorder shows drag handles and switches the sort to custom order.
  */
 @Composable
@@ -136,6 +152,18 @@ fun PlaylistStudio(repo: MusicRepository, name: String, onBack: () -> Unit, onRe
         reordering = true
     }
     val list = rememberLazyListState()
+    val rename: (String) -> Unit = { newName ->
+        val n = newName.trim()
+        if (n.isEmpty() || n == name) Unit
+        else if (repo.renamePlaylist(name, n)) {
+            // the sort, filters and recency move with the playlist
+            SavedFilters.save(ctx, SavedFilters.playlistKey(n), filter); SavedFilters.save(ctx, filterKey, SongFilter())
+            PlaylistRecency.rename(name, n)
+            onRenamed(n)
+        } else Snack.show("A playlist called \"$n\" already exists")
+    }
+    var editingName by rememberSaveable(name) { mutableStateOf(NewPlaylist.fresh.value == name) }
+    LaunchedEffect(name) { if (NewPlaylist.fresh.value == name) NewPlaylist.fresh.value = null }
 
     LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
@@ -162,15 +190,18 @@ fun PlaylistStudio(repo: MusicRepository, name: String, onBack: () -> Unit, onRe
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 PlaylistArt(playlist, plTracks.firstOrNull(), 180.dp, shape = MaterialTheme.shapes.large)
                 Spacer(Modifier.height(14.dp))
-                Text(name, color = TextPrimary, style = MaterialTheme.typography.headlineMedium, maxLines = 2,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+                if (editingName) NameField(name, onDone = { editingName = false; rename(it) })
+                else Text(name, color = TextPrimary, style = MaterialTheme.typography.headlineMedium, maxLines = 2, textAlign = TextAlign.Center,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(onClickLabel = "rename") { editingName = true }.semantics { heading() })
                 Text("Playlist · ${songCount(plTracks.size)}", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(12.dp))
-                PlayShuffleRow(listed, repo)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showAdd = true }) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Add songs") }
-                    if (plTracks.size > 1 && !reordering) OutlinedButton(onClick = startReorder) { Icon(Icons.Filled.SwapVert, null); Spacer(Modifier.width(6.dp)); Text("Reorder") }
+                if (plTracks.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    PlayShuffleRow(listed, repo)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { showAdd = true }) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Add songs") }
+                        if (plTracks.size > 1 && !reordering) OutlinedButton(onClick = startReorder) { Icon(Icons.Filled.SwapVert, null); Spacer(Modifier.width(6.dp)); Text("Reorder") }
+                    }
                 }
                 PlaylistDownloadBar(playlist, plTracks, dlStates)
                 Spacer(Modifier.height(10.dp))
@@ -183,11 +214,13 @@ fun PlaylistStudio(repo: MusicRepository, name: String, onBack: () -> Unit, onRe
             }
         }
         if (plTracks.isEmpty()) item {
-            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("No songs yet", color = TextPrimary, style = MaterialTheme.typography.titleMedium)
-                Text("Search your library or YouTube and tick the songs you want.", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(12.dp))
-                FilledTonalButton(onClick = { showAdd = true }) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Add songs") }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Button(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                    Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Add songs", style = MaterialTheme.typography.titleMedium)
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Search your library or YouTube and tick the songs you want.", color = TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
             }
         } else if (!reordering && shown.isEmpty()) item { EmptyHint(if (q.isEmpty()) "No songs here match these filters" else "No songs here match \"$q\"") }
         if (reordering) reorderRows(repo, name, plTracks, list)
@@ -199,20 +232,32 @@ fun PlaylistStudio(repo: MusicRepository, name: String, onBack: () -> Unit, onRe
     }
 
     if (showAdd) AddSongsSheet(repo, name, onDismiss = { showAdd = false })
-    if (showRename) RenamePlaylistDialog(
-        currentName = name,
-        onRename = { newName ->
-            val n = newName.trim()
-            if (repo.renamePlaylist(name, n)) {
-                // the sort, filters and recency move with the playlist
-                SavedFilters.save(ctx, SavedFilters.playlistKey(n), filter); SavedFilters.save(ctx, filterKey, SongFilter())
-                PlaylistRecency.rename(name, n)
-                onRenamed(n)
-            } else Snack.show("A playlist called \"$n\" already exists")
-        },
-        onDismiss = { showRename = false },
-    )
+    if (showRename) RenamePlaylistDialog(currentName = name, onRename = rename, onDismiss = { showRename = false })
     if (showDelete) DeleteDialog(repo, playlist, plTracks, onDismiss = { showDelete = false }, onDeleted = onBack)
+}
+
+/** The playlist name as a field, all selected; Done, the check or tapping elsewhere keeps it. */
+@Composable
+private fun NameField(name: String, onDone: (String) -> Unit) {
+    // Done then the focus loss that follows must save only once
+    var saved by remember { mutableStateOf(false) }
+    val save = { text: String -> if (!saved) { saved = true; onDone(text) } }
+    var value by remember(name) { mutableStateOf(TextFieldValue(name, TextRange(0, name.length))) }
+    val focus = remember { FocusRequester() }
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    OutlinedTextField(
+        value = value, onValueChange = { value = it }, singleLine = true,
+        textStyle = MaterialTheme.typography.headlineSmall.copy(textAlign = TextAlign.Center),
+        placeholder = { Text("Playlist name") },
+        trailingIcon = { IconButton(onClick = { save(value.text) }) { Icon(Icons.Filled.Check, "Save name", tint = Accent) } },
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { save(value.text) }),
+        modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged {
+            if (focused && !it.isFocused) save(value.text)
+            focused = it.isFocused
+        },
+    )
 }
 
 @Composable

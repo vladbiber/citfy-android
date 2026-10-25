@@ -14,8 +14,8 @@ android {
         applicationId = "com.ctify.player"
         minSdk = 26
         targetSdk = 36
-        versionCode = 26
-        versionName = "2.4.2"
+        versionCode = 27
+        versionName = "3.0.0"
         vectorDrawables { useSupportLibrary = true }
         // Last.fm key for genres and creators: local.properties, else the environment; blank hides those parts
         val lastFmKey = rootProject.file("local.properties").takeIf { it.exists() }

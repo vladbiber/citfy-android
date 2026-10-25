@@ -146,7 +146,7 @@ object Mp4TagWriter {
         t.year.clean()?.let { add(text(Atom.DAY, it)) }
         t.genre.clean()?.let { add(text(Atom.GENRE, it)) }
         t.comment.clean(4096)?.let { add(text(Atom.CMT, it)) }
-        add(text(Atom.TOO, "Ctify"))
+        add(text(Atom.TOO, "Guava Player"))
         if (t.trackNumber > 0) {
             val v = ByteArrayOutputStream(8)
             listOf(0, t.trackNumber, t.trackTotal, 0).forEach { writeUInt16(v, it.coerceIn(0, 0xFFFF)) }

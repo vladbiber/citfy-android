@@ -32,17 +32,69 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.Ctify">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <!-- "Share to Ctify" from YouTube and YouTube Music -->
-            <intent-filter android:label="Add to Ctify">
+            <!-- "Share to Guava Player" from YouTube and YouTube Music -->
+            <intent-filter android:label="Add to Guava Player">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- launcher icon for each mode; only one is enabled at a time -->
+        <activity-alias
+            android:name=".IconDefault"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- launcher icon for each mode; only one is enabled at a time -->
+        <activity-alias
+            android:name=".IconEvil"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_evil"
+            android:roundIcon="@mipmap/ic_launcher_evil_round"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- launcher icon for each mode; only one is enabled at a time -->
+        <activity-alias
+            android:name=".IconGodly"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_godly"
+            android:roundIcon="@mipmap/ic_launcher_godly_round"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- launcher icon for each mode; only one is enabled at a time -->
+        <activity-alias
+            android:name=".IconGoodEvil"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_goodevil"
+            android:roundIcon="@mipmap/ic_launcher_goodevil_round"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <service
             android:name=".player.PlaybackService"

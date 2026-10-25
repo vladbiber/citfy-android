@@ -93,7 +93,7 @@ fun SpotifyImportDialog(repository: MusicRepository, initialLink: String?, onDis
         text = {
             Column {
                 if (total == 0 && !running) {
-                    Text("Paste a link to a public Spotify playlist or album. Ctify finds every song on YouTube and saves them as a playlist that plays online.", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
+                    Text("Paste a link to a public Spotify playlist or album. Guava Player finds every song on YouTube and saves them as a playlist that plays online.", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = link, onValueChange = { link = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),

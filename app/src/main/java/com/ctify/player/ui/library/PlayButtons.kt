@@ -1,5 +1,6 @@
 package com.ctify.player.ui.library
 
+import com.ctify.player.ui.mood.moodText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -9,6 +10,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -34,15 +37,27 @@ object PlayList {
     }
 }
 
-/** Play and Shuffle for a playlist, album or artist header; [extra] adds buttons after them. */
+/**
+ * Play (filled) and Shuffle (tonal, same hue) for a playlist, album or artist header; [extra] adds buttons after them.
+ * With no songs the two are left out rather than shown disabled.
+ */
 @Composable
 fun PlayShuffleRow(tracks: List<Track>, repo: MusicRepository, modifier: Modifier = Modifier, extra: @Composable RowScope.() -> Unit = {}) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(onClick = { PlayList.play(repo, tracks) }, enabled = tracks.isNotEmpty()) {
-            Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Play")
-        }
-        FilledTonalButton(onClick = { PlayList.shuffle(repo, tracks) }, enabled = tracks.isNotEmpty()) {
-            Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Shuffle")
+        if (tracks.isNotEmpty()) {
+            Button(onClick = { PlayList.play(repo, tracks) }) {
+                Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text(moodText("Play"))
+            }
+            // primaryContainer, not the default secondary one, which is the other theme color in Two colors
+            FilledTonalButton(
+                onClick = { PlayList.shuffle(repo, tracks) },
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+            ) {
+                Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text(moodText("Shuffle"))
+            }
         }
         extra()
     }

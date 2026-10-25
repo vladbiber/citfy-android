@@ -1,6 +1,5 @@
 package com.ctify.player.ui.visualizer
 
-import com.ctify.player.ui.theme.isAppInDarkTheme
 import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -160,8 +159,8 @@ fun VisualizerView(v: Visualizer, art: Painter, playing: Boolean, still: Boolean
     if (timed) LaunchedEffect(Unit) { while (true) withFrameNanos { tick.longValue = it } }
     val sc = remember { Scratch() }
 
-    // drawn in white over the dark player; light theme gets near-black so they stay visible
-    val ink = if (isAppInDarkTheme()) Color.White else Color(0xFF111111)
+    // drawn in white over the dark player
+    val ink = Color.White
     val dim = ink.copy(alpha = 0.55f)
     val barBrush = remember(ink) { Brush.verticalGradient(listOf(dim, ink, dim)) }
     val one = MaterialTheme.colorScheme.primary

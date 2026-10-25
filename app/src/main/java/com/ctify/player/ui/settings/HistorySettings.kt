@@ -30,7 +30,6 @@ import com.ctify.player.CtifyApp
 import com.ctify.player.data.HistoryPrefs
 import com.ctify.player.data.HistoryPrefs.Key
 import com.ctify.player.ui.RecentSearches
-import com.ctify.player.ui.SectionHeader
 
 /** Home's history shelves, what gets remembered, and clearing it. */
 @Composable
@@ -39,7 +38,7 @@ fun HistorySettings(modifier: Modifier = Modifier) {
     val app = ctx.applicationContext as CtifyApp
     var confirmClear by remember { mutableStateOf(false) }
     Column(modifier) {
-        SectionHeader("History", Modifier.padding(top = 24.dp, bottom = 4.dp))
+        Spacer(Modifier.height(8.dp))
         Toggle(Key.SHOW_RECENT, "Recently played on Home", "A row of the songs you played last")
         Toggle(Key.SHOW_MOST, "Most played on Home", "A row of the songs you play most")
         Spacer(Modifier.height(8.dp))

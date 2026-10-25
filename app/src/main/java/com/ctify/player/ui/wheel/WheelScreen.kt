@@ -4,7 +4,6 @@ import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,13 +34,11 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import com.ctify.player.ui.PillTabs
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -167,49 +164,21 @@ fun WheelScreen(
             Text(title, color = TextPrimary, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
         }
         if (library != null) {
-            PrimaryTabRow(selectedTabIndex = if (lucky) 1 else 0, containerColor = BgBlack) {
-                Tab(selected = !lucky, onClick = { lucky = false }, enabled = !motion.spinning, text = { Text("My songs") })
-                Tab(selected = lucky, onClick = { lucky = true }, enabled = !motion.spinning, text = { Text("I'm feeling lucky") })
-            }
+            PillTabs(
+                listOf("My songs", "I'm feeling lucky"), if (lucky) 1 else 0,
+                onSelect = { if (!motion.spinning) lucky = it == 1 },
+            )
             if (lucky) {
                 LuckyWheel(library)
                 return@Column
             }
         }
         val busy = motion.spinning
-        ChipRow {
-            all.forEach { s ->
-                FilterChip(
-                    selected = s.id == selectedId,
-                    enabled = s.unavailable == null && !busy,
-                    onClick = { selectedId = s.id },
-                    label = {
-                        Column {
-                            Text(s.label, maxLines = 1)
-                            s.unavailable?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = TextMuted, maxLines = 1) }
-                        }
-                    },
-                )
-            }
-        }
-        if (source is LibrarySource) {
-            ChipRow {
-                FilterChip(libScope == LibraryScope.All, { libScope = LibraryScope.All }, { Text("All songs") }, enabled = !busy)
-                FilterChip(libScope == LibraryScope.Favorites, { libScope = LibraryScope.Favorites }, { Text("Liked songs") }, enabled = !busy)
-                playlists.forEach { pl ->
-                    val sc = LibraryScope.InPlaylist(pl.name)
-                    FilterChip(libScope == sc, { libScope = sc }, { Text(pl.name, maxLines = 1) }, enabled = !busy)
-                }
-            }
-        }
-        ChipRow {
-            WheelMode.entries.forEach { m ->
-                FilterChip(
-                    mode == m, { mode = m; picker.mode = m },
-                    { Text(m.label) }, enabled = !busy,
-                )
-            }
-        }
+        WheelSourceBar(
+            all, selectedId, libScope, playlists, mode, enabled = !busy,
+            onPick = { id, sc -> selectedId = id; if (sc != null) libScope = sc },
+            onMode = { mode = it; picker.mode = it },
+        )
         notice?.let {
             Text(it, color = TextMuted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
@@ -291,14 +260,6 @@ private fun SpinButton(text: String, enabled: Boolean, onClick: () -> Unit) {
         Spacer(Modifier.width(8.dp))
         Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
     }
-}
-
-@Composable
-private fun ChipRow(content: @Composable () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) { content() }
 }
 
 private fun odds(w: Wheel, mode: WheelMode, noun: String): String {

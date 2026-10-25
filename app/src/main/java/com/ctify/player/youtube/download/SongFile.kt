@@ -151,7 +151,7 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             // no MediaStore paths before Android 10: keep it in the app's own music folder
-            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Ctify/$artist/$album").apply { mkdirs() }
+            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Guava Player/$artist/$album").apply { mkdirs() }
             val dest = File(dir, name)
             file.copyTo(dest, overwrite = true)
             return Uri.fromFile(dest)
@@ -160,7 +160,7 @@ internal class SongFile(private val context: Context, private val dao: DownloadD
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, name)
             put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
-            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Ctify/$artist/$album/")
+            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/Guava Player/$artist/$album/")
             put(MediaStore.Audio.Media.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)

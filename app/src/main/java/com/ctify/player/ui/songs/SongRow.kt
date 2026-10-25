@@ -52,7 +52,7 @@ import com.ctify.player.ui.theme.SurfaceElevated
 import com.ctify.player.ui.theme.TextPrimary
 import kotlinx.coroutines.launch
 
-/** A song row wired to the shared actions: heart = Liked songs, + = playlist picker, ⋮ = [SongSheet], long press = select. */
+/** A song row: cover, title, artist and ⋮ ([SongSheet] holds Like and Add to playlist); long press = select. */
 @Composable
 fun SongRow(
     track: Track,
@@ -61,28 +61,24 @@ fun SongRow(
     onPlay: () -> Unit,
     status: Pair<String, ImageVector>? = null,
 ) {
-    val repo = (LocalContext.current.applicationContext as CtifyApp).repository
-    val favorites by repo.favorites.collectAsStateWithLifecycle()
     val now by PlayerHub.nowPlaying.collectAsStateWithLifecycle()
     val sel by Selecting.state.collectAsStateWithLifecycle()
     val selecting = sel.isSelecting(context)
     val on = track.id == now.first
-    var pick by remember { mutableStateOf(false) }
-    if (pick) AddToPlaylistSheet(listOf(track), onDismiss = { pick = false })
     TrackRow(
         track = track,
         isCurrent = on,
         isPlaying = on && now.second,
-        isFavorite = track.id in favorites,
+        isFavorite = false,
         onClick = { if (selecting) Selecting.toggle(track, context, pool) else onPlay() },
-        onToggleFavorite = { SongActions.toggleLike(repo, track) },
+        onToggleFavorite = null,
         onMore = { SongSheets.show(SongTarget.Song(track), context, pool) },
         status = status?.first,
         statusIcon = status?.second,
         onCoverClick = if (selecting) ({ Selecting.toggle(track, context, pool) }) else null,
         selected = selecting && sel.has(track.id),
-        onAddToPlaylist = if (selecting) null else ({ pick = true }),
         onLongClick = { Selecting.toggle(track, context, pool) },
+        showDuration = false,
     )
 }
 

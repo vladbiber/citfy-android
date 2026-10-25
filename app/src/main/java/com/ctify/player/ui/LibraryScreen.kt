@@ -47,6 +47,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DragHandle
@@ -136,14 +137,7 @@ internal fun PlaylistCard(playlist: Playlist, firstTrack: Track?, onLongClick: (
             }
             .padding(4.dp),
     ) {
-        if (playlist.coverUri != null || firstTrack != null) {
-            PlaylistArt(playlist, firstTrack, 0.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
-        } else {
-            Box(
-                Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.small).background(SurfaceElevated),
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Accent, modifier = Modifier.size(36.dp)) }
-        }
+        PlaylistArt(playlist, firstTrack, 0.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
         Spacer(Modifier.height(8.dp))
         Text(playlist.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(songCount(playlist.trackIds.size), color = TextSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)
@@ -166,13 +160,15 @@ class AddActions(
     val downloads: () -> Unit,
 )
 
-/** The + button and its menu; [onNewPlaylist] adds the playlist entry. */
+/** The + button and its menu; New playlist makes one and opens it unless [onNewPlaylist] says otherwise. */
 @Composable
 internal fun AddMenu(add: AddActions, onNewPlaylist: (() -> Unit)? = null) {
+    val repo = (LocalContext.current.applicationContext as com.ctify.player.CtifyApp).repository
+    val newPlaylist = onNewPlaylist ?: { NewPlaylist.open(repo) }
     var showAddMenu by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { showAddMenu = true }) {
-            Icon(Icons.Filled.Add, if (onNewPlaylist != null) "Add music or a playlist" else "Add music", tint = TextPrimary)
+            Icon(Icons.Filled.Add, "Add music or a playlist", tint = TextPrimary)
         }
         DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }, containerColor = SurfaceElevated) {
             DropdownMenuItem(
@@ -200,10 +196,10 @@ internal fun AddMenu(add: AddActions, onNewPlaylist: (() -> Unit)? = null) {
                 leadingIcon = { Icon(Icons.Filled.Download, null, tint = TextSecondary) },
                 onClick = { showAddMenu = false; add.downloads() },
             )
-            if (onNewPlaylist != null) DropdownMenuItem(
+            DropdownMenuItem(
                 text = { Text("New playlist", color = TextPrimary) },
                 leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, tint = TextSecondary) },
-                onClick = { showAddMenu = false; onNewPlaylist() },
+                onClick = { showAddMenu = false; newPlaylist() },
             )
         }
     }
@@ -220,6 +216,7 @@ fun LibraryScreen(
     onOpenSettings: () -> Unit,
     section: Int = 0,
     onSection: (Int) -> Unit = {},
+    onOpenWheel: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
@@ -229,7 +226,6 @@ fun LibraryScreen(
     val repo = viewModel.repository
     val sec = LibSection.entries.getOrElse(section) { LibSection.SONGS }
 
-    var showCreate by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
     var plActions by remember { mutableStateOf<Playlist?>(null) }
     // one query for every section
@@ -255,19 +251,14 @@ fun LibraryScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         full {
-            Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                ScreenTitle("Library", Modifier.weight(1f))
+            TabTopBar("Library") {
+                IconButton(onClick = onOpenWheel) { Icon(Icons.Filled.Casino, "Spin the wheel", tint = TextPrimary) }
                 AddMenu(add)
                 SettingsButton(onOpenSettings)
             }
         }
         full {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp).selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                LibSection.entries.forEach { s -> TabChip(s.label, sec == s) { onSection(s.ordinal) } }
-            }
+            PillTabs(LibSection.entries.map { it.label }, sec.ordinal, onSection)
         }
         full {
             Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -319,7 +310,7 @@ fun LibraryScreen(
                 val shown = if (q.isEmpty()) playlists else playlists.filter { pl ->
                     pl.name.contains(q, true) || pl.trackIds.any { repo.trackById(it)?.matches(q) == true }
                 }
-                if (q.isEmpty()) item(key = "new") { NewPlaylistCard { showCreate = true } }
+                if (q.isEmpty()) item(key = "new") { NewPlaylistCard { NewPlaylist.open(repo) } }
                 else if (shown.isEmpty()) full { EmptyHint("No playlists match \"$q\"") }
                 items(shown, key = { it.name }) { pl ->
                     PlaylistCard(pl, pl.trackIds.firstNotNullOfOrNull { repo.trackById(it) }, onLongClick = { plActions = pl }) {
@@ -359,7 +350,6 @@ fun LibraryScreen(
         }
     }
 
-    if (showCreate) CreatePlaylistDialog(repo, onDismiss = { showCreate = false })
     if (showPicker) {
         val streamed = repo.favoriteTracks().filter { it.isStreamed() }
         DownloadPicker("Download liked songs", streamed.map { it.pickSong() }, onDismiss = { showPicker = false })
@@ -396,11 +386,11 @@ private fun NewPlaylistCard(onClick: () -> Unit) {
         Modifier.clip(MaterialTheme.shapes.medium).clickable(role = Role.Button, onClick = onClick).padding(4.dp),
     ) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.small).background(Accent.copy(alpha = 0.14f)),
+            Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Add, null, tint = Accent, modifier = Modifier.size(40.dp)) }
+        ) { Icon(Icons.Filled.Add, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(40.dp)) }
         Spacer(Modifier.height(8.dp))
-        Text("New playlist", color = Accent, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+        Text("New playlist", color = TextPrimary, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -423,9 +413,7 @@ private fun ArtistRow(name: String, songs: Int, onClick: () -> Unit) {
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(MaterialTheme.shapes.small).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiaryContainer), contentAlignment = Alignment.Center) {
-            Text(name.take(1).uppercase(), color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.titleMedium)
-        }
+        com.ctify.player.ui.art.ArtistArt(name, null, emptyList(), size = 40.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(name, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -454,25 +442,5 @@ private fun PlaylistActionsSheet(repo: MusicRepository, pl: Playlist, onOpen: ()
             Snack.show("Deleted \"${pl.name}\"", repo.deletePlaylist(pl.name)); onDismiss()
         }
         Spacer(Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .heightIn(min = 48.dp)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else TextPrimary,
-            fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(if (selected) Accent else SurfaceElevated)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        )
     }
 }

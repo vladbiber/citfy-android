@@ -1,58 +1,33 @@
-# Ctify (Android)
+# Guava Player (Android)
 
-A native Android music player, built as a polished, Spotify-styled companion to the
-original C `ctify` desktop app. Written in **Kotlin + Jetpack Compose** with
-**Media3 / ExoPlayer** for playback.
-
-It ships with bundled demo tracks so it works out of the box on any device or emulator,
-and can also scan the device's own local audio (with permission).
+A native Android music player, formerly **ctify**. Written in **Kotlin + Jetpack Compose**
+(Material 3 Expressive) with **Media3 / ExoPlayer** for playback. Dark theme only.
 
 ## Download
 
-**[⬇ Download the APK](https://github.com/Vifuddyxg/citfy-android/releases/latest/download/ctify.apk)** — Android 7.0+
+**[⬇ Download the APK](https://github.com/vladbiber/guava-player/releases/latest/download/ctify.apk)** (Android 8.0+)
 
-All versions are on the [Releases page](https://github.com/Vifuddyxg/citfy-android/releases).
+All versions are on the [Releases page](https://github.com/vladbiber/guava-player/releases).
 After downloading, open the file and allow "Install from unknown sources" if asked.
 
 ## Features
 
-- Dark UI with a blue accent, Home / Search / Library / Sound tabs
-- Five interactive player looks: vinyl (tonearm, scratch to seek), CD, cassette,
-  TP-7 style device and plain cover; design inspired by
-  [Spun](https://github.com/yappologistic/Spun) by
-  [@yappologistic](https://github.com/yappologistic) (independent Compose
-  reimplementation, no Spun code or assets)
-- Sound effects: slow + pitch, reverb, bass, "magic Hz" tuning, stereo width,
-  8D rotation, "another room", one-tap presets
-- Real vinyl sound (crackle, wow and flutter, warmth) and calm rain sounds
-- Reverse mode for any track
-- Local files only: import songs or folders through the system picker
-- Bundled offline demo library (9 tracks across 3 albums, generated locally)
-- Full-screen **Now Playing** with album art, scrub bar, shuffle, repeat,
-  previous/next, and volume
-- Persistent **mini-player** with progress
-- **Favorites** (heart any track) and user **playlists** (create / add / remove / delete)
-- Background playback with a system media notification + lock-screen controls
-- Resumes the last track and position on reopen
-- Optional scan of on-device music via `MediaStore`
-
-## Map to the C original
-
-| C `ctify` | This app |
-|-----------|----------|
-| SDL window, mpv backend | Compose UI, ExoPlayer backend |
-| Home / All Songs / Favorites / Playlists | Home / Search / Library tabs |
-| `~/.local/state/ctify` (favorites.txt, playlists, playback_state) | `SharedPreferences` (JSON) |
-| `.m3u` playlists | in-app playlists |
-| shuffle / repeat / seek / volume | same controls in Now Playing |
-| blue accent | blue accent |
+- Your local music, plus YouTube search, streaming and downloads
+- Internet radio from Radio Browser, with live channels picked for you
+- Hand-drawn player looks: vinyl (scratch to seek), TP-7, tape, MiniDisc, boombox, car radio
+- Sound: EQ, speed and pitch, reverb, bass, "magic Hz" tuning, 8D, vinyl crackle, reverse
+- Synced lyrics (LRCLIB), visualizers, sleep timer, spin-the-wheel song picker
+- Home shelves from what you play, Last.fm genres, artists and charts, MusicBrainz album info
+- ListenBrainz scrobbling, ratings with RateYourMusic CSV import
+- Tie-dye backgrounds (spiral, bullseye, crumple, ice dye, chevron) in your theme colors,
+  a rainbow or the album cover's colors; a choice of fonts
+- Android Auto, media notification and lock-screen controls, keyboard-phone shortcuts
 
 ## Build
 
-Requires a JDK 17 and the Android SDK (platform 35, build-tools 35).
+Requires JDK 17 and the Android SDK (compileSdk 37).
 
 ```sh
-# point at your JDK + SDK if not already on PATH
 export JAVA_HOME=/path/to/jdk-17
 export ANDROID_HOME=$HOME/Android/Sdk
 
@@ -60,17 +35,11 @@ export ANDROID_HOME=$HOME/Android/Sdk
 # APK -> app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Install on a connected device/emulator:
-
-```sh
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-Or just open the folder in Android Studio and press Run.
+Or open the folder in Android Studio and press Run.
 
 ## Releases and signing
 
-Every push builds a debug APK (Actions artifact). Pushing a tag like `v2.1.3`
+Every push builds a debug APK (Actions artifact). Pushing a tag like `v3.0.0`
 builds a release APK signed with one fixed key and attaches it to that tag's
 GitHub Release as `ctify.apk`. Local release builds without the key stay
 unsigned.
@@ -85,29 +54,36 @@ base64 -w0 ctify-release.jks   # paste the output into CTIFY_KEYSTORE_BASE64
 
 Add these repository secrets (Settings → Secrets and variables → Actions):
 
-- `CTIFY_KEYSTORE_BASE64` — the base64 of the `.jks` file
-- `CTIFY_KEYSTORE_PASSWORD` — the keystore password
-- `CTIFY_KEY_ALIAS` — `ctify` (the `-alias` above)
-- `CTIFY_KEY_PASSWORD` — the key password (same as the keystore password if
+- `CTIFY_KEYSTORE_BASE64`: the base64 of the `.jks` file
+- `CTIFY_KEYSTORE_PASSWORD`: the keystore password
+- `CTIFY_KEY_ALIAS`: `ctify` (the `-alias` above)
+- `CTIFY_KEY_PASSWORD`: the key password (same as the keystore password if
   keytool didn't ask for a separate one)
 
 Back up `ctify-release.jks` and its passwords somewhere safe and never commit
 them. If the key is lost, no future build can update installed copies.
 
-Older APKs were signed with whichever machine built them, so moving to the
-signed releases needs one uninstall: first use Settings → Save backup, then
-uninstall, install the new `ctify.apk` and use Settings → Restore.
-
 ## Credits
 
-The player looks (vinyl, CD, cassette and TP-7 style) are inspired by
-[Spun](https://github.com/yappologistic/Spun), a CD-shaped music player for
-Linux by [@yappologistic](https://github.com/yappologistic). Ctify's versions
-are an independent Jetpack Compose reimplementation; no Spun code or assets are
-included. Thank you for the beautiful designs.
+- [Levyra](https://github.com/LUC4N3X/Levyra-deepsound) (GPL-3.0): the Material 3
+  Expressive shape style (cookie, clover and sunny shapes); its NewPipe Extractor fork
+- [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPL-3.0): YouTube
+- [Radio Browser](https://www.radio-browser.info): radio stations
+- [LRCLIB](https://lrclib.net): synced lyrics
+- [Last.fm](https://www.last.fm): genres, artists and charts
+- [MusicBrainz](https://musicbrainz.org): album info
+- [ListenBrainz](https://listenbrainz.org): scrobbling
+- [Spun](https://github.com/yappologistic/Spun) by
+  [@yappologistic](https://github.com/yappologistic): the first player looks (vinyl, CD,
+  cassette, TP-7) were inspired by it; an independent Compose reimplementation, no Spun
+  code or assets
+
+## License
+
+GPL-3.0.
 
 ## Demo assets
 
 The files in `app/src/main/assets/demo/` (audio + cover gradients) are generated
-locally with `ffmpeg` — short ambient chord pads, royalty-free, purely for the demo.
+locally with `ffmpeg`: short ambient chord pads, royalty-free, purely for the demo.
 `manifest.json` lists their metadata.

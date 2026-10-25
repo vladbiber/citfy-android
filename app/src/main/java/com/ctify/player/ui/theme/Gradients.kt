@@ -1,5 +1,7 @@
 package com.ctify.player.ui.theme
 
+import com.ctify.player.player.fx.Moods
+import com.ctify.player.player.fx.Mood
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -12,28 +14,31 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.ctify.player.player.PlayerHub
 import com.ctify.player.ui.reducedMotion
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import kotlin.math.abs
 
 /** Color 1 fading into color 2 with Two colors on, else solid primary: for play button, selected tab, progress, sliders. */
 @Composable
@@ -44,49 +49,98 @@ fun accentBrush(): Brush {
 }
 
 /**
- * Draws the two-color Oil, Liquid or Fade backdrop behind big surfaces (player, Home header); draws nothing otherwise.
- * With a [pulse] (see [rememberMusicPulse]) the colors are boosted and the blobs (or oil swirls) swell with it.
- * Oil needs Android 13 shaders; older phones get Liquid.
+ * The backdrop behind big surfaces (player, Home header), styled by [Appearance.gradient]: a tie-dye (Android 13+,
+ * older phones get Fade), the soft two-color Fade, or nothing when Off.
+ * [coverColors] are the album cover's colors for Dye colors "Album cover"; theme colors when null.
+ * [fadeOut] fades the dye into the background by that fraction of the height; null covers it all,
+ * with a [bottomScrim] (background alpha at the bottom edge) so the controls stay readable.
+ * With a [pulse] (see [rememberMusicPulse]) the dye deepens and swells with the bass.
  */
 @Composable
-fun LiquidBackground(modifier: Modifier = Modifier, pulse: State<Float>? = null) {
-    val source by Appearance.source.collectAsState()
+fun LiquidBackground(
+    modifier: Modifier = Modifier,
+    pulse: State<Float>? = null,
+    coverColors: List<Color>? = null,
+    fadeOut: Float? = null,
+    bottomScrim: Float = if (fadeOut == null) 0.45f else 0f,
+) {
     val style by Appearance.gradient.collectAsState()
-    if (source != ThemeSource.DUO) return
+    if (style == GradientStyle.OFF) return
+    val source by Appearance.dyeColors.collectAsState()
+    val strength by Appearance.dyeStrength.collectAsState()
     val s = MaterialTheme.colorScheme
-    // Toned down so text on top stays readable; light mode gets pastel washes.
-    val oilStyle = style == GradientStyle.OIL && Build.VERSION.SDK_INT >= 33
-    // oil is a picture, not a wash: it needs more body than Liquid to read as a slick
-    val alpha = if (isAppInDarkTheme()) (if (oilStyle) 0.72f else 0.38f) else (if (oilStyle) 0.42f else 0.24f)
+    val mood by Moods.mood.collectAsState()
+    val dyes = remember(source, s.primary, s.tertiary, coverColors, mood) {
+        MoodDyes[mood] ?: dyeSet(source, s.primary, s.tertiary, coverColors)
+    }
+    // a bad shader must not crash the app: it just falls back to Fade
+    val dye = if (style.dyed && Build.VERSION.SDK_INT >= 33) remember { runCatching { TieDyeBrush() }.getOrNull() } else null
+    val flow = if (dye != null && !reducedMotion()) {
+        rememberInfiniteTransition(label = "dye")
+            .animateFloat(0f, 1f, infiniteRepeatable(tween(DYE_LOOP_MS, easing = LinearEasing)), label = "flow")
+    } else null
+    val scrim = s.background
     val one = if (pulse != null) s.primary.boosted() else s.primary
     val two = if (pulse != null) s.tertiary.boosted() else s.tertiary
-    // a bad shader must not crash the app: it just falls back to Liquid
-    val oil = if (style == GradientStyle.OIL && Build.VERSION.SDK_INT >= 33) remember { runCatching { OilBrush() }.getOrNull() } else null
-    val flow = if (oil != null && !reducedMotion()) {
-        rememberInfiniteTransition(label = "oil")
-            .animateFloat(0f, 1f, infiniteRepeatable(tween(OIL_LOOP_MS, easing = LinearEasing)), label = "flow")
-    } else null
-    Canvas(modifier) {
+    val masked = dye == null && fadeOut != null
+    Canvas(if (masked) modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen } else modifier) {
         // read here, in the draw phase, so each beat redraws without recomposing
         val e = pulse?.value ?: 0f
-        val al = if (pulse != null) (alpha * 1.4f + 0.18f * e).coerceAtMost(if (oilStyle) 0.92f else 0.75f) else alpha
-        if (oil != null && Build.VERSION.SDK_INT >= 33) {
-            drawRect(oil.at(size.width, size.height, flow?.value ?: 0.3f, e, al, one, two))
-            return@Canvas
+        if (dye != null && Build.VERSION.SDK_INT >= 33) {
+            val mode = style.ordinal.coerceAtMost(GradientStyle.CHEVRON.ordinal)
+            drawRect(dye.at(size.width, size.height, flow?.value ?: 0.3f, e, strength.amount, mode, fadeOut ?: 0f, 0.94f, dyes[0], dyes[1], dyes[2]))
+        } else {
+            val al = if (pulse != null) (0.53f + 0.18f * e).coerceAtMost(0.75f) else 0.38f
+            drawRect(Brush.linearGradient(listOf(one.copy(alpha = al), two.copy(alpha = al))))
+            if (fadeOut != null) drawRect(
+                Brush.verticalGradient(0f to Color.Black, 0.25f * fadeOut to Color.Black, fadeOut to Color.Transparent, endY = size.height),
+                blendMode = BlendMode.DstIn,
+            )
         }
-        val a = one.copy(alpha = al)
-        val b = two.copy(alpha = al)
-        if (style == GradientStyle.FADE) {
-            drawRect(Brush.linearGradient(listOf(a, b)))
-            return@Canvas
-        }
-        val d = size.maxDimension * (1f + 0.18f * e)
-        for ((x, y, r, second) in Blobs) {
-            val c = if (second) b else a
-            val center = Offset(x * size.width, y * size.height)
-            drawCircle(Brush.radialGradient(listOf(c, Color.Transparent), center, r * d), r * d, center)
-        }
+        if (bottomScrim > 0f) drawRect(Brush.verticalGradient(0.45f to Color.Transparent, 1f to scrim.copy(alpha = bottomScrim), endY = size.height))
     }
+}
+
+/** Evil bleeds red into black, Godly is TempleOS yellow, blue and cyan, Good & Evil only white and greys. */
+private val MoodDyes = mapOf(
+    Mood.EVIL to listOf(Color(0xFFD00000), Color(0xFF5A0000), Color(0xFFFF3B1F)),
+    Mood.GODLY to listOf(Color(0xFFFFFF55), Color(0xFF5555FF), Color(0xFF55FFFF)),
+    Mood.GOOD_EVIL to listOf(Color(0xFFFFFFFF), Color(0xFF989898), Color(0xFFD0D0D0)),
+)
+
+/** A vivid rainbow; the dyes bleed through orange, green and violet. */
+private val RainbowDyes = listOf(Color(0xFFED1F8C), Color(0xFFFFC714), Color(0xFF148CF2))
+
+/** The three dyes: theme primary, tertiary and their hue midpoint, the rainbow, or the cover's colors. */
+internal fun dyeSet(source: DyeColors, primary: Color, tertiary: Color, cover: List<Color>?): List<Color> {
+    if (source == DyeColors.RAINBOW) return RainbowDyes
+    val c = cover?.takeIf { source == DyeColors.COVER && it.isNotEmpty() }
+    val one = (c?.get(0) ?: primary).dyeTone()
+    val two = (c?.getOrNull(1) ?: if (c != null) c[0] else tertiary).dyeTone()
+    val three = c?.getOrNull(2)?.dyeTone() ?: between(one, two)
+    return listOf(one, two, three)
+}
+
+/** Dark-theme tones are pastel; a dye wants them saturated and bright. */
+private fun Color.dyeTone(): Color {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(toArgb(), hsv)
+    hsv[1] = (hsv[1] * 1.35f).coerceIn(0.55f, 0.95f)
+    hsv[2] = hsv[2].coerceAtLeast(0.85f)
+    return Color(android.graphics.Color.HSVToColor(hsv))
+}
+
+/** The hue halfway round the short way; close hues get pushed 50 degrees apart so three dyes show. */
+private fun between(a: Color, b: Color): Color {
+    val x = FloatArray(3)
+    val y = FloatArray(3)
+    android.graphics.Color.colorToHSV(a.toArgb(), x)
+    android.graphics.Color.colorToHSV(b.toArgb(), y)
+    var d = y[0] - x[0]
+    if (d > 180f) d -= 360f
+    if (d < -180f) d += 360f
+    val h = if (abs(d) < 40f) x[0] + 50f else x[0] + d / 2f
+    return Color(android.graphics.Color.HSVToColor(floatArrayOf((h % 360f + 360f) % 360f, (x[1] + y[1]) / 2f, (x[2] + y[2]) / 2f)))
 }
 
 /** More saturated and a little brighter, for the music-reactive background. */
@@ -144,12 +198,3 @@ private fun rememberPowerSave(): Boolean {
     }
     return saver
 }
-
-/** One soft ink blob: center as a fraction of the size, radius as a fraction of the longer side, color 1 or 2. */
-private data class Blob(val x: Float, val y: Float, val r: Float, val second: Boolean)
-
-// One fixed layout: the two colors overlap in the middle so they melt into each other.
-private val Blobs = listOf(
-    Blob(0.15f, 0.10f, 0.75f, false), Blob(0.90f, 0.25f, 0.65f, true), Blob(0.25f, 0.70f, 0.70f, true),
-    Blob(0.85f, 0.90f, 0.60f, false), Blob(0.55f, 0.45f, 0.45f, false),
-)

@@ -74,6 +74,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.ctify.player.R
+import com.ctify.player.ui.art.GeneratedCover
+import com.ctify.player.ui.art.coverTones
 import com.ctify.player.data.Track
 import com.ctify.player.ui.radio.LiveBadge
 import com.ctify.player.ui.radio.StationArt
@@ -95,63 +100,59 @@ fun formatTime(ms: Long): String {
     return "%d:%02d".format(m, s)
 }
 
-private fun gradientFor(seed: String): Brush {
-    val palettes = listOf(
-        listOf(Color(0xFF1E3A8A), Color(0xFF5B9DFF)),
-        listOf(Color(0xFF0EA5E9), Color(0xFF1E3A8A)),
-        listOf(Color(0xFF3B5BDB), Color(0xFF9775FA)),
-        listOf(Color(0xFF0B7285), Color(0xFF74C0FC)),
-    )
-    val p = palettes[(seed.hashCode() and 0x7fffffff) % palettes.size]
-    return Brush.linearGradient(p)
+/** What a track's generated cover is named after: its album, or its title for loose songs. */
+internal fun coverName(track: Track?): String {
+    val album = track?.album?.trim().orEmpty()
+    return if (album.isNotEmpty() && album != "YouTube" && album != "Imported") album else track?.title.orEmpty()
 }
 
 @Composable
 fun AlbumArt(track: Track?, size: Dp, shape: Shape = MaterialTheme.shapes.extraSmall, modifier: Modifier = Modifier.size(size)) {
-    Box(
-        modifier = modifier
-            .clip(shape)
-            .background(gradientFor(track?.album ?: "ctify")),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (track?.coverUri != null) {
-            SubcomposeAsyncImage(
-                model = track.coverUri,
-                contentDescription = track.album,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                loading = { },
-                error = {
-                    Icon(Icons.Filled.MusicNote, null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(size / 3))
-                },
-            )
-        } else {
-            Icon(Icons.Filled.MusicNote, null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(size / 3))
-        }
-    }
+    CoverImage(track?.coverUri, coverName(track), shape, modifier)
 }
 
-/** The ctify logo: a blue gradient disc with a music note, used centered on the Home screen. */
+/** A cover picture, or the [GeneratedCover] of [name] when there is none or it fails to load. */
 @Composable
-fun CtifyLogo(size: Dp) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(
-                Brush.linearGradient(listOf(Color(0xFF8AB8FF), Color(0xFF2B5FD9)))
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            Icons.Filled.MusicNote, "ctify logo",
-            tint = Color.White,
-            modifier = Modifier.size(size / 2),
+fun CoverImage(uri: Any?, name: String, shape: Shape, modifier: Modifier) {
+    Box(modifier.clip(shape).background(coverTones(name).paper), contentAlignment = Alignment.Center) {
+        if (uri == null) GeneratedCover(name, Modifier.fillMaxSize())
+        else SubcomposeAsyncImage(
+            model = uri,
+            contentDescription = name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            loading = { },
+            error = { GeneratedCover(name, Modifier.fillMaxSize()) },
         )
     }
 }
 
-/** Playlist artwork: the custom cover if one was set, else the first track's art. */
+/** The Guava Player logo: the half guava, half record picture. */
+@Composable
+fun CtifyLogo(size: Dp) {
+    Image(
+        painterResource(moodLogo()), "Guava Player logo",
+        modifier = Modifier.size(size),
+    )
+}
+
+/** The guava turns red in Evil mode and gold in Godly mode; Good & Evil gets a black and white one. */
+@Composable
+private fun moodLogo(): Int {
+    val mood by com.ctify.player.player.fx.Moods.mood.collectAsState()
+    return when (mood) {
+        com.ctify.player.player.fx.Mood.EVIL -> R.drawable.logo_guava_evil
+        com.ctify.player.player.fx.Mood.GODLY -> R.drawable.logo_guava_godly
+        com.ctify.player.player.fx.Mood.GOOD_EVIL -> R.drawable.logo_guava_goodevil
+        com.ctify.player.player.fx.Mood.NORMAL -> R.drawable.logo_guava
+    }
+}
+
+/** The logo under its new name; [CtifyLogo] stays for existing callers. */
+@Composable
+fun GuavaLogo(size: Dp) = CtifyLogo(size)
+
+/** Playlist artwork: the custom cover if one was set, else the first track's art, else a cover generated from its name. */
 @Composable
 fun PlaylistArt(
     playlist: com.ctify.player.data.Playlist,
@@ -160,27 +161,7 @@ fun PlaylistArt(
     shape: Shape = MaterialTheme.shapes.extraSmall,
     modifier: Modifier = Modifier.size(size),
 ) {
-    if (playlist.coverUri != null) {
-        Box(
-            modifier = modifier
-                .clip(shape)
-                .background(gradientFor(playlist.name)),
-            contentAlignment = Alignment.Center,
-        ) {
-            SubcomposeAsyncImage(
-                model = playlist.coverUri,
-                contentDescription = playlist.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                loading = { },
-                error = {
-                    Icon(Icons.Filled.MusicNote, null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(size / 3))
-                },
-            )
-        }
-    } else {
-        AlbumArt(firstTrack, size, shape, modifier)
-    }
+    CoverImage(playlist.coverUri ?: firstTrack?.coverUri, playlist.name, shape, modifier)
 }
 
 @Composable
@@ -204,6 +185,7 @@ fun TrackRow(
     onAddToPlaylist: (() -> Unit)? = null,
     /** long press; defaults to [onMore] */
     onLongClick: (() -> Unit)? = onMore,
+    showDuration: Boolean = true,
 ) {
     val titleColor by animateColorAsState(if (isCurrent) Accent else TextPrimary, label = "title")
     Row(
@@ -255,7 +237,7 @@ fun TrackRow(
                         )
                     }
                 }
-                Text(formatTime(track.durationMs), color = TextMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp))
+                if (showDuration) Text(formatTime(track.durationMs), color = TextMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp))
             }
         }
         if (onToggleFavorite != null) {
