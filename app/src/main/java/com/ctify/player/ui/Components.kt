@@ -204,6 +204,7 @@ fun TrackRow(
     onAddToPlaylist: (() -> Unit)? = null,
     /** long press; defaults to [onMore] */
     onLongClick: (() -> Unit)? = onMore,
+    showDuration: Boolean = true,
 ) {
     val titleColor by animateColorAsState(if (isCurrent) Accent else TextPrimary, label = "title")
     Row(
@@ -255,7 +256,7 @@ fun TrackRow(
                         )
                     }
                 }
-                Text(formatTime(track.durationMs), color = TextMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp))
+                if (showDuration) Text(formatTime(track.durationMs), color = TextMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp))
             }
         }
         if (onToggleFavorite != null) {

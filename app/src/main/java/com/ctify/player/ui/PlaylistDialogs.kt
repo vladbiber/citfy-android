@@ -23,7 +23,19 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
+import com.ctify.player.ui.home.HomePage
+import com.ctify.player.ui.songs.SongSheets
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,31 +115,55 @@ fun ColumnScope.PlaylistRows(tracks: List<Track>, onDone: () -> Unit) {
     if (showCreate) CreatePlaylistDialog(repo, addTracks = tracks, onDismiss = { showCreate = false; onDone() })
 }
 
-/** Dialog to create a playlist; [addTracks] go into it on creation. */
+/** Making a playlist from scratch: it is created right away and opened, its name ready to type over. */
+object NewPlaylist {
+    /** The playlist just made; its page opens with the name field focused. */
+    val fresh = MutableStateFlow<String?>(null)
+
+    /** "New playlist", then "New playlist 2", 3... whichever is free. */
+    fun freeName(repo: MusicRepository): String {
+        val taken = repo.playlists.value.map { it.name }.toSet()
+        return generateSequence(1) { it + 1 }.map { if (it == 1) "New playlist" else "New playlist $it" }.first { it !in taken }
+    }
+
+    /** Creates an empty playlist and opens it. */
+    fun open(repo: MusicRepository) {
+        val name = freeName(repo)
+        repo.createPlaylist(name)
+        PlaylistRecency.touch(name)
+        fresh.value = name
+        SongSheets.goTo.value = HomePage.Playlist(name)
+    }
+}
+
+/** Dialog to create a playlist holding [addTracks]; the name starts as a free "New playlist N", selected. */
 @Composable
 fun CreatePlaylistDialog(repo: MusicRepository, addTracks: List<Track> = emptyList(), onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(NewPlaylist.freeName(repo).let { TextFieldValue(it, TextRange(0, it.length)) }) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    val create = {
+        val n = name.text.trim()
+        if (n.isNotEmpty()) {
+            repo.remember(addTracks)
+            repo.createPlaylistWithTracks(n, addTracks.map { it.id })
+            PlaylistRecency.touch(n)
+            Snack.show(if (addTracks.isEmpty()) "Created $n" else "Added to $n")
+            onDismiss()
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                enabled = name.isNotBlank(),
-                onClick = {
-                    val n = name.trim()
-                    repo.remember(addTracks)
-                    repo.createPlaylistWithTracks(n, addTracks.map { it.id })
-                    PlaylistRecency.touch(n)
-                    Snack.show(if (addTracks.isEmpty()) "Created $n" else "Added to $n")
-                    onDismiss()
-                },
-            ) { Text("Create", color = Accent) }
-        },
+        confirmButton = { TextButton(enabled = name.text.isNotBlank(), onClick = create) { Text("Create", color = Accent) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } },
         title = { Text("New playlist", color = TextPrimary) },
         text = {
             OutlinedTextField(
                 value = name, onValueChange = { name = it }, singleLine = true,
                 placeholder = { Text("Playlist name") },
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { create() }),
+                modifier = Modifier.focusRequester(focus),
             )
         },
         containerColor = SurfaceElevated,

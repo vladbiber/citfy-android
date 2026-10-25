@@ -1,7 +1,10 @@
 package com.ctify.player.ui.home
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -130,8 +133,8 @@ internal fun AlbumPage(album: String, artist: String, repo: MusicRepository, onO
                     if (songs.isEmpty() && mb != null) "None of your songs are from this album yet" else "Album · ${songCount(songs.size)}",
                     color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
                 )
-                if (mb != null) AlbumFacts(mb, artist, album)
-                else RatingLine(artist, album, null, null)
+                if (mb != null) AlbumFacts(mb)
+                YourRating(artist, album, mb?.group?.year)
                 Spacer(Modifier.height(10.dp))
                 PlayShuffleRow(songs, repo)
             }
@@ -175,25 +178,26 @@ internal fun AlbumPage(album: String, artist: String, repo: MusicRepository, onO
     }
 }
 
-/** Year, type, community and personal rating, and genres. */
+/** Year and type, the MusicBrainz rating, and genres. */
 @Composable
-private fun AlbumFacts(mb: MbAlbum, artist: String, album: String) {
-    val facts = mb.group.label()
-    if (facts.isNotEmpty()) Text(facts, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
-    RatingLine(artist, album, mb.rating?.let { "MusicBrainz ★ %.1f (%d)".format(it, mb.votes) }, mb.group.year)
+private fun AlbumFacts(mb: MbAlbum) {
+    val facts = listOfNotNull(mb.group.label().takeIf { it.isNotEmpty() }, mb.rating?.let { "MusicBrainz ★ %.1f (%d)".format(it, mb.votes) })
+    if (facts.isNotEmpty()) Text(facts.joinToString(" · "), color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
     TagChips(mb.tags)
 }
 
-/** "MusicBrainz ★ 4.1 (23)" next to your own stars for the album. */
+/** Your own stars for the album, as a small labeled row under the title. */
 @Composable
-private fun RatingLine(artist: String, album: String, community: String?, year: Int?) {
+private fun YourRating(artist: String, album: String, year: Int?) {
     val ctx = LocalContext.current
     val target = remember(artist, album, year) { RatingKeys.album(artist, album)?.let { RateTarget(RatingKind.ALBUM, it, album, artist, album, year = year) } } ?: return
     val ratings = remember { Ratings.get(ctx) }
     val row by remember(target.key) { ratings.rating(RatingKind.ALBUM, target.key) }.collectAsState(null)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        community?.let { Text(it, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 12.dp)) }
-        Text("You", color = TextSecondary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 6.dp))
-        RatingBar(row?.value ?: 0, { ratings.set(target, it) }, starSize = 20.dp, label = "Your album rating, $album")
+    Row(
+        Modifier.padding(top = 8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(start = 14.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Your rating", color = TextSecondary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 8.dp))
+        RatingBar(row?.value ?: 0, { ratings.set(target, it) }, starSize = 18.dp, label = "Your album rating, $album")
     }
 }
