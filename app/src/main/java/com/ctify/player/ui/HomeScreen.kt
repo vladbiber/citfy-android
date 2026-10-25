@@ -168,6 +168,7 @@ fun HomeScreen(
             shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
         }
         if (showMost && most.isNotEmpty()) full { TrackCarousel("Most played", most, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+        full { HeardSection() }
         if (genres == null) full { ShelfPlaceholder("Genres", 150.dp) }
         if (!genres.isNullOrEmpty()) full { GenresRow(genres) { onOpenPage(HomePage.GenrePage(it)) } }
         if (creators == null) full { ShelfPlaceholder("Creators", 104.dp, CircleShape) }
