@@ -69,6 +69,8 @@ import androidx.compose.foundation.shape.CircleShape
 import com.ctify.player.ui.home.GenrePage
 import com.ctify.player.ui.home.GenresRow
 import com.ctify.player.ui.home.HomePage
+import com.ctify.player.ui.home.Top100Page
+import com.ctify.player.ui.home.WorldSection
 import com.ctify.player.ui.home.rememberCreators
 import com.ctify.player.ui.home.rememberGenres
 import com.ctify.player.ui.radio.radioRepo
@@ -120,6 +122,8 @@ fun HomeScreen(
             is HomePage.GenrePage -> GenrePage(page.tag, viewModel.repository, back)
             HomePage.Creators -> CreatorsPage(creators.orEmpty(), open, back)
             is HomePage.ArtistPage -> ArtistPage(page.artist, viewModel.repository, open, back)
+            is HomePage.Artists -> CreatorsPage(page.artists, open, back, page.title)
+            is HomePage.Top100 -> Top100Page(page.continent, viewModel.repository, back)
         }
         return
     }
@@ -177,6 +181,12 @@ fun HomeScreen(
             if (!genres.isNullOrEmpty()) full { GenresRow(genres) { pages += HomePage.GenrePage(it) } }
             if (creators == null) full { ShelfPlaceholder("Creators", 104.dp, CircleShape) }
             if (!creators.isNullOrEmpty()) full { CreatorsRow(creators, onOpen = { pages += HomePage.ArtistPage(it) }, onSeeAll = { pages += HomePage.Creators }) }
+            if (LastFm.enabled) full {
+                WorldSection(
+                    onGenre = { pages += HomePage.GenrePage(it) }, onArtist = { pages += HomePage.ArtistPage(it) },
+                    onSeeAll = { title, list -> pages += HomePage.Artists(title, list) }, onTop100 = { pages += HomePage.Top100(it) },
+                )
+            }
             full { HomeStationRows() }
             if (playlists.isNotEmpty()) {
                 full { SectionHeader("Playlists", Modifier.padding(top = 10.dp, start = 4.dp)) }
