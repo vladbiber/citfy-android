@@ -2,6 +2,7 @@ package com.ctify.player
 
 import android.app.Application
 import com.ctify.player.data.MusicRepository
+import com.ctify.player.data.Ratings
 import com.ctify.player.data.db.CtifyDatabase
 import com.ctify.player.diag.Diagnostics
 import com.ctify.player.net.NetworkGate
@@ -25,6 +26,7 @@ class CtifyApp : Application() {
         YtRuntime.ensure(this)
         if (NetworkGate.blockReason(com.ctify.player.net.Feature.YOUTUBE) == null) com.ctify.player.youtube.YouTubeSource.warmUp()
         Downloads.init(this, database.downloads())
+        Ratings.get(this)
         MusicWatcher.init(this, database.library(), repository)
         com.ctify.player.youtube.Chapters.start()
     }

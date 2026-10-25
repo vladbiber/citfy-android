@@ -263,6 +263,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                     FilledTonalButton(onClick = { exportLauncher.launch("ctify-backup-${LocalDate.now()}.zip") }) { Text("Save backup") }
                     FilledTonalButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }) { Text("Restore") }
                 }
+                com.ctify.player.ui.rating.RymImportRow(Modifier.padding(top = 12.dp))
             }
 
             Column(Modifier.enterStagger(5)) {

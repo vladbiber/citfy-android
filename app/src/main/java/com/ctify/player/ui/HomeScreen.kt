@@ -71,6 +71,7 @@ import com.ctify.player.ui.home.ArtistPage
 import com.ctify.player.ui.home.CreatorsPage
 import com.ctify.player.ui.home.CreatorsRow
 import com.ctify.player.ui.home.ForYouPager
+import com.ctify.player.ui.home.StarsShelf
 import com.ctify.player.ui.home.ForYouPlaceholder
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
@@ -110,6 +111,7 @@ fun HomeScreen(
     val most by remember { viewModel.repository.mostPlayed(20) }.collectAsStateWithLifecycle(emptyList())
     val ctx = LocalContext.current
     val shelves by Recommendations.shelves.collectAsStateWithLifecycle()
+    val stars by Recommendations.stars.collectAsStateWithLifecycle()
     val shelf = remember(shelves) { shelves.mapValues { (_, songs) -> songs.map { it.toTrack() } } }
     // waits for the library so liked and downloaded seeds exist
     LaunchedEffect(tracks.isNotEmpty()) {
@@ -158,7 +160,8 @@ fun HomeScreen(
         shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
         if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
         if (recentPlaylists.isNotEmpty()) full { PlaylistsRow(recentPlaylists, viewModel) { onOpenPage(HomePage.Playlist(it)) } }
-        listOf(Shelf.LIKED, Shelf.PLAYED, Shelf.DOWNLOADS).forEach { s ->
+        stars.forEachIndexed { i, g -> full { StarsShelf(g, i == 0, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+        listOf(Shelf.PLAYED, Shelf.DOWNLOADS).forEach { s ->
             shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
         }
         if (most.isNotEmpty()) full { TrackCarousel("Most played", most, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
