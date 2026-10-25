@@ -604,7 +604,8 @@ private fun SoundStrip(accent: Color, radio: Boolean, onSkin: () -> Unit, onPane
     val speedOn = abs(rate - 1f) > 0.004f
     val reverbOn = reverb > 0.004f
     val bassOn = bass >= 0.05f
-    val moreOn = !radio && (v.on || reversed) || rain != RainPreset.OFF || preparing
+    val reverseOn = !radio && (reversed || preparing)
+    val moreOn = !radio && v.on || rain != RainPreset.OFF
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -620,10 +621,12 @@ private fun SoundStrip(accent: Color, radio: Boolean, onSkin: () -> Unit, onPane
         if (all || bassOn) StripChip(if (bass < 0.05f) "Bass off" else "Bass +${bass.roundToInt()} dB", null, bassOn, accent) { onPanel(ChipPanel.BASS) }
         if (all || retune != 0) StripChip("${RETUNE_PRESETS[retune].hz} Hz", null, retune != 0, accent) { onPanel(ChipPanel.HZ) }
         if (all || space != "off") StripChip(if (space == "off") "Space" else "Space · $space", null, space != "off", accent) { onPanel(ChipPanel.SPACE) }
-        if (all || moreOn) StripChip(
-            if (preparing) "Reverse: decoding…" else "More", Icons.Default.MoreHoriz, moreOn, accent,
-            description = if (radio) "Equalizer and rain" else "Equalizer, rain, vinyl and reverse",
-        ) { onPanel(ChipPanel.MORE) }
+        // reverse gets its own chip: one tap, no panel
+        if (!radio && (all || reverseOn)) StripChip(
+            if (preparing) "Reverse: decoding…" else "Reverse", Icons.Default.FastRewind, reverseOn, accent,
+            description = "Play backwards",
+        ) { PlayerHub.toggleReverse() }
+        if (all || moreOn) StripChip("More", Icons.Default.MoreHoriz, moreOn, accent, description = if (radio) "Equalizer and rain" else "Equalizer, rain and vinyl") { onPanel(ChipPanel.MORE) }
     }
 }
 
