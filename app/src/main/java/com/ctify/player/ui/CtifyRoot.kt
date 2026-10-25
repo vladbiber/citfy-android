@@ -1,5 +1,14 @@
 package com.ctify.player.ui
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import com.ctify.player.keys.KeyAction
+import com.ctify.player.keys.KeyRouter
+import com.ctify.player.keys.LocalDeviceProfile
+
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
@@ -133,6 +142,25 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
     val ctx = androidx.compose.ui.platform.LocalContext.current
     remember { HiddenArtists.init(ctx) }
     val snack = rememberSnackState()
+    var showQueue by remember { mutableStateOf(false) }
+    var keyPick by remember { mutableStateOf<com.ctify.player.data.Track?>(null) }
+    val nowTrack by androidx.compose.runtime.rememberUpdatedState(current)
+    // hardware keyboard shortcuts that need the UI (keyboard phones, tablets)
+    LaunchedEffect(Unit) {
+        KeyRouter.uiActions.collect { a ->
+            when (a) {
+                KeyAction.SEARCH -> { showNowPlaying = false; showSettings = false; selectTab(Tab.Search.ordinal) }
+                KeyAction.QUEUE -> if (nowTrack != null) showQueue = true
+                KeyAction.OPEN_PLAYER -> showNowPlaying = true
+                KeyAction.ADD_TO_PLAYLIST -> keyPick = nowTrack.takeIf { now?.station == null }
+                KeyAction.TAB_1, KeyAction.TAB_2, KeyAction.TAB_3, KeyAction.TAB_4 -> {
+                    showNowPlaying = false; showSettings = false
+                    selectTab(a.ordinal - KeyAction.TAB_1.ordinal)
+                }
+                else -> {}
+            }
+        }
+    }
     val overlay = showWheel || showYouTube || showNowPlaying || showSettings
     val goTo by SongSheets.goTo.collectAsState()
     LaunchedEffect(goTo) {
@@ -160,7 +188,17 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                     )
                 }
                 val duo = Appearance.source.collectAsState().value == ThemeSource.DUO
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                // square keyboard phones have little height: icons only, in a slim bar
+                if (LocalDeviceProfile.current.isSquare) Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).navigationBarsPadding().height(52.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Tab.entries.forEachIndexed { index, t ->
+                        androidx.compose.material3.IconButton(onClick = { selectTab(index) }) {
+                            Icon(t.icon, t.label, tint = if (tab == index) Accent else TextSecondary)
+                        }
+                    }
+                } else NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                     Tab.entries.forEachIndexed { index, t ->
                         NavigationBarItem(
                             selected = tab == index,
@@ -275,6 +313,8 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
     }
 
     if (showDownloads) DownloadsSheet(onDismiss = { showDownloads = false })
+    if (showQueue) QueueSheet(onDismiss = { showQueue = false })
+    keyPick?.let { AddToPlaylistSheet(listOf(it), onDismiss = { keyPick = null }) }
 
     val spotifyLink by YtIntake.spotify.collectAsState()
     spotifyLink?.let { link ->

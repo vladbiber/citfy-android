@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -122,8 +124,13 @@ fun SongSheet(
     // the YouTube lookup shows its own dialogs, so the sheet makes way for it
     ytAction?.let { action -> heard?.let { HeardYouTube(it, action, onDone = onDismiss) }; return }
 
-    // the picker replaces the sheet, so it isn't buried under the other rows
-    track?.let { t -> if (pickPlaylist) return AddToPlaylistSheet(listOf(t), onDismiss = onDismiss) }
+    var rate by remember { mutableStateOf(false) }
+    val stars by com.ctify.player.recommend.Recommendations.stars.collectAsStateWithLifecycle()
+    // the picker and the rating sheet replace this sheet, so they aren't buried under its rows
+    track?.let { t ->
+        if (pickPlaylist) return AddToPlaylistSheet(listOf(t), onDismiss = onDismiss)
+        if (rate) return com.ctify.player.ui.rating.RateSheet(t, onDismiss = onDismiss)
+    }
 
     val done: (() -> Unit) -> Unit = { action -> action(); onDismiss() }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SurfaceDark) {
@@ -151,6 +158,7 @@ fun SongSheet(
                 heard != null -> LikeRow(heard.liked) { done { HeardLikes.setLiked(ctx, heard, !heard.liked) } }
                 t != null -> LikeRow(t.id in favorites) { done { SongActions.toggleLike(repo, t) } }
             }
+            if (t != null) SheetRow(Icons.Filled.Star, "Rate", "Stars and a short review for the song, album or artist") { rate = true }
             extraTop?.invoke(this)
             if (context is SongContext.Playlist && t != null) {
                 val index = playlists.firstOrNull { it.name == context.name }?.trackIds?.indexOf(t.id) ?: -1
@@ -171,6 +179,10 @@ fun SongSheet(
             }
             genreTag?.let { tag -> SheetRow(Icons.Filled.Category, "Go to genre", genreLabel(tag)) { done { SongSheets.goTo.value = HomePage.GenrePage(tag) } } }
             if (onSelect != null && target is SongTarget.Song) SheetRow(Icons.Filled.CheckCircle, "Select") { done(onSelect) }
+            val vid = t?.ytVideoId()
+            if (context == SongContext.Recommended && vid != null && stars.any { g -> g.songs.any { it.videoId == vid } }) {
+                SheetRow(Icons.Filled.ThumbDown, "Not for me", "Fewer songs like this from your stars") { done { com.ctify.player.recommend.Recommendations.notForMe(vid) } }
+            }
             if (context == SongContext.Recommended && artist != null) {
                 val lead = RadioMixer.leadArtist(artist)
                 SheetRow(Icons.Filled.PersonOff, "Hide $lead", "No more $lead in your recommendations") { done { SongActions.hideArtist(lead) } }
