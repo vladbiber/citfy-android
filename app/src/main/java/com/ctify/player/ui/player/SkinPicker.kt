@@ -26,8 +26,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.ctify.player.ui.PillTabs
 import com.ctify.player.ui.visualizer.Visualizer
 import com.ctify.player.ui.visualizer.VisualizerCustomizeSheet
 import kotlinx.coroutines.launch
@@ -79,11 +78,7 @@ fun <T> SkinPicker(
                     title, style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.semantics { heading() },
                 )
-                if (tabs.size > 1) PrimaryTabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
-                    tabs.forEachIndexed { i, (name, _) ->
-                        Tab(selected = i == tab, onClick = { tab = i }, text = { Text(name) })
-                    }
-                }
+                if (tabs.size > 1) PillTabs(tabs.map { it.first }, tab, { tab = it }, Modifier.padding(horizontal = 8.dp))
                 key(tab) { LookPager(tabs[tab].second, current, label, preview, onSelect) }
             }
         }

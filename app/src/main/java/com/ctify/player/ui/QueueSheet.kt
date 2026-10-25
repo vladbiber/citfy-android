@@ -25,9 +25,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -59,7 +56,6 @@ import com.ctify.player.recommend.UpNext
 import com.ctify.player.ui.songs.SongContext
 import com.ctify.player.ui.songs.SongSheets
 import com.ctify.player.ui.songs.SongTarget
-import com.ctify.player.ui.theme.SurfaceDark
 import com.ctify.player.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
@@ -79,14 +75,10 @@ internal fun QueueSheet(onDismiss: () -> Unit) {
     var dragDelta by remember { mutableFloatStateOf(0f) }
     val ids = ui.queueIds
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SurfaceDark, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerLow, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxHeight(0.9f)) {
             Text("Up next", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 16.dp, bottom = 4.dp).semantics { heading() })
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-                listOf(false to "Library", true to "Recommended").forEachIndexed { i, (on, label) ->
-                    SegmentedButton(selected = recommended == on, onClick = { UpNext.choose(on) }, shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(label) }
-                }
-            }
+            PillTabs(listOf("Library", "Recommended"), if (recommended) 1 else 0, { UpNext.choose(it == 1) }, Modifier.padding(horizontal = 8.dp))
             val note = if (loading) "Finding songs like this one…" else error
             if (note != null) Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (loading) { CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
