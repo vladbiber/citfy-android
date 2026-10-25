@@ -45,7 +45,7 @@ object NetworkGate {
     val wifiOnlyDownloads = MutableStateFlow(true)
 
     /** Radio Browser and MusicBrainz both ask for a User-Agent that names the app. */
-    val userAgent = "Ctify/${BuildConfig.VERSION_NAME} (private build)"
+    val userAgent = "GuavaPlayer/${BuildConfig.VERSION_NAME} (private build)"
 
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder()

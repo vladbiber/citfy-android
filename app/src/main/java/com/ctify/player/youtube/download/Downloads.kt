@@ -78,7 +78,7 @@ object Downloads {
         if (folder.value == null) return
         setFolder(null)
         Handler(Looper.getMainLooper()).post {
-            Toast.makeText(app, "Download folder isn't available. Saving to Music/Ctify instead.", Toast.LENGTH_LONG).show()
+            Toast.makeText(app, "Download folder isn't available. Saving to Music/Guava Player instead.", Toast.LENGTH_LONG).show()
         }
     }
 

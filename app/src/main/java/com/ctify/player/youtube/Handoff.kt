@@ -100,7 +100,7 @@ object MusicWatcher {
         app.contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, selection, args, null)?.use { c ->
             while (c.moveToNext()) {
                 val path = c.getString(5).orEmpty()
-                if (path.contains("/Music/Ctify/")) continue
+                if (path.contains("/Music/Ctify/") || path.contains("/Music/Guava Player/")) continue
                 val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, c.getLong(0))
                 found += TrackEntity(
                     id = "imp_ms_${c.getLong(0)}",

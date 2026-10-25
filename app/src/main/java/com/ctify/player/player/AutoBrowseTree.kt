@@ -45,7 +45,7 @@ object AutoIds {
 /** Builds the Auto browse tree from the library and radio data, and turns a tapped leaf into a [Cmd]. */
 class AutoLibrary(private val repository: MusicRepository, private val radio: RadioRepository) {
 
-    val root: MediaItem = folder(AutoIds.ROOT, "Ctify", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+    val root: MediaItem = folder(AutoIds.ROOT, "Guava Player", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
 
     suspend fun children(parentId: String): List<MediaItem>? = when (parentId) {
         AutoIds.ROOT -> AutoIds.TABS.map(::tab)

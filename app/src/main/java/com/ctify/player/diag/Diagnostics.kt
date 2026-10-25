@@ -105,7 +105,7 @@ object Diagnostics {
 
     /** Phone state that decides whose move a failure is. */
     private fun environment(): String {
-        val parts = mutableListOf("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})", "Ctify ${BuildConfig.VERSION_NAME}")
+        val parts = mutableListOf("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})", "Guava Player ${BuildConfig.VERSION_NAME}")
         runCatching { WebView.getCurrentWebViewPackage()?.let { parts += "WebView ${it.versionName}" } }
         runCatching {
             val cm = app.getSystemService(ConnectivityManager::class.java)
@@ -126,7 +126,7 @@ object Diagnostics {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && cm.getLinkProperties(net)?.isPrivateDnsActive == true) parts += "Private DNS on"
             if (cm.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED) parts += "Data Saver on"
         }
-        if (NetworkGate.offline.value) parts += "Ctify offline mode on"
+        if (NetworkGate.offline.value) parts += "Offline mode on"
         parts += "free storage ${app.filesDir.usableSpace / (1024 * 1024)} MB"
         return parts.joinToString(", ")
     }
@@ -158,7 +158,7 @@ object Diagnostics {
             Failure(
                 feature = "app",
                 action = "crash on thread ${lines[1]}",
-                component = "Ctify ${BuildConfig.VERSION_NAME}",
+                component = "Guava Player ${BuildConfig.VERSION_NAME}",
                 item = top.take(200),
                 error = RuntimeException(stack),
                 errorClass = "crash",
@@ -185,7 +185,7 @@ object Diagnostics {
             Failure(
                 feature = "app",
                 action = "previous run $kind",
-                component = "Ctify ${BuildConfig.VERSION_NAME}",
+                component = "Guava Player ${BuildConfig.VERSION_NAME}",
                 item = last.description?.take(200),
                 errorClass = if (last.reason == ApplicationExitInfo.REASON_LOW_MEMORY) "system_kill" else "crash",
             )

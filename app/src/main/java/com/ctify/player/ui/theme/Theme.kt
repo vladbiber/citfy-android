@@ -1,6 +1,5 @@
 package com.ctify.player.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -8,15 +7,17 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,7 +33,7 @@ val TextPrimary: Color @Composable @ReadOnlyComposable get() = MaterialTheme.col
 val TextSecondary: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 val TextMuted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
 
-/** Ctify blue, used when the phone has no wallpaper colors (Android 8–11) or they are switched off. */
+/** Guava blue, used when the phone has no wallpaper colors (Android 8–11) or they are switched off. */
 private val CtifyDark = darkColorScheme(
     primary = Color(0xFF5B9DFF),
     onPrimary = Color(0xFF0A1428),
@@ -59,41 +60,39 @@ private val CtifyDark = darkColorScheme(
     surfaceContainerHighest = Color(0xFF252C3D),
 )
 
-private val CtifyLight = lightColorScheme(
-    primary = Color(0xFF2B5FD9),
-    onPrimary = Color(0xFFFFFFFF),
-    secondary = Color(0xFF3F6AB8),
-    onSecondary = Color(0xFFFFFFFF),
-    tertiary = Color(0xFF6A4FC8),
-    primaryContainer = Color(0xFFD7E6FF),
-    onPrimaryContainer = Color(0xFF0A1F4D),
-    secondaryContainer = Color(0xFFDDE6F8),
-    onSecondaryContainer = Color(0xFF13274A),
-    tertiaryContainer = Color(0xFFE6DEFF),
-    onTertiaryContainer = Color(0xFF24145C),
-    outline = Color(0xFFC3CAD8),
-    background = Color(0xFFF7F9FD),
-    onBackground = Color(0xFF12151C),
-    surface = Color(0xFFF7F9FD),
-    onSurface = Color(0xFF12151C),
-    surfaceVariant = Color(0xFFE4E9F2),
-    onSurfaceVariant = Color(0xFF4A5366),
-    surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF1F4FA),
-    surfaceContainer = Color(0xFFEBEFF7),
-    surfaceContainerHigh = Color(0xFFE4E9F2),
-    surfaceContainerHighest = Color(0xFFDDE3EE),
-)
-
 // Sizes and weights only: line height and letter spacing still come from bodyLarge, as with hand-typed sizes.
-private val CtifyType = Typography(
-    headlineMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 28.sp), // screen titles
-    titleLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp), // sheet titles, hero cards
-    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 18.sp), // section headers, card titles
-    // bodyLarge stays Material's 16sp: list titles and plain text.
-    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 13.sp), // secondary text, settings and sound body
-    labelSmall = TextStyle(fontWeight = FontWeight.Normal, fontSize = 12.sp), // captions, times, chip labels
-)
+// Every role takes the chosen family; a serif font only sets the headings, body text stays the phone's.
+private fun ctifyType(font: AppFont): Typography {
+    val family = font.family()
+    val head = family ?: FontFamily.Default
+    val body = if (font.variable) head else FontFamily.Default
+    val base = Typography()
+    fun TextStyle.with(f: FontFamily) = copy(fontFamily = f)
+    return Typography(
+        displayLarge = base.displayLarge.with(head), displayMedium = base.displayMedium.with(head),
+        displaySmall = base.displaySmall.with(head), headlineLarge = base.headlineLarge.with(head),
+        headlineMedium = TextStyle(fontFamily = head, fontWeight = FontWeight.Bold, fontSize = 28.sp), // screen titles
+        headlineSmall = base.headlineSmall.with(head),
+        titleLarge = TextStyle(fontFamily = head, fontWeight = FontWeight.Bold, fontSize = 20.sp), // sheet titles, hero cards
+        titleMedium = TextStyle(fontFamily = head, fontWeight = FontWeight.SemiBold, fontSize = 18.sp), // section headers, card titles
+        titleSmall = base.titleSmall.with(body),
+        // bodyLarge stays Material's 16sp: list titles and plain text.
+        bodyLarge = base.bodyLarge.with(body),
+        bodyMedium = TextStyle(fontFamily = body, fontWeight = FontWeight.Normal, fontSize = 13.sp), // secondary text, settings and sound body
+        bodySmall = base.bodySmall.with(body),
+        labelLarge = base.labelLarge.with(body), labelMedium = base.labelMedium.with(body),
+        labelSmall = TextStyle(fontFamily = body, fontWeight = FontWeight.Normal, fontSize = 12.sp), // captions, times, chip labels
+    )
+}
+
+/** The bundled font as a family; variable fonts get one entry per weight so bold really is bold. */
+private fun AppFont.family(): FontFamily? {
+    val id = res ?: return null
+    if (!variable) return FontFamily(Font(id, FontWeight.Normal))
+    return FontFamily(listOf(300, 400, 500, 600, 700, 800).map { w ->
+        Font(id, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
+    })
+}
 
 private val CtifyShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
@@ -103,47 +102,34 @@ private val CtifyShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp),
 )
 
-/** True when the app is drawn dark, after the user's System/Light/Dark choice. */
-@Composable
-fun isAppInDarkTheme(): Boolean {
-    val mode by Appearance.mode.collectAsState()
-    return when (mode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
-}
-
 @Composable
 fun CtifyTheme(content: @Composable () -> Unit) {
-    val dark = isAppInDarkTheme()
     val source by Appearance.source.collectAsState()
     val pureBlack by Appearance.pureBlack.collectAsState()
+    val font by Appearance.font.collectAsState()
     val ctx = LocalContext.current
     var scheme = when {
-        source == ThemeSource.DUO -> duoScheme(dark)
-        source == ThemeSource.WALLPAPER && Appearance.dynamicSupported ->
-            if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-        dark -> CtifyDark
-        else -> CtifyLight
+        source == ThemeSource.DUO -> duoScheme()
+        source == ThemeSource.WALLPAPER && Appearance.dynamicSupported -> dynamicDarkColorScheme(ctx)
+        else -> CtifyDark
     }
-    if (dark && pureBlack) scheme = scheme.pureBlack()
-    MaterialTheme(colorScheme = scheme, typography = CtifyType, shapes = CtifyShapes, content = content)
+    if (pureBlack) scheme = scheme.pureBlack()
+    val type = remember(font) { ctifyType(font) }
+    MaterialTheme(colorScheme = scheme, typography = type, shapes = CtifyShapes, content = content)
 }
 
 /** Color 1 drives primary, color 2 secondary + tertiary; MaterialKolor keeps the tones contrast-safe. */
 @Composable
-private fun duoScheme(dark: Boolean): ColorScheme {
+private fun duoScheme(): ColorScheme {
     val c1 by Appearance.color1.collectAsState()
     val c2 by Appearance.color2.collectAsState()
     val s = rememberDynamicColorScheme(
-        seedColor = c1.color, isDark = dark,
+        seedColor = c1.color, isDark = true,
         primary = c1.color, secondary = c2.color, tertiary = c2.color,
     )
     if (c1 != c2) return s
     // Same swatch twice: color 2 becomes a darker shade, taken from the primary palette's own contrast-safe pair.
-    return if (dark) s.copy(tertiary = s.primaryContainer, onTertiary = s.onPrimaryContainer)
-    else s.copy(tertiary = s.onPrimaryContainer, onTertiary = s.primaryContainer)
+    return s.copy(tertiary = s.primaryContainer, onTertiary = s.onPrimaryContainer)
 }
 
 private fun ColorScheme.pureBlack() = copy(

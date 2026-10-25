@@ -44,7 +44,7 @@ object Lrc {
 /** Lyrics from LRCLIB (lrclib.net, free, no key), kept in memory per track for the session. */
 object LyricsRepository {
     private val cache = ConcurrentHashMap<String, Lyrics>()
-    private const val UA = "ctify (github.com/vladbiber/citfy-android)"
+    private const val UA = "guava-player (github.com/vladbiber/guava-player)"
     private val api = "https://lrclib.net/api/".toHttpUrl()
 
     fun cached(track: Track): Lyrics? = cache[track.id]

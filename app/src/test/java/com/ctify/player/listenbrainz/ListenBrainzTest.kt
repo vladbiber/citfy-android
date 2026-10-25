@@ -22,7 +22,7 @@ class ListenBrainzTest {
         assertEquals("OK Computer", m.getString("release_name"))
         val info = m.getJSONObject("additional_info")
         assertEquals(284_000, info.getLong("duration_ms"))
-        assertEquals("ctify", info.getString("submission_client"))
+        assertEquals("guava-player", info.getString("submission_client"))
         assertEquals(BuildConfig.VERSION_NAME, info.getString("submission_client_version"))
     }
 

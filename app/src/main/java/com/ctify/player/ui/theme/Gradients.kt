@@ -52,16 +52,15 @@ fun accentBrush(): Brush {
 fun LiquidBackground(modifier: Modifier = Modifier, pulse: State<Float>? = null) {
     val source by Appearance.source.collectAsState()
     val style by Appearance.gradient.collectAsState()
-    if (source != ThemeSource.DUO) return
+    if (style == GradientStyle.OFF) return
     val s = MaterialTheme.colorScheme
-    // Toned down so text on top stays readable; light mode gets pastel washes.
-    val oilStyle = style == GradientStyle.OIL && Build.VERSION.SDK_INT >= 33
-    // oil is a picture, not a wash: it needs more body than Liquid to read as a slick
-    val alpha = if (isAppInDarkTheme()) (if (oilStyle) 0.72f else 0.38f) else (if (oilStyle) 0.42f else 0.24f)
+    // Toned down so text on top stays readable.
+    val oilStyle = style.dyed && Build.VERSION.SDK_INT >= 33
+    val alpha = if (oilStyle) 0.72f else 0.38f
     val one = if (pulse != null) s.primary.boosted() else s.primary
     val two = if (pulse != null) s.tertiary.boosted() else s.tertiary
     // a bad shader must not crash the app: it just falls back to Liquid
-    val oil = if (style == GradientStyle.OIL && Build.VERSION.SDK_INT >= 33) remember { runCatching { OilBrush() }.getOrNull() } else null
+    val oil = if (oilStyle) remember { runCatching { OilBrush() }.getOrNull() } else null
     val flow = if (oil != null && !reducedMotion()) {
         rememberInfiniteTransition(label = "oil")
             .animateFloat(0f, 1f, infiniteRepeatable(tween(OIL_LOOP_MS, easing = LinearEasing)), label = "flow")
@@ -76,16 +75,7 @@ fun LiquidBackground(modifier: Modifier = Modifier, pulse: State<Float>? = null)
         }
         val a = one.copy(alpha = al)
         val b = two.copy(alpha = al)
-        if (style == GradientStyle.FADE) {
-            drawRect(Brush.linearGradient(listOf(a, b)))
-            return@Canvas
-        }
-        val d = size.maxDimension * (1f + 0.18f * e)
-        for ((x, y, r, second) in Blobs) {
-            val c = if (second) b else a
-            val center = Offset(x * size.width, y * size.height)
-            drawCircle(Brush.radialGradient(listOf(c, Color.Transparent), center, r * d), r * d, center)
-        }
+        drawRect(Brush.linearGradient(listOf(a, b)))
     }
 }
 
@@ -144,12 +134,3 @@ private fun rememberPowerSave(): Boolean {
     }
     return saver
 }
-
-/** One soft ink blob: center as a fraction of the size, radius as a fraction of the longer side, color 1 or 2. */
-private data class Blob(val x: Float, val y: Float, val r: Float, val second: Boolean)
-
-// One fixed layout: the two colors overlap in the middle so they melt into each other.
-private val Blobs = listOf(
-    Blob(0.15f, 0.10f, 0.75f, false), Blob(0.90f, 0.25f, 0.65f, true), Blob(0.25f, 0.70f, 0.70f, true),
-    Blob(0.85f, 0.90f, 0.60f, false), Blob(0.55f, 0.45f, 0.45f, false),
-)

@@ -27,7 +27,6 @@ import com.ctify.player.player.PlayerViewModel
 import com.ctify.player.ui.CtifyRoot
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.CtifyTheme
-import com.ctify.player.ui.theme.isAppInDarkTheme
 import com.ctify.player.youtube.YtIntake
 
 class MainActivity : ComponentActivity() {
@@ -49,10 +48,9 @@ class MainActivity : ComponentActivity() {
         YtIntake.offer(intent?.getStringExtra(Intent.EXTRA_TEXT))
         setContent {
             CtifyTheme {
-                val dark = isAppInDarkTheme()
-                // bar icons follow the app's theme, which can differ from the system's
-                LaunchedEffect(dark) {
-                    val style = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark }
+                // the app is always dark, whatever the system theme says
+                LaunchedEffect(Unit) {
+                    val style = SystemBarStyle.dark(Color.TRANSPARENT)
                     enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
                 }
                 val profile by DeviceProfiles.active.collectAsState()

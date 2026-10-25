@@ -117,7 +117,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.ctify.player.CtifyApp
-import com.ctify.player.ui.theme.isAppInDarkTheme
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.LiquidBackground
 import com.ctify.player.ui.theme.ThemeSource
@@ -230,10 +229,8 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}, onOpenPlayl
     var pickStation by remember { mutableStateOf(false) }
     val onRadio = state?.station != null || pickStation
     LaunchedEffect(state?.station != null) { if (state?.station != null) pickStation = false }
-    val dark = isAppInDarkTheme()
     val coverColors by Appearance.coverColors.collectAsState()
     val accent = rememberArtAccent(if (coverColors) track?.coverUri else null, MaterialTheme.colorScheme.primary)
-        .let { if (dark) it else it.darkened() }
     val art = rememberArtPainter(track?.coverUri)
     val live = rememberLiveProgress()
     val source by Appearance.source.collectAsState()
@@ -251,7 +248,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}, onOpenPlayl
     val playerScheme = if (!lyricsMode) base else base.copy(
         background = Color.Black, onBackground = Color.White, onSurface = Color.White,
         onSurfaceVariant = Color.White.copy(alpha = 0.7f),
-        surfaceContainerHigh = if (dark) base.surfaceContainerHigh else Color(0xFF1E1E1E),
+        surfaceContainerHigh = base.surfaceContainerHigh,
     )
     MaterialTheme(colorScheme = playerScheme) {
     CompositionLocalProvider(LocalContentColor provides Ink) {
@@ -421,7 +418,7 @@ fun PlayerContent(onClose: () -> Unit, onOpenRadio: () -> Unit = {}, onOpenPlayl
                 if (item is Skin) SkinView(item, still, art, accent, track, skinSide(item, space.width, space.height), seek = false)
                 else if (item is Visualizer) VisualizerView(item, art, playing = false, still = true, side = minOf(space.width, space.height))
                 else if (item is RadioSkin) RadioSkinView(
-                    item, state?.station?.name ?: "ctify radio", null, art, accent, playing = false, still = true,
+                    item, state?.station?.name ?: "guava radio", null, art, accent, playing = false, still = true,
                     onTogglePlay = {}, modifier = radioSkinSize(item, space.width, space.height),
                 )
             },
@@ -492,8 +489,8 @@ internal fun SkinView(s: Skin, live: LiveProgress, art: Painter, accent: Color, 
         when (s) {
             Skin.VINYL -> VinylSkin(live, art, accent, m, title)
             Skin.CD -> CdSkin(live, art, accent, m, title)
-            Skin.TAPE -> TapeSkin(live, art, accent, track?.album ?: track?.title ?: "ctify", m)
-            Skin.TP7 -> Tp7Skin(live, art, accent, track?.let { "${it.title} · ${it.artist}" } ?: "ctify", m)
+            Skin.TAPE -> TapeSkin(live, art, accent, track?.album ?: track?.title ?: "guava", m)
+            Skin.TP7 -> Tp7Skin(live, art, accent, track?.let { "${it.title} · ${it.artist}" } ?: "guava", m)
             Skin.COVER -> {
                 CoverSkin(live, art, accent, m)
                 if (seek) SeekRow(live, accent, Modifier.width(side * 0.86f), fill)

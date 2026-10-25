@@ -73,9 +73,10 @@ import com.ctify.player.ui.settings.KeyboardSettingsScreen
 import com.ctify.player.ui.theme.Appearance
 import com.ctify.player.ui.theme.GradientStyle
 import com.ctify.player.ui.theme.Swatch
-import com.ctify.player.ui.theme.ThemeMode
+import com.ctify.player.ui.theme.AppFont
+import com.ctify.player.ui.theme.DyeColors
+import com.ctify.player.ui.theme.DyeStrength
 import com.ctify.player.ui.theme.ThemeSource
-import com.ctify.player.ui.theme.isAppInDarkTheme
 import com.ctify.player.youtube.download.Downloads
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -86,7 +87,6 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     val app = ctx.applicationContext as CtifyApp
     val scope = rememberCoroutineScope()
-    val mode by Appearance.mode.collectAsState()
     val source by Appearance.source.collectAsState()
     val color1 by Appearance.color1.collectAsState()
     val color2 by Appearance.color2.collectAsState()
@@ -94,7 +94,9 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
     val pureBlack by Appearance.pureBlack.collectAsState()
     val coverColors by Appearance.coverColors.collectAsState()
     val reactToMusic by Appearance.reactToMusic.collectAsState()
-    val dark = isAppInDarkTheme()
+    val font by Appearance.font.collectAsState()
+    val dyeColors by Appearance.dyeColors.collectAsState()
+    val dyeStrength by Appearance.dyeStrength.collectAsState()
     val offline by NetworkGate.offline.collectAsState()
     val features by NetworkGate.enabled.collectAsState()
     val wifiOnlyStreaming by NetworkGate.wifiOnlyStreaming.collectAsState()
@@ -153,12 +155,16 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 if (source == ThemeSource.DUO) {
                     SwatchRow("Color 1", "Play button, selected tab, sliders and switches", color1, Appearance::setColor1)
                     SwatchRow("Color 2", "Chips, badges and the gradient. Same as color 1 gives a darker shade.", color2, Appearance::setColor2)
-                    Text("Gradient", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-                    Choice(GradientStyle.entries, gradient, { it.label }, Appearance::setGradient)
                 }
-                Text("Light or dark", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-                Choice(ThemeMode.entries, mode, { it.label }, Appearance::setMode)
-                SwitchRow("Pure black", "Black background in dark theme, for OLED screens", pureBlack, Appearance::setPureBlack, enabled = dark)
+                Text("Background", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
+                Choice(GradientStyle.entries, gradient, { it.label }, Appearance::setGradient)
+                if (gradient.dyed) {
+                    Choice(DyeColors.entries, dyeColors, { it.label }, Appearance::setDyeColors)
+                    Choice(DyeStrength.entries, dyeStrength, { it.label }, Appearance::setDyeStrength)
+                }
+                Text("Font", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
+                Choice(AppFont.entries, font, { it.label }, Appearance::setFont)
+                SwitchRow("Pure black", "Black background, for OLED screens", pureBlack, Appearance::setPureBlack)
                 SwitchRow("Cover colors in Now Playing", "Tint the player with the album cover instead of the theme", coverColors, Appearance::setCoverColors)
                 SwitchRow("React to music", "Player background pulses with the bass. Off in battery saver.", reactToMusic, Appearance::setReactToMusic)
             }
@@ -197,7 +203,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                     Column(Modifier.weight(1f)) {
                         Text("Download folder", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                         Text(
-                            folderName ?: "Default (Music/Ctify)",
+                            folderName ?: "Default (Music/Guava Player)",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -294,7 +300,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
         AlertDialog(
             onDismissRequest = { pendingRestore = null },
             title = { Text("Restore backup?") },
-            text = { Text("This replaces your current favorites, playlists and settings. Ctify will close afterwards; open it again.") },
+            text = { Text("This replaces your current favorites, playlists and settings. Guava Player will close afterwards; open it again.") },
             confirmButton = {
                 TextButton(onClick = {
                     pendingRestore = null
@@ -313,12 +319,12 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text("Backup restored") },
-            text = { Text("Ctify will close now. Open it again to load your data.") },
+            text = { Text("Guava Player will close now. Open it again to load your data.") },
             confirmButton = {
                 TextButton(onClick = {
                     (ctx as? Activity)?.finishAffinity()
                     exitProcess(0)
-                }) { Text("Close Ctify") }
+                }) { Text("Close Guava Player") }
             },
         )
     }

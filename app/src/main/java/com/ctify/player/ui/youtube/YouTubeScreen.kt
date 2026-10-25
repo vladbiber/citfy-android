@@ -208,7 +208,7 @@ fun YouTubeScreen(viewModel: PlayerViewModel, onClose: () -> Unit, onOpenDownloa
                     }
                     songs.isEmpty() -> Hint(
                         "Search YouTube Music, or paste a link to a song, album or playlist. " +
-                            "You can also share a link from the YouTube app to Ctify.\n\n" +
+                            "You can also share a link from the YouTube app to Guava Player.\n\n" +
                             "Tap a song to listen, or Download to keep it in your library."
                     )
                     else -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {

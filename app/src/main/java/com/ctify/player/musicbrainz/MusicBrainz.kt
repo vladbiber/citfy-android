@@ -25,7 +25,7 @@ object MusicBrainz {
     private const val FOUND_TTL_MS = 30L * 24 * 60 * 60 * 1000
     private const val MISSING_TTL_MS = 7L * 24 * 60 * 60 * 1000
 
-    val userAgent = "ctify/${BuildConfig.VERSION_NAME} ( https://github.com/vladbiber/citfy-android )"
+    val userAgent = "guava-player/${BuildConfig.VERSION_NAME} ( https://github.com/vladbiber/guava-player )"
 
     private val gate = Mutex()
     private var lastAt = 0L

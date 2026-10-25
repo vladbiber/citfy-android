@@ -144,7 +144,7 @@ fun CtifyLogo(size: Dp) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Filled.MusicNote, "ctify logo",
+            Icons.Filled.MusicNote, "Guava Player logo",
             tint = Color.White,
             modifier = Modifier.size(size / 2),
         )
