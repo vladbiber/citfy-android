@@ -112,4 +112,6 @@ dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs.nio)
 
     testImplementation(libs.junit)
+    // real org.json for parsing tests; the android.jar copy is a stub
+    testImplementation(libs.org.json)
 }

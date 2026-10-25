@@ -27,6 +27,8 @@ class CtifyApp : Application() {
         if (NetworkGate.blockReason(com.ctify.player.net.Feature.YOUTUBE) == null) com.ctify.player.youtube.YouTubeSource.warmUp()
         Downloads.init(this, database.downloads())
         Ratings.get(this)
+        com.ctify.player.listenbrainz.ListenBrainz.init(this)
+        com.ctify.player.musicbrainz.MusicBrainz.init(this)
         MusicWatcher.init(this, database.library(), repository)
         com.ctify.player.youtube.Chapters.start()
     }

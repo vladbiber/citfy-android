@@ -34,7 +34,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ctify.player.data.MusicRepository
-import com.ctify.player.data.Track
 import com.ctify.player.lastfm.LastFm
 import com.ctify.player.recommend.HiddenArtists
 import com.ctify.player.recommend.SongRadio
@@ -78,6 +77,7 @@ internal fun ArtistPage(artist: LastFm.Artist, repo: MusicRepository, onOpen: (H
                 CardRow(list.firstNotNullOfOrNull { it.coverUri }, album, com.ctify.player.ui.songCount(list.size)) { onOpen(HomePage.Album(album, artist.name)) }
             }
         }
+        item { DiscographyRow(artist.name, onOpen) }
         if (mine.isNotEmpty()) {
             item { SectionHeader("Your songs", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)) }
             items(mine, key = { "m" + it.id }) { t -> SongRow(t, SongContext.Library, mine, onPlay = { PlayList.play(repo, mine, mine.indexOf(t)) }) }
@@ -125,30 +125,5 @@ internal fun NamedSongRow(index: Int, s: LastFm.Song, repo: MusicRepository) {
             Text(s.artist, color = TextSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (busy) Box(Modifier.size(24.dp)) { CircularProgressIndicator(Modifier.size(20.dp), color = Accent, strokeWidth = 2.dp) }
-    }
-}
-
-/** Your songs of one album, in library order, with Play, Shuffle and the artist one tap away. */
-@Composable
-internal fun AlbumPage(album: String, artist: String, repo: MusicRepository, onOpen: (HomePage) -> Unit, onBack: () -> Unit) {
-    val tracks by repo.tracks.collectAsStateWithLifecycle()
-    val songs = remember(tracks, album, artist) {
-        tracks.filter { it.album == album && (artist.isBlank() || artistMatches(it.artist, artist) || it.artist.contains(artist, true)) }
-    }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-        item { PageTop(album, onBack) }
-        item {
-            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                songs.firstOrNull()?.let { com.ctify.player.ui.AlbumArt(it, 180.dp, shape = MaterialTheme.shapes.large) }
-                Spacer(Modifier.height(10.dp))
-                if (artist.isNotBlank()) androidx.compose.material3.TextButton(onClick = { onOpen(HomePage.ArtistPage(LastFm.Artist(artist, null))) }) {
-                    Text(artist, style = MaterialTheme.typography.titleMedium)
-                }
-                Text("Album · ${com.ctify.player.ui.songCount(songs.size)}", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(10.dp))
-                PlayShuffleRow(songs, repo)
-            }
-        }
-        items(songs, key = { it.id }) { t: Track -> SongRow(t, SongContext.Library, songs, onPlay = { PlayList.play(repo, songs, songs.indexOf(t)) }) }
     }
 }

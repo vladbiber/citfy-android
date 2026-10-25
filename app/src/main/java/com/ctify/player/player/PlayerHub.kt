@@ -6,6 +6,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import com.ctify.player.data.Track
+import com.ctify.player.listenbrainz.ListenBrainz
 import com.ctify.player.player.fx.Fx
 import com.ctify.player.player.fx.FxRange
 import com.ctify.player.player.fx.RETUNE_PRESETS
@@ -64,13 +65,21 @@ object PlayerHub {
         if (::app.isInitialized) return
         app = context.applicationContext
         loadFx()
+        ListenBrainz.init(app)
         val counter = PlayCounter()
+        val listens = PlayCounter(ListenBrainz::thresholdMs)
+        var announced: String? = null
         scope.launch {
             playback.collect { s ->
                 val t = s?.track ?: return@collect
                 // radio songs are kept separately as heard songs
-                if (s.station == null && counter.update(t.id, s.progressMs.toLong(), s.durationMs, s.isPlaying)) {
+                if (s.station != null) return@collect
+                if (counter.update(t.id, s.progressMs.toLong(), s.durationMs, s.isPlaying)) {
                     (app as com.ctify.player.CtifyApp).repository.recordPlay(t)
+                }
+                if (s.isPlaying && t.id != announced) { announced = t.id; ListenBrainz.nowPlaying(t) }
+                if (listens.update(t.id, s.progressMs.toLong(), s.durationMs, s.isPlaying)) {
+                    ListenBrainz.listened(t, System.currentTimeMillis() - s.progressMs)
                 }
             }
         }
@@ -289,8 +298,8 @@ object PlayerHub {
 }
 
 
-/** Decides when a track counts as played: ~30 s of listening or half the track, whichever comes first. */
-internal class PlayCounter {
+/** Decides when a track counts as played: by default ~30 s of listening or half the track, whichever comes first. */
+internal class PlayCounter(private val threshold: (Long) -> Long = ::thresholdMs) {
     private var id: String? = null
     private var lastMs = 0L
     private var heardMs = 0L
@@ -305,7 +314,7 @@ internal class PlayCounter {
         val step = positionMs - lastMs
         lastMs = positionMs
         if (playing && step in 1..MAX_STEP_MS) heardMs += step
-        if (counted || heardMs < thresholdMs(durationMs)) return false
+        if (counted || heardMs < threshold(durationMs)) return false
         counted = true
         return true
     }

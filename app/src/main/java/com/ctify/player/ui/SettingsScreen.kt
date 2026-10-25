@@ -182,6 +182,7 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 )
                 SwitchRow("Genres and creators (Last.fm)", "Genre and artist suggestions on Home", features[Feature.LASTFM] != false, { NetworkGate.setEnabled(Feature.LASTFM, it) }, enabled = !offline)
                 SwitchRow("Lyrics (LRCLIB)", "Synced lyrics in the player", features[Feature.LYRICS] != false, { NetworkGate.setEnabled(Feature.LYRICS, it) }, enabled = !offline)
+                SwitchRow("Album info (MusicBrainz)", "Track lists, years, community ratings and discographies", features[Feature.MUSICBRAINZ] != false, { NetworkGate.setEnabled(Feature.MUSICBRAINZ, it) }, enabled = !offline)
                 SwitchRow("Downloads only while charging", "Wait until the phone is plugged in", chargingOnly, Downloads::setChargingOnly, enabled = !offline && youtubeOn)
                 val folderName = remember(folder) { folder?.let { DocumentFile.fromTreeUri(ctx, it)?.name ?: it.lastPathSegment } }
                 val folderPress = remember { MutableInteractionSource() }
@@ -225,6 +226,11 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                     steps = 14,
                     modifier = Modifier.semantics { contentDescription = "Radio rewind buffer, $bufferMin minutes" },
                 )
+            }
+
+            Column(Modifier.enterStagger(3)) {
+                SectionHeader("Connections", Modifier.padding(top = 24.dp, bottom = 4.dp))
+                com.ctify.player.ui.settings.ConnectionsSection()
             }
 
             Column(Modifier.enterStagger(3)) {
