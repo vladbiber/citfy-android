@@ -1,6 +1,10 @@
 package com.ctify.player.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import com.ctify.player.youtube.Suggest
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -319,6 +323,22 @@ internal fun SearchTab(viewModel: PlayerViewModel, add: AddActions, onOpenSettin
             SearchFilterButton(searchFilter, HOME_SCOPES) { searchFilter = it }
         }
         val q = query.trim()
+        // suggestions while the box has focus; a tap searches for one
+        var suggestions by remember { mutableStateOf(emptyList<String>()) }
+        LaunchedEffect(q, fieldFocused) {
+            if (!fieldFocused || q.length < 2 || YouTubeSource.isLink(q) || NetworkGate.blockReason(Feature.YOUTUBE) != null) { suggestions = emptyList(); return@LaunchedEffect }
+            Suggest.cached(q)?.let { suggestions = it; return@LaunchedEffect }
+            delay(120)
+            suggestions = try { Suggest.of(q) } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
+        }
+        if (suggestions.isNotEmpty()) Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            suggestions.forEach { s ->
+                androidx.compose.material3.SuggestionChip(onClick = { query = s; focusManager.clearFocus() }, label = { Text(s, maxLines = 1) })
+            }
+        }
         when {
             YouTubeSource.isLink(q) -> Column(Modifier.padding(16.dp)) {
                 Text("That's a YouTube link", color = TextPrimary, style = MaterialTheme.typography.titleMedium)

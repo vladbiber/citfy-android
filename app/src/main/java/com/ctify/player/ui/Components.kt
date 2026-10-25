@@ -7,6 +7,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -304,6 +305,7 @@ fun MiniPlayer(
     val dx = remember { Animatable(0f) }
     val next by rememberUpdatedState(onNext)
     val previous by rememberUpdatedState(onPrevious)
+    val openPlayer by rememberUpdatedState(onClick)
     val swipeAt = with(LocalDensity.current) { 72.dp.toPx() }
     val nextLabel = if (isLive) "Next station" else "Next track"
     val previousLabel = if (isLive) "Previous station" else "Previous track"
@@ -311,6 +313,13 @@ fun MiniPlayer(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 6.dp)
+            // swipe up opens the player, like a tap
+            .pointerInput(Unit) {
+                var dy = 0f
+                detectVerticalDragGestures(onDragStart = { dy = 0f }, onDragEnd = { if (dy < -swipeAt / 2) openPlayer() }) { change, amount ->
+                    change.consume(); dy += amount
+                }
+            }
             // swipe left = next, right = previous; taps still open the player
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
