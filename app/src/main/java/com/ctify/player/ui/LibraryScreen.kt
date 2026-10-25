@@ -262,12 +262,7 @@ fun LibraryScreen(
             }
         }
         full {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp).selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                LibSection.entries.forEach { s -> TabChip(s.label, sec == s) { onSection(s.ordinal) } }
-            }
+            PillTabs(LibSection.entries.map { it.label }, sec.ordinal, onSection)
         }
         full {
             Row(Modifier.padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -454,25 +449,5 @@ private fun PlaylistActionsSheet(repo: MusicRepository, pl: Playlist, onOpen: ()
             Snack.show("Deleted \"${pl.name}\"", repo.deletePlaylist(pl.name)); onDismiss()
         }
         Spacer(Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .heightIn(min = 48.dp)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else TextPrimary,
-            fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(if (selected) Accent else SurfaceElevated)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        )
     }
 }
