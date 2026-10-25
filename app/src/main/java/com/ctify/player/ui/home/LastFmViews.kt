@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ctify.player.data.MusicRepository
+import com.ctify.player.lastfm.Continent
 import com.ctify.player.lastfm.LastFm
 import com.ctify.player.lastfm.Taste
 import com.ctify.player.radio.RadioRepository
@@ -77,11 +78,13 @@ sealed interface HomePage {
     data class GenrePage(val tag: String) : HomePage
     data object Creators : HomePage
     data class ArtistPage(val artist: LastFm.Artist) : HomePage
+    data class Artists(val title: String, val artists: List<LastFm.Artist>) : HomePage
+    data class Top100(val continent: Continent) : HomePage
 }
 
 /** Runs [load] once per [key]; [initial] until it finishes, failures (offline, no key) give [empty]. */
 @Composable
-private fun <T> rememberLoad(key: Any, empty: T, initial: T = empty, load: suspend () -> T): T =
+internal fun <T> rememberLoad(key: Any, empty: T, initial: T = empty, load: suspend () -> T): T =
     produceState(initial, key) {
         value = try { load() } catch (e: CancellationException) { throw e } catch (_: Exception) { empty }
     }.value
@@ -90,9 +93,9 @@ internal fun genreLabel(tag: String) = tag.split(' ', '-').joinToString(" ") { w
 
 /** Home's Genres row: a card with four album covers per genre. */
 @Composable
-internal fun GenresRow(genres: List<String>, onOpen: (String) -> Unit) {
+internal fun GenresRow(genres: List<String>, title: String = "Genres", onOpen: (String) -> Unit) {
     Column {
-        SectionHeader("Genres", Modifier.padding(top = 10.dp, start = 4.dp))
+        SectionHeader(title, Modifier.padding(top = 10.dp, start = 4.dp))
         Spacer(Modifier.height(8.dp))
         LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(genres, key = { it }) { tag ->
@@ -150,10 +153,10 @@ private fun ArtistTile(artist: LastFm.Artist, size: Dp, onOpen: (LastFm.Artist) 
 
 /** Home's Creators row: your artists first, then similar ones from Last.fm. */
 @Composable
-internal fun CreatorsRow(creators: List<LastFm.Artist>, onOpen: (LastFm.Artist) -> Unit, onSeeAll: () -> Unit) {
+internal fun CreatorsRow(creators: List<LastFm.Artist>, onOpen: (LastFm.Artist) -> Unit, onSeeAll: () -> Unit, title: String = "Creators") {
     Column {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            SectionHeader("Creators", Modifier.weight(1f).padding(top = 10.dp))
+            SectionHeader(title, Modifier.weight(1f).padding(top = 10.dp))
             TextButton(onClick = onSeeAll) { Text("See all") }
         }
         LazyRow(contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -172,9 +175,9 @@ private fun PageTop(title: String, onBack: () -> Unit) {
 
 /** Every creator from the row, as a grid. */
 @Composable
-internal fun CreatorsPage(creators: List<LastFm.Artist>, onOpen: (LastFm.Artist) -> Unit, onBack: () -> Unit) {
+internal fun CreatorsPage(creators: List<LastFm.Artist>, onOpen: (LastFm.Artist) -> Unit, onBack: () -> Unit, title: String = "Creators") {
     Column(Modifier.fillMaxSize()) {
-        PageTop("Creators", onBack)
+        PageTop(title, onBack)
         LazyVerticalGrid(GridCells.Adaptive(112.dp), contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             items(creators, key = { it.name }) { ArtistTile(it, 104.dp, onOpen) }
         }
@@ -207,7 +210,7 @@ internal fun ArtistPage(artist: LastFm.Artist, repo: MusicRepository, onOpen: (L
 }
 
 @Composable
-private fun SongsPage(
+internal fun SongsPage(
     title: String,
     art: @Composable () -> Unit,
     songs: List<LastFm.Song>?,
