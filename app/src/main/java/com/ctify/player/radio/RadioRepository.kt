@@ -1,5 +1,6 @@
 package com.ctify.player.radio
 
+import com.ctify.player.data.HistoryPrefs
 import com.ctify.player.genre.Genre
 import com.ctify.player.integration.Provider
 import com.ctify.player.integration.ProviderChain
@@ -180,8 +181,10 @@ class RadioRepository(private val dao: RadioDao, private val heardDao: HeardSong
     /** Called when a station starts: remembers it and, for directory stations, reports the click. */
     fun recordPlay(station: Station) = scope.launch {
         dao.upsertStations(listOf(station))
-        dao.addRecent(StationRecent(station.uuid, System.currentTimeMillis()))
-        dao.trimRecents()
+        if (HistoryPrefs[HistoryPrefs.Key.KEEP_STATIONS]) {
+            dao.addRecent(StationRecent(station.uuid, System.currentTimeMillis()))
+            dao.trimRecents()
+        }
         if (station.source == StationSource.DIRECTORY) runCatching { browser.reportClick(station.uuid) }
     }
 
@@ -223,7 +226,7 @@ class RadioRepository(private val dao: RadioDao, private val heardDao: HeardSong
         openHeardId?.let { heardDao.end(it, now) }
         openHeardId = null
         lastHeardKey = key
-        if (song != null) {
+        if (song != null && HistoryPrefs[HistoryPrefs.Key.KEEP_HEARD]) {
             openHeardId = heardDao.insert(
                 HeardSong(
                     rawTitle = title.display ?: song,
@@ -246,6 +249,8 @@ class RadioRepository(private val dao: RadioDao, private val heardDao: HeardSong
 
     fun setHeardLiked(song: HeardSong, liked: Boolean) = heardScope.launch { heardDao.setLiked(song.id, liked) }
     fun deleteHeard(song: HeardSong) = heardScope.launch { heardDao.delete(song.id) }
+    fun clearRecentStations() = scope.launch { dao.clearRecents() }
+
     fun clearHeard() = heardScope.launch { heardDao.clear(); openHeardId = null; lastHeardKey = null }
 
     // ---- tabs ----

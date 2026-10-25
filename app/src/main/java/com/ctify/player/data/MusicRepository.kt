@@ -581,6 +581,7 @@ class MusicRepository private constructor(private val appContext: Context, datab
     // ---- listening history ----
 
     fun recordPlay(t: Track) {
+        if (!HistoryPrefs[HistoryPrefs.Key.KEEP_PLAYS]) return
         val now = System.currentTimeMillis()
         writer.launch {
             dao.insertPlay(PlayEntity(trackId = t.id, playedAt = now, title = t.title, artist = t.artist, album = t.album, uri = t.uri, coverUri = t.coverUri, durationMs = t.durationMs))

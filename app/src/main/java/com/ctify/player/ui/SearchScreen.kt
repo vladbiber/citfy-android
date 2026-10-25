@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ctify.player.data.HistoryPrefs
 import com.ctify.player.data.Track
 import com.ctify.player.keys.typingField
 import com.ctify.player.net.Feature
@@ -297,7 +298,8 @@ internal fun SearchTab(viewModel: PlayerViewModel, add: AddActions, onOpenSettin
     var searchFilter by rememberSaveable { mutableStateOf(SearchFilter()) }
     val ctx = LocalContext.current
     val recent = remember { RecentSearches(ctx) }
-    var recentList by remember { mutableStateOf(recent.all()) }
+    val keepSearches by HistoryPrefs.flow(HistoryPrefs.Key.KEEP_SEARCHES).collectAsStateWithLifecycle()
+    var recentList by remember(keepSearches) { mutableStateOf(if (keepSearches) recent.all() else emptyList()) }
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     var fieldFocused by remember { mutableStateOf(false) }
@@ -308,7 +310,7 @@ internal fun SearchTab(viewModel: PlayerViewModel, add: AddActions, onOpenSettin
     // a search counts once the user stopped typing for a while
     LaunchedEffect(query) {
         val q = query.trim()
-        if (q.length < 2 || YouTubeSource.isLink(q)) return@LaunchedEffect
+        if (q.length < 2 || YouTubeSource.isLink(q) || !HistoryPrefs[HistoryPrefs.Key.KEEP_SEARCHES]) return@LaunchedEffect
         delay(2000)
         recent.add(q); recentList = recent.all()
     }
@@ -373,7 +375,7 @@ internal fun SearchTab(viewModel: PlayerViewModel, add: AddActions, onOpenSettin
 }
 
 /** The last searches, newest first, kept on the phone. */
-private class RecentSearches(context: android.content.Context) {
+internal class RecentSearches(context: android.content.Context) {
     private val prefs = context.applicationContext.getSharedPreferences("recent_searches", android.content.Context.MODE_PRIVATE)
 
     fun all(): List<String> = prefs.getString("q", null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
@@ -386,5 +388,8 @@ private class RecentSearches(context: android.content.Context) {
 
     private fun save(list: List<String>) = prefs.edit().putString("q", list.take(MAX).joinToString("\n")).apply()
 
-    private companion object { const val MAX = 12 }
+    companion object {
+        private const val MAX = 12
+        fun clear(context: android.content.Context) = RecentSearches(context).clear()
+    }
 }

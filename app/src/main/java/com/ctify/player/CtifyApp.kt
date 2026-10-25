@@ -22,6 +22,7 @@ class CtifyApp : Application() {
         Diagnostics.init(this, database.diagnostics())
         NetworkGate.init(this)
         com.ctify.player.data.PlaylistRecency.init(this)
+        com.ctify.player.data.HistoryPrefs.init(this)
         YtSession.init(this)
         YtRuntime.ensure(this)
         if (NetworkGate.blockReason(com.ctify.player.net.Feature.YOUTUBE) == null) com.ctify.player.youtube.YouTubeSource.warmUp()

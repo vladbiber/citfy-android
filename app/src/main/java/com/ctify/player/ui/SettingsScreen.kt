@@ -107,7 +107,6 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
     var message by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<android.net.Uri?>(null) }
     var restored by remember { mutableStateOf(false) }
-    var confirmClearHistory by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
@@ -253,16 +252,8 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
             Column(Modifier.enterStagger(3)) {
                 SectionHeader("Keyboard", Modifier.padding(top = 24.dp, bottom = 4.dp))
                 KeyboardSettingsRow(onOpen = { showKeys = true })
-
-                SectionHeader("History", Modifier.padding(top = 24.dp, bottom = 4.dp))
-                Text(
-                    "Songs you played, used for Recently played and Most played.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                FilledTonalButton(onClick = { confirmClearHistory = true }) { Text("Clear listening history") }
             }
+            com.ctify.player.ui.settings.HistorySettings(Modifier.enterStagger(3))
 
             Column(Modifier.enterStagger(4)) {
                 SectionHeader("Backup", Modifier.padding(top = 24.dp, bottom = 4.dp))
@@ -316,17 +307,6 @@ fun SettingsScreen(onClose: (() -> Unit)? = null) {
                 }) { Text("Restore") }
             },
             dismissButton = { TextButton(onClick = { pendingRestore = null }) { Text("Cancel") } },
-        )
-    }
-    if (confirmClearHistory) {
-        AlertDialog(
-            onDismissRequest = { confirmClearHistory = false },
-            title = { Text("Clear listening history?") },
-            text = { Text("Recently played and Most played start over. Your songs, favorites and playlists stay.") },
-            confirmButton = {
-                TextButton(onClick = { confirmClearHistory = false; app.repository.clearHistory() }) { Text("Clear") }
-            },
-            dismissButton = { TextButton(onClick = { confirmClearHistory = false }) { Text("Cancel") } },
         )
     }
     if (restored) {

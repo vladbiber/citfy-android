@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.IconButton
+import com.ctify.player.data.HistoryPrefs
 import com.ctify.player.data.Playlist
 import com.ctify.player.data.PlaylistRecency
 import com.ctify.player.ui.theme.SurfaceElevated
@@ -108,6 +109,8 @@ fun HomeScreen(
     val playlists by viewModel.repository.playlists.collectAsStateWithLifecycle()
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val recent by remember { viewModel.repository.recentlyPlayed(20) }.collectAsStateWithLifecycle(emptyList())
+    val showRecent by HistoryPrefs.flow(HistoryPrefs.Key.SHOW_RECENT).collectAsStateWithLifecycle()
+    val showMost by HistoryPrefs.flow(HistoryPrefs.Key.SHOW_MOST).collectAsStateWithLifecycle()
     val most by remember { viewModel.repository.mostPlayed(20) }.collectAsStateWithLifecycle(emptyList())
     val ctx = LocalContext.current
     val shelves by Recommendations.shelves.collectAsStateWithLifecycle()
@@ -158,13 +161,13 @@ fun HomeScreen(
         if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder, or search YouTube to add songs.") }
         if (building && shelf[Shelf.FOR_YOU].isNullOrEmpty()) full { ForYouPlaceholder() }
         shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
-        if (recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+        if (showRecent && recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
         if (recentPlaylists.isNotEmpty()) full { PlaylistsRow(recentPlaylists, viewModel) { onOpenPage(HomePage.Playlist(it)) } }
         stars.forEachIndexed { i, g -> full { StarsShelf(g, i == 0, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
         listOf(Shelf.PLAYED, Shelf.DOWNLOADS).forEach { s ->
             shelf[s]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(s.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
         }
-        if (most.isNotEmpty()) full { TrackCarousel("Most played", most, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+        if (showMost && most.isNotEmpty()) full { TrackCarousel("Most played", most, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
         if (genres == null) full { ShelfPlaceholder("Genres", 150.dp) }
         if (!genres.isNullOrEmpty()) full { GenresRow(genres) { onOpenPage(HomePage.GenrePage(it)) } }
         if (creators == null) full { ShelfPlaceholder("Creators", 104.dp, CircleShape) }
