@@ -264,6 +264,7 @@ fun CtifyRoot(viewModel: PlayerViewModel) = SharedTransitionLayout { Composition
                         onOpenPage = openPage,
                         onOpenSettings = openSettings,
                         onOpenWheel = openWheel,
+                        onOpenPlayer = { showNowPlaying = true },
                         section = librarySection,
                         onSection = { librarySection = it },
                     )

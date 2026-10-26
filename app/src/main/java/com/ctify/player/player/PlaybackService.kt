@@ -116,13 +116,13 @@ class PlaybackService : MediaLibraryService() {
         mediaSession = MediaLibrarySession.Builder(this, player, SessionCallback()).build()
 
         // home screen widgets: redrawn when the song, play state, station or mode changes, not on every tick
-        GuavaWidgets.attach(this, player) { action -> playback?.handle(action, Bundle.EMPTY) }
+        GuavaWidgets.attach(this, player) { action, args -> playback?.handle(action, args) }
         scope.launch {
             PlayerHub.playback
                 .distinctUntilChanged { a, b -> a?.track?.id == b?.track?.id && a?.isPlaying == b?.isPlaying && a?.station?.uuid == b?.station?.uuid }
                 .collect { GuavaWidgets.update(this@PlaybackService, it) }
         }
-        scope.launch { Moods.mood.collect { GuavaWidgets.render(this@PlaybackService) } }
+        scope.launch { Moods.mood.collect { GuavaWidgets.redraw(this@PlaybackService) } }
     }
 
     /** Live radio has one item, so the system next/previous buttons switch stations instead. */

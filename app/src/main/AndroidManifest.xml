@@ -108,39 +108,75 @@
 
         <!-- home screen widgets -->
         <receiver
-            android:name=".widget.BarWidget"
+            android:name=".widget.VinylWidget"
             android:exported="false"
-            android:label="Guava Bar">
+            android:label="Vinyl">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_bar_info" />
+                android:resource="@xml/widget_vinyl_info" />
         </receiver>
 
         <receiver
-            android:name=".widget.CardWidget"
+            android:name=".widget.CdWidget"
             android:exported="false"
-            android:label="Guava Card">
+            android:label="CD">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_card_info" />
+                android:resource="@xml/widget_cd_info" />
         </receiver>
 
         <receiver
-            android:name=".widget.DiscWidget"
+            android:name=".widget.TapeWidget"
             android:exported="false"
-            android:label="Guava Disc">
+            android:label="Cassette">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_disc_info" />
+                android:resource="@xml/widget_tape_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.Tp7Widget"
+            android:exported="false"
+            android:label="TP-7">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tp7_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.RadioDeviceWidget"
+            android:exported="false"
+            android:label="Radio">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_radio_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.NowWidget"
+            android:exported="false"
+            android:label="Now playing">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_now_info" />
         </receiver>
 
         <receiver

@@ -121,6 +121,10 @@ import com.ctify.player.ui.youtube.ytStatus
 import com.ctify.player.ui.songs.Snack
 import com.ctify.player.ui.songs.SongContext
 import com.ctify.player.ui.songs.SongRow
+import com.ctify.player.ui.home.BoardWidget
+import com.ctify.player.ui.home.HomeEditor
+import com.ctify.player.ui.home.LibraryLayout
+import androidx.compose.material.icons.filled.Widgets
 
 internal fun LazyGridScope.full(content: @Composable () -> Unit) =
     item(span = { GridItemSpan(maxLineSpan) }) { content() }
@@ -217,6 +221,7 @@ fun LibraryScreen(
     section: Int = 0,
     onSection: (Int) -> Unit = {},
     onOpenWheel: () -> Unit = {},
+    onOpenPlayer: () -> Unit = {},
 ) {
     val tracks by viewModel.repository.tracks.collectAsStateWithLifecycle()
     val favorites by viewModel.repository.favorites.collectAsStateWithLifecycle()
@@ -243,6 +248,12 @@ fun LibraryScreen(
     // saved YouTube songs load in addedAt order
     val downloads = remember(tracks, sec) { if (sec == LibSection.DOWNLOADS) tracks.filter { it.id.startsWith("yt_") }.asReversed() else emptyList() }
 
+    remember { LibraryLayout.init(ctx) }
+    val widgets by LibraryLayout.shown.collectAsStateWithLifecycle()
+    var editing by rememberSaveable { mutableStateOf(false) }
+    if (editing) HomeEditor(onDismiss = { editing = false }, board = LibraryLayout, title = "Library widgets", place = "Library")
+    val likedTracks = remember(tracks, favorites) { tracks.filter { it.id in favorites } }
+
     LazyVerticalGrid(
         columns = GridCells.Adaptive(150.dp),
         modifier = Modifier.fillMaxSize(),
@@ -252,11 +263,13 @@ fun LibraryScreen(
     ) {
         full {
             TabTopBar("Library") {
+                IconButton(onClick = { editing = true }) { Icon(Icons.Filled.Widgets, "Library widgets", tint = TextPrimary) }
                 IconButton(onClick = onOpenWheel) { Icon(Icons.Filled.Casino, "Spin the wheel", tint = TextPrimary) }
                 AddMenu(add)
                 SettingsButton(onOpenSettings)
             }
         }
+        widgets.forEach { w -> full { BoardWidget(w, repo, tracks, likedTracks, playlists.size, onOpenPlayer, onOpenWheel) } }
         full {
             PillTabs(LibSection.entries.map { it.label }, sec.ordinal, onSection)
         }

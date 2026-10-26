@@ -6,6 +6,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Adjust
+import androidx.compose.material.icons.filled.SettingsInputComponent
+import androidx.compose.material.icons.filled.Voicemail
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
@@ -31,6 +34,11 @@ import kotlinx.coroutines.flow.asStateFlow
 /** Everything Home can show, in the default order; [widget]s are off until added. */
 enum class HomeSection(val id: String, val title: String, val icon: ImageVector, val widget: Boolean = false) {
     NOW_PLAYING("w_now", "Now playing", Icons.Filled.PlayCircle, widget = true),
+    VINYL("w_vinyl", "Vinyl", Icons.Filled.Album, widget = true),
+    CD("w_cd", "CD", Icons.Filled.Adjust, widget = true),
+    TAPE("w_tape", "Cassette", Icons.Filled.Voicemail, widget = true),
+    TP7("w_tp7", "TP-7", Icons.Filled.SettingsInputComponent, widget = true),
+    RADIO("w_radio", "Radio", Icons.Filled.Radio, widget = true),
     QUICK_PICKS("quick", "Quick picks", Icons.Filled.GridView),
     CONTINUE("continue", "Continue listening", Icons.Filled.Replay),
     FOR_YOU("for_you", "For you", Icons.Filled.AutoAwesome),
@@ -54,6 +62,11 @@ enum class HomeSection(val id: String, val title: String, val icon: ImageVector,
     /** One line for the editor, under the name. */
     val hint: String get() = when (this) {
         NOW_PLAYING -> "Big cover, controls and the time bar"
+        VINYL -> "The record from the player, spinning"
+        CD -> "The CD from the player"
+        TAPE -> "The cassette from the player"
+        TP7 -> "The TP-7 from the player"
+        RADIO -> "A radio with your last station"
         VISUALIZER -> "Bars that dance to what's playing"
         SHORTCUTS -> "Shuffle liked, shuffle all, radio, spin the wheel"
         STATS -> "Songs, liked, playlists and artists"
@@ -66,15 +79,14 @@ enum class HomeSection(val id: String, val title: String, val icon: ImageVector,
     }
 }
 
-/** Which sections Home shows and in what order; kept in the "ctify-ui" prefs so backup carries it. */
-object HomeLayout {
-    private const val PREFS = "ctify-ui"
-    private const val ORDER = "home_order"
-    // every id the user has seen, so a section added in a later version shows up without bringing back removed ones
-    private const val KNOWN = "home_known"
-
+/** An ordered set of sections kept in the "ctify-ui" prefs (so backup carries it); [defaults] show until the user edits. */
+class Board(
+    private val key: String,
+    private val defaults: List<HomeSection>,
+    /** what the editor lets you add here */
+    val offered: List<HomeSection>,
+) {
     private var prefs: SharedPreferences? = null
-    private val defaults = HomeSection.entries.filterNot { it.widget }
     private val state = MutableStateFlow(defaults)
     val shown: StateFlow<List<HomeSection>> = state.asStateFlow()
 
@@ -82,24 +94,33 @@ object HomeLayout {
         if (prefs != null) return
         val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs = p
-        val saved = p.getString(ORDER, null) ?: return
-        val known = p.getString(KNOWN, "").orEmpty().split(',').toSet()
-        val order = saved.split(',').filter { it.isNotBlank() }.mapNotNull(HomeSection::byId).distinct()
+        val saved = p.getString("${key}_order", null) ?: return
+        // every id the user has seen, so a section added in a later version shows up without bringing back removed ones
+        val known = p.getString("${key}_known", "").orEmpty().split(',').toSet()
+        val order = saved.split(',').filter { it.isNotBlank() }.mapNotNull(HomeSection::byId).filter { it in offered }.distinct()
         state.value = order + defaults.filter { it.id !in known && it !in order }
     }
-
-    fun hidden(): List<HomeSection> = HomeSection.entries - state.value.toSet()
 
     fun set(list: List<HomeSection>) {
         state.value = list.distinct()
         prefs?.edit()
-            ?.putString(ORDER, state.value.joinToString(",") { it.id })
-            ?.putString(KNOWN, HomeSection.entries.joinToString(",") { it.id })
+            ?.putString("${key}_order", state.value.joinToString(",") { it.id })
+            ?.putString("${key}_known", HomeSection.entries.joinToString(",") { it.id })
             ?.apply()
     }
 
     fun reset() {
         state.value = defaults
-        prefs?.edit()?.remove(ORDER)?.remove(KNOWN)?.apply()
+        prefs?.edit()?.remove("${key}_order")?.remove("${key}_known")?.apply()
+    }
+
+    private companion object {
+        const val PREFS = "ctify-ui"
     }
 }
+
+/** Home: the shelves, plus any widget. */
+val HomeLayout = Board("home", HomeSection.entries.filterNot { it.widget }, HomeSection.entries)
+
+/** Library: a strip of widgets above the tabs, empty until you add some. */
+val LibraryLayout = Board("library", emptyList(), HomeSection.entries.filter { it.widget })

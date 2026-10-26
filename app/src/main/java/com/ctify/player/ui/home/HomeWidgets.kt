@@ -67,7 +67,7 @@ import com.ctify.player.ui.SectionHeader
 import com.ctify.player.ui.library.PlayList
 import com.ctify.player.ui.pressFeedback
 import com.ctify.player.ui.radio.radioRepo
-import com.ctify.player.ui.skins.rememberLiveProgress
+import com.ctify.player.ui.skins.Skin
 import com.ctify.player.ui.songs.SongActions
 import com.ctify.player.ui.theme.Accent
 import com.ctify.player.ui.theme.TextPrimary
@@ -77,81 +77,24 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** The song playing now, big: blurred cover behind, controls and a running time bar. With nothing loaded it offers a shuffle. */
+/** Draws one widget section; Home and Library share it. */
 @Composable
-internal fun NowPlayingWidget(repo: MusicRepository, liked: List<Track>, onOpen: () -> Unit) {
-    val state by PlayerHub.playback.collectAsStateWithLifecycle()
-    val favorites by repo.favorites.collectAsStateWithLifecycle()
-    val track = state?.track
-    val c = MaterialTheme.colorScheme
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp)
-            .clip(MaterialTheme.shapes.extraLarge)
-            .background(c.surfaceContainer)
-            .clickable(onClickLabel = "open the player", onClick = { if (track != null) onOpen() else PlayList.shuffle(repo, liked) }),
-    ) {
-        // a soft wash of the cover; Android 11 and older can't blur, so the cover is just dimmed there
-        if (track != null) CoverImage(
-            track.coverUri, track.title, MaterialTheme.shapes.extraLarge,
-            Modifier.matchParentSize().then(if (Build.VERSION.SDK_INT >= 31) Modifier.blur(40.dp) else Modifier),
-        )
-        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(c.surface.copy(alpha = 0.55f), c.surface.copy(alpha = 0.85f)))))
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AlbumArt(track, 112.dp, shape = MaterialTheme.shapes.large)
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (track == null) "Nothing playing" else if (state?.isPlaying == true) "Now playing" else "Paused",
-                        color = Accent, style = MaterialTheme.typography.labelLarge,
-                    )
-                    Text(
-                        track?.title ?: "Tap to shuffle your liked songs", color = TextPrimary,
-                        style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    )
-                    track?.let { Text(it.artist, color = TextSecondary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                }
-            }
-            if (track != null) {
-                Spacer(Modifier.height(14.dp))
-                TimeBar()
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    val shuffleOn = state?.shuffle == true
-                    IconButton(onClick = { PlayerHub.toggleShuffle() }) {
-                        Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (shuffleOn) Accent else TextSecondary)
-                    }
-                    IconButton(onClick = { PlayerHub.previous() }) { Icon(Icons.Filled.SkipPrevious, "Previous track", Modifier.size(32.dp)) }
-                    FilledIconButton(
-                        onClick = { PlayerHub.togglePlay() }, modifier = Modifier.size(64.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Accent),
-                    ) {
-                        val playing = state?.isPlaying == true
-                        Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(34.dp))
-                    }
-                    IconButton(onClick = { PlayerHub.next() }) { Icon(Icons.Filled.SkipNext, "Next track", Modifier.size(32.dp)) }
-                    val isLiked = track.id in favorites
-                    IconButton(onClick = { SongActions.toggleLike(repo, track) }) {
-                        Icon(if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (isLiked) "Unlike" else "Like", tint = if (isLiked) Accent else TextSecondary)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** Kept apart so only the bar redraws every frame, not the whole card. */
-@Composable
-private fun TimeBar() {
-    val live = rememberLiveProgress()
-    val p = (live.positionMs.toFloat() / live.durationMs).coerceIn(0f, 1f)
-    Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))) {
-        Box(Modifier.fillMaxWidth(p).height(4.dp).clip(CircleShape).background(Accent))
-    }
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        Text(time(live.positionMs), color = TextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-        Text(time(live.durationMs), color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+internal fun BoardWidget(
+    s: HomeSection, repo: MusicRepository, tracks: List<Track>, liked: List<Track>, playlists: Int,
+    onOpenPlayer: () -> Unit, onSpinWheel: () -> Unit,
+) {
+    when (s) {
+        HomeSection.NOW_PLAYING -> NowPlayingWidget(repo, liked, onOpenPlayer)
+        HomeSection.VINYL -> SkinWidget(Skin.VINYL, onOpenPlayer)
+        HomeSection.CD -> SkinWidget(Skin.CD, onOpenPlayer)
+        HomeSection.TAPE -> SkinWidget(Skin.TAPE, onOpenPlayer)
+        HomeSection.TP7 -> SkinWidget(Skin.TP7, onOpenPlayer)
+        HomeSection.RADIO -> RadioWidget(onOpenPlayer)
+        HomeSection.VISUALIZER -> VisualizerWidget(onOpenPlayer)
+        HomeSection.SHORTCUTS -> ShortcutsWidget(repo, liked, tracks, onSpinWheel)
+        HomeSection.STATS -> StatsWidget(tracks, liked.size, playlists)
+        HomeSection.CLOCK -> ClockWidget()
+        else -> {}
     }
 }
 

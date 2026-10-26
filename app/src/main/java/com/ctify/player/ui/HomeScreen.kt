@@ -80,14 +80,10 @@ import com.ctify.player.ui.home.QuickPick
 import com.ctify.player.ui.home.QuickPicks
 import com.ctify.player.ui.home.RankedSongs
 import com.ctify.player.ui.home.greeting
-import com.ctify.player.ui.home.ClockWidget
 import com.ctify.player.ui.home.HomeEditor
 import com.ctify.player.ui.home.HomeLayout
 import com.ctify.player.ui.home.HomeSection
-import com.ctify.player.ui.home.NowPlayingWidget
-import com.ctify.player.ui.home.ShortcutsWidget
-import com.ctify.player.ui.home.StatsWidget
-import com.ctify.player.ui.home.VisualizerWidget
+import com.ctify.player.ui.home.BoardWidget
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.OutlinedButton
 import com.ctify.player.ui.home.tileShape
@@ -191,12 +187,11 @@ fun HomeScreen(
         full { SearchPill(onOpenSearch) }
         if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder, or search YouTube to add songs.") }
         layout.forEach { section ->
+            if (section.widget) {
+                full { BoardWidget(section, viewModel.repository, tracks, likedTracks, playlists.size, onOpenNowPlaying, onSpinWheel) }
+                return@forEach
+            }
             when (section) {
-                HomeSection.NOW_PLAYING -> full { NowPlayingWidget(viewModel.repository, likedTracks, onOpenNowPlaying) }
-                HomeSection.VISUALIZER -> full { VisualizerWidget(onOpenNowPlaying) }
-                HomeSection.SHORTCUTS -> full { ShortcutsWidget(viewModel.repository, likedTracks, tracks, onSpinWheel) }
-                HomeSection.STATS -> full { StatsWidget(tracks, liked.size, playlists.size) }
-                HomeSection.CLOCK -> full { ClockWidget() }
                 HomeSection.QUICK_PICKS -> if (picks.size >= 2) full { QuickPicks(picks) }
                 HomeSection.CONTINUE -> if (last != null && !ui.isPlaying) full {
                     val mine = last.id == ui.currentTrackId
@@ -242,6 +237,7 @@ fun HomeScreen(
                         onSeeAll = { title, list -> onOpenPage(HomePage.Artists(title, list)) }, onTop100 = { onOpenPage(HomePage.Top100(it)) },
                     )
                 }
+                else -> {}
             }
         }
         item(span = { GridItemSpan(maxLineSpan) }) {

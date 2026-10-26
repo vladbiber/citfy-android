@@ -57,14 +57,14 @@ import com.ctify.player.ui.theme.TextPrimary
 import com.ctify.player.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
-/** Home's editor: drag ≡ to reorder, − takes a section off Home, + puts it (or a widget) on. Changes apply as you go. */
+/** A board's editor: drag ≡ to reorder, − takes a section off, + puts it (or a widget) on. Changes apply as you go. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeEditor(onDismiss: () -> Unit) {
+fun HomeEditor(onDismiss: () -> Unit, board: Board = HomeLayout, title: String = "Edit Home", place: String = "Home") {
     // the World shelf needs a Last.fm key; without one it would never show, so it isn't offered
-    val offered: (HomeSection) -> Boolean = { it != HomeSection.WORLD || LastFm.enabled }
-    val list = remember { mutableStateListOf<HomeSection>().apply { addAll(HomeLayout.shown.value) } }
-    val save = { HomeLayout.set(list.toList()) }
+    val offered: (HomeSection) -> Boolean = { it in board.offered && (it != HomeSection.WORLD || LastFm.enabled) }
+    val list = remember { mutableStateListOf<HomeSection>().apply { addAll(board.shown.value) } }
+    val save = { board.set(list.toList()) }
     val off = HomeSection.entries.filter { it !in list && offered(it) }
     val lazy = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -91,16 +91,20 @@ fun HomeEditor(onDismiss: () -> Unit) {
         LazyColumn(state = lazy, contentPadding = PaddingValues(bottom = 32.dp)) {
             item(key = "title") {
                 Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Edit Home", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { HomeLayout.reset(); list.clear(); list.addAll(HomeLayout.shown.value) }) { Text("Reset") }
+                    Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { board.reset(); list.clear(); list.addAll(board.shown.value) }) { Text("Reset") }
                     TextButton(onClick = onDismiss) { Text("Done") }
                 }
                 Text(
-                    "Hold ≡ and drag to move a row. − takes it off Home, + brings it back.",
+                    "Hold ≡ and drag to move a row. − takes it off $place, + brings it back.",
                     color = TextSecondary, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                 )
-                Label("On Home")
+                Label("On $place")
+                if (list.isEmpty()) Text(
+                    "Nothing here yet. Add a widget from the list below.", color = TextMuted,
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
             }
             items(list, key = { it.id }) { s ->
                 val me = s == dragging
@@ -155,7 +159,7 @@ fun HomeEditor(onDismiss: () -> Unit) {
                 items(widgets, key = { it.id }) { s -> EditorRow(s, on = false, modifier = Modifier.animateItem(), onToggle = { list.add(0, s); save() }) }
             }
             if (shelves.isNotEmpty()) {
-                item(key = "removed") { Label("Taken off Home") }
+                item(key = "removed") { Label("Taken off $place") }
                 items(shelves, key = { it.id }) { s -> EditorRow(s, on = false, modifier = Modifier.animateItem(), onToggle = { list.add(s); save() }) }
             }
         }
@@ -187,8 +191,8 @@ private fun EditorRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onToggle) {
-            if (on) Icon(Icons.Filled.RemoveCircleOutline, "Take ${s.title} off Home", tint = MaterialTheme.colorScheme.error)
-            else Icon(Icons.Filled.AddCircle, "Add ${s.title} to Home", tint = Accent)
+            if (on) Icon(Icons.Filled.RemoveCircleOutline, "Take ${s.title} off", tint = MaterialTheme.colorScheme.error)
+            else Icon(Icons.Filled.AddCircle, "Add ${s.title}", tint = Accent)
         }
         Box(Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
             Icon(s.icon, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
