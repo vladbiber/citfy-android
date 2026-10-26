@@ -106,6 +106,47 @@
             </intent-filter>
         </service>
 
+        <!-- home screen widgets -->
+        <receiver
+            android:name=".widget.BarWidget"
+            android:exported="false"
+            android:label="Guava Bar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_bar_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.CardWidget"
+            android:exported="false"
+            android:label="Guava Card">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_card_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.DiscWidget"
+            android:exported="false"
+            android:label="Guava Disc">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_disc_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.WidgetActionReceiver"
+            android:exported="false" />
+
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />

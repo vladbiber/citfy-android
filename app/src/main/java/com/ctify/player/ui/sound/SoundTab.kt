@@ -25,13 +25,12 @@ import com.ctify.player.ui.TuningSection
 import com.ctify.player.ui.VinylSection
 import com.ctify.player.ui.enterStagger
 
-/** Every sound setting: presets, speed, reverb, bass, EQ, then effects, output and the range; [radio] leaves out vinyl and reverse. */
+/** Every sound setting: presets, speed, reverb, bass, EQ, then effects, output, the range and the mode last; [radio] leaves out vinyl and reverse. */
 @Composable
 fun SoundTab(modifier: Modifier = Modifier, radio: Boolean = false) {
     val context = LocalContext.current
     remember { SoundEngine.init(context) }
     val sections = listOfNotNull<@Composable () -> Unit>(
-        { ModeSection() },
         { PresetStatus() },
         { GenrePresetsRow() },
         { SpeedSection() },
@@ -50,6 +49,8 @@ fun SoundTab(modifier: Modifier = Modifier, radio: Boolean = false) {
         { Heading("Range") },
         { EffectRangeSection() },
         { ResetFxButton() },
+        // the modes change the whole app, so they sit last, under everything else
+        { ModeSection() },
     )
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // each section emits a single node, so the wrapper keeps the spacing as it was

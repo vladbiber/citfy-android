@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 4x1: cover, song, previous / play / next -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/wg_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/wg_bg"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <ImageView
+        android:id="@+id/wg_cover"
+        android:src="@mipmap/ic_launcher"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/wg_title"
+            android:text="Guava Player"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/wg_artist"
+            android:text="Tap to start the music"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#B3FFFFFF"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/wg_prev"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@null"
+        android:contentDescription="Previous"
+        android:src="@drawable/wg_prev" />
+
+    <FrameLayout
+        android:id="@+id/wg_play"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginHorizontal="2dp">
+
+        <ImageView
+            android:id="@+id/wg_play_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:src="@drawable/wg_circle"
+            android:tint="#FF5B9DFF" />
+
+        <ImageView
+            android:id="@+id/wg_play_icon"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="center"
+            android:contentDescription="Play or pause"
+            android:src="@drawable/wg_play"
+            android:tint="#FF0A1428" />
+    </FrameLayout>
+
+    <ImageButton
+        android:id="@+id/wg_next"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@null"
+        android:contentDescription="Next"
+        android:src="@drawable/wg_next" />
+</LinearLayout>

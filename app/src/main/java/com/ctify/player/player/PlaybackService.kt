@@ -34,7 +34,10 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
+import com.ctify.player.player.fx.Moods
+import com.ctify.player.widget.GuavaWidgets
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
@@ -111,6 +114,15 @@ class PlaybackService : MediaLibraryService() {
         playback = PlaybackController(this, player, app.repository, app.radio, ::showStationButtons)
         library = AutoLibrary(app.repository, app.radio)
         mediaSession = MediaLibrarySession.Builder(this, player, SessionCallback()).build()
+
+        // home screen widgets: redrawn when the song, play state, station or mode changes, not on every tick
+        GuavaWidgets.attach(this, player) { action -> playback?.handle(action, Bundle.EMPTY) }
+        scope.launch {
+            PlayerHub.playback
+                .distinctUntilChanged { a, b -> a?.track?.id == b?.track?.id && a?.isPlaying == b?.isPlaying && a?.station?.uuid == b?.station?.uuid }
+                .collect { GuavaWidgets.update(this@PlaybackService, it) }
+        }
+        scope.launch { Moods.mood.collect { GuavaWidgets.render(this@PlaybackService) } }
     }
 
     /** Live radio has one item, so the system next/previous buttons switch stations instead. */
@@ -217,6 +229,7 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        GuavaWidgets.detach(this)
         playback?.release()
         playback = null
         mediaSession?.run {

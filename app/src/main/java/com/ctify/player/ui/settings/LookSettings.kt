@@ -15,7 +15,7 @@ import com.ctify.player.ui.theme.DyeStrength
 import com.ctify.player.ui.theme.GradientStyle
 import com.ctify.player.ui.theme.ThemeSource
 
-/** Theme colors, backdrop, font and the player tint switches. */
+/** Theme colors, backdrop, font, the player tint switches and, last, the modes. */
 @Composable
 internal fun ColumnScope.LookSettings() {
     val source by Appearance.source.collectAsState()
@@ -31,11 +31,7 @@ internal fun ColumnScope.LookSettings() {
     val evil by Moods.evil.collectAsState()
     val godly by Moods.godly.collectAsState()
 
-    SettingLabel("Modes", Modifier.padding(top = 8.dp))
-    SwitchRow("Evil mode", "Red and black, everything renamed, the music turns dark, low and distorted", evil, Moods::setEvil)
-    SwitchRow("Godly mode", "TempleOS colors, holy names, cathedral reverb and a choir on every song", godly, Moods::setGodly)
-    if (evil && godly) SettingLabel("Both on: Good & Evil. Songs play backwards, black and white, with strange effects.")
-    SettingLabel("Theme", Modifier.padding(top = 12.dp))
+    SettingLabel("Theme", Modifier.padding(top = 8.dp))
     // Below Android 12 there are no wallpaper colors and Wallpaper looks like Guava Blue, so only Guava Blue is offered.
     val sources = if (Appearance.dynamicSupported) ThemeSource.entries else ThemeSource.entries - ThemeSource.WALLPAPER
     val shownSource = if (source in sources) source else ThemeSource.CTIFY_BLUE
@@ -57,4 +53,9 @@ internal fun ColumnScope.LookSettings() {
     SwitchRow("Pure black", "Black background, for OLED screens", pureBlack, Appearance::setPureBlack)
     SwitchRow("Cover colors in Now Playing", "Tint the player with the album cover instead of the theme", coverColors, Appearance::setCoverColors)
     SwitchRow("React to music", "Player background pulses with the bass. Off in battery saver.", reactToMusic, Appearance::setReactToMusic)
+    // last on the page, under everything else
+    SettingLabel("Modes", Modifier.padding(top = 12.dp))
+    SwitchRow("Evil mode", "Red and black, everything renamed, the music turns dark, low and distorted", evil, Moods::setEvil)
+    SwitchRow("Godly mode", "TempleOS colors, holy names, cathedral reverb and a choir on every song", godly, Moods::setGodly)
+    if (evil && godly) SettingLabel("Both on: Good & Evil. Songs play backwards, black and white, with strange effects.")
 }

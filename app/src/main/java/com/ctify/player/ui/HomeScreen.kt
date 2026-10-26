@@ -80,6 +80,16 @@ import com.ctify.player.ui.home.QuickPick
 import com.ctify.player.ui.home.QuickPicks
 import com.ctify.player.ui.home.RankedSongs
 import com.ctify.player.ui.home.greeting
+import com.ctify.player.ui.home.ClockWidget
+import com.ctify.player.ui.home.HomeEditor
+import com.ctify.player.ui.home.HomeLayout
+import com.ctify.player.ui.home.HomeSection
+import com.ctify.player.ui.home.NowPlayingWidget
+import com.ctify.player.ui.home.ShortcutsWidget
+import com.ctify.player.ui.home.StatsWidget
+import com.ctify.player.ui.home.VisualizerWidget
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.OutlinedButton
 import com.ctify.player.ui.home.tileShape
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -141,6 +151,10 @@ fun HomeScreen(
     val picks = quickPicks(likedTracks, recentPlaylists, history, viewModel, onOpenPage, onOpenNowPlaying)
     // the song the player stopped on, or the last one played; hidden while something plays
     val last = viewModel.repository.trackById(ui.currentTrackId) ?: history.firstOrNull()
+    remember { HomeLayout.init(ctx) }
+    val layout by HomeLayout.shown.collectAsStateWithLifecycle()
+    var editing by rememberSaveable { mutableStateOf(false) }
+    if (editing) HomeEditor(onDismiss = { editing = false })
 
     Box(Modifier.fillMaxSize()) {
     // Two colors: the liquid wash sits behind the header and fades out downward
@@ -168,6 +182,7 @@ fun HomeScreen(
         }
         full {
             TabTopBar(greeting()) {
+                IconButton(onClick = { editing = true }) { Icon(Icons.Filled.Edit, "Edit Home", tint = TextPrimary) }
                 IconButton(onClick = onSpinWheel) { Icon(Icons.Filled.Casino, "Spin the wheel", tint = TextPrimary) }
                 AddMenu(add)
                 SettingsButton(onOpenSettings)
@@ -175,44 +190,68 @@ fun HomeScreen(
         }
         full { SearchPill(onOpenSearch) }
         if (tracks.isEmpty()) full { EmptyHint("Tap + to import a folder, or search YouTube to add songs.") }
-        if (picks.size >= 2) full { QuickPicks(picks) }
-        if (last != null && !ui.isPlaying) full {
-            val mine = last.id == ui.currentTrackId
-            ContinueCard(
-                last, progress = if (mine && ui.durationMs > 0) ui.positionMs.toFloat() / ui.durationMs else 0f,
-                onResume = { if (mine) viewModel.togglePlay() else { viewModel.repository.remember(history); viewModel.playQueue(history, 0) } },
-                onOpen = { if (!mine) { viewModel.repository.remember(history); viewModel.playQueue(history, 0) }; onOpenNowPlaying() },
-            )
-        }
-        if (building && shelf[Shelf.FOR_YOU].isNullOrEmpty()) full { ForYouPlaceholder() }
-        shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
-        if (showRecent && recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
-        if (recentPlaylists.isNotEmpty()) full { PlaylistsRow(recentPlaylists, viewModel) { onOpenPage(HomePage.Playlist(it)) } }
-        full { LiveRadioRow() }
-        stars.forEachIndexed { i, g -> full { StarsShelf(g, i == 0, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
-        // tile sizes vary from shelf to shelf, so the page doesn't read as one long strip
-        shelf[Shelf.PLAYED]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(Shelf.PLAYED.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, tile = 168.dp) } }
-        if (rediscover.size >= 3) full {
-            TrackCarousel("Rediscover", rediscover, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, subtitle = "Songs you love that you haven't played lately")
-        }
-        shelf[Shelf.DOWNLOADS]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(Shelf.DOWNLOADS.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, tile = 112.dp) } }
-        if (showMost && most.isNotEmpty()) full {
-            RankedSongs("Most played", most, ui.currentTrackId) { i ->
-                viewModel.repository.remember(most); viewModel.playQueue(most, i); onOpenNowPlaying()
+        layout.forEach { section ->
+            when (section) {
+                HomeSection.NOW_PLAYING -> full { NowPlayingWidget(viewModel.repository, likedTracks, onOpenNowPlaying) }
+                HomeSection.VISUALIZER -> full { VisualizerWidget(onOpenNowPlaying) }
+                HomeSection.SHORTCUTS -> full { ShortcutsWidget(viewModel.repository, likedTracks, tracks, onSpinWheel) }
+                HomeSection.STATS -> full { StatsWidget(tracks, liked.size, playlists.size) }
+                HomeSection.CLOCK -> full { ClockWidget() }
+                HomeSection.QUICK_PICKS -> if (picks.size >= 2) full { QuickPicks(picks) }
+                HomeSection.CONTINUE -> if (last != null && !ui.isPlaying) full {
+                    val mine = last.id == ui.currentTrackId
+                    ContinueCard(
+                        last, progress = if (mine && ui.durationMs > 0) ui.positionMs.toFloat() / ui.durationMs else 0f,
+                        onResume = { if (mine) viewModel.togglePlay() else { viewModel.repository.remember(history); viewModel.playQueue(history, 0) } },
+                        onOpen = { if (!mine) { viewModel.repository.remember(history); viewModel.playQueue(history, 0) }; onOpenNowPlaying() },
+                    )
+                }
+                HomeSection.FOR_YOU -> {
+                    if (building && shelf[Shelf.FOR_YOU].isNullOrEmpty()) full { ForYouPlaceholder() }
+                    shelf[Shelf.FOR_YOU]?.takeIf { it.isNotEmpty() }?.let { full { ForYouPager(it, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+                }
+                HomeSection.RECENT -> if (showRecent && recent.isNotEmpty()) full { TrackCarousel("Recently played", recent, SongContext.History, ui.currentTrackId, viewModel, onOpenNowPlaying) }
+                HomeSection.PLAYLISTS -> if (recentPlaylists.isNotEmpty()) full { PlaylistsRow(recentPlaylists, viewModel) { onOpenPage(HomePage.Playlist(it)) } }
+                HomeSection.LIVE_RADIO -> full { LiveRadioRow() }
+                HomeSection.STARS -> stars.forEachIndexed { i, g -> full { StarsShelf(g, i == 0, ui.currentTrackId, viewModel, onOpenNowPlaying) } }
+                // tile sizes vary from shelf to shelf, so the page doesn't read as one long strip
+                HomeSection.PLAYED -> shelf[Shelf.PLAYED]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(Shelf.PLAYED.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, tile = 168.dp) } }
+                HomeSection.REDISCOVER -> if (rediscover.size >= 3) full {
+                    TrackCarousel("Rediscover", rediscover, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, subtitle = "Songs you love that you haven't played lately")
+                }
+                HomeSection.DOWNLOADS -> shelf[Shelf.DOWNLOADS]?.takeIf { it.isNotEmpty() }?.let { full { TrackCarousel(Shelf.DOWNLOADS.title, it, SongContext.Recommended, ui.currentTrackId, viewModel, onOpenNowPlaying, tile = 112.dp) } }
+                HomeSection.MOST -> if (showMost && most.isNotEmpty()) full {
+                    RankedSongs("Most played", most, ui.currentTrackId) { i ->
+                        viewModel.repository.remember(most); viewModel.playQueue(most, i); onOpenNowPlaying()
+                    }
+                }
+                HomeSection.HEARD -> full { HeardSection() }
+                HomeSection.GENRES -> {
+                    if (genres == null) full { ShelfPlaceholder("Genres", 150.dp) }
+                    if (!genres.isNullOrEmpty()) full { GenresRow(genres) { onOpenPage(HomePage.GenrePage(it)) } }
+                }
+                HomeSection.CREATORS -> {
+                    if (creators == null) full { ShelfPlaceholder("Creators", 104.dp, CircleShape) }
+                    if (!creators.isNullOrEmpty()) full {
+                        CreatorsRow(creators, onOpen = { onOpenPage(HomePage.ArtistPage(it)) }, onSeeAll = { onOpenPage(HomePage.Artists("Creators", creators)) })
+                    }
+                }
+                HomeSection.WORLD -> if (LastFm.enabled) full {
+                    WorldSection(
+                        onGenre = { onOpenPage(HomePage.GenrePage(it)) }, onArtist = { onOpenPage(HomePage.ArtistPage(it)) },
+                        onSeeAll = { title, list -> onOpenPage(HomePage.Artists(title, list)) }, onTop100 = { onOpenPage(HomePage.Top100(it)) },
+                    )
+                }
             }
         }
-        full { HeardSection() }
-        if (genres == null) full { ShelfPlaceholder("Genres", 150.dp) }
-        if (!genres.isNullOrEmpty()) full { GenresRow(genres) { onOpenPage(HomePage.GenrePage(it)) } }
-        if (creators == null) full { ShelfPlaceholder("Creators", 104.dp, CircleShape) }
-        if (!creators.isNullOrEmpty()) full {
-            CreatorsRow(creators, onOpen = { onOpenPage(HomePage.ArtistPage(it)) }, onSeeAll = { onOpenPage(HomePage.Artists("Creators", creators)) })
-        }
-        if (LastFm.enabled) full {
-            WorldSection(
-                onGenre = { onOpenPage(HomePage.GenrePage(it)) }, onArtist = { onOpenPage(HomePage.ArtistPage(it)) },
-                onSeeAll = { title, list -> onOpenPage(HomePage.Artists(title, list)) }, onTop100 = { onOpenPage(HomePage.Top100(it)) },
-            )
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Box(Modifier.fillMaxWidth().padding(top = 20.dp), contentAlignment = Alignment.Center) {
+                OutlinedButton(onClick = { editing = true }) {
+                    Icon(Icons.Filled.Edit, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Edit Home")
+                }
+            }
         }
     }
     }

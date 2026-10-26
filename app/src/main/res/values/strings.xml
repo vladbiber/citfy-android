@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Guava Player</string>
+    <string name="widget_bar_desc">Song and controls in one slim bar</string>
+    <string name="widget_card_desc">Big cover, song and large controls</string>
+    <string name="widget_disc_desc">A record with the cover on it, tap to play</string>
 </resources>

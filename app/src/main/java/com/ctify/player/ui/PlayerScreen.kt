@@ -111,6 +111,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.draw.alpha
+import com.ctify.player.ui.songs.Snack
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -541,12 +542,20 @@ private fun PlayerTopBar(
     }
 }
 
-/** Lyrics on or off; greyed out while looking or when the song has none. */
+/** Lyrics on or off; dimmed while looking or when the song has none, but a tap still answers with a message. */
 @Composable
 private fun LyricsToggle(lyrics: Lyrics?, on: Boolean, accent: Color, onToggle: (Boolean) -> Unit) {
     val found = lyrics?.found == true
     CtToggleIconButton(
-        checked = on, onCheckedChange = onToggle, icon = Icons.Default.Lyrics, accent = accent, enabled = found,
+        checked = on && found, icon = Icons.Default.Lyrics, accent = accent,
+        onCheckedChange = {
+            when {
+                found -> onToggle(it)
+                lyrics == null -> Snack.show("Still looking for lyrics…")
+                else -> Snack.show("No lyrics found for this song")
+            }
+        },
+        modifier = Modifier.alpha(if (found) 1f else 0.4f),
         contentDescription = when {
             lyrics == null -> "Lyrics, looking for them"
             !found -> "Lyrics, none found for this song"
